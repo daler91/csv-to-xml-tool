@@ -42,6 +42,27 @@ class TestFormatDate(unittest.TestCase):
         self.assertEqual(format_date("2023-1-1"), "2023-01-01") # Check zero padding
         self.assertEqual(format_date("bad", default_return="---"), "---")
 
+    def test_format_date_value_error_path(self):
+        # Specifically malformed date string that causes ValueError inside the date parsing loop
+        # and tests that it continues to try the next format
+        self.assertEqual(format_date("10/26/2023", input_formats=["%Y-%m-%d", "%m/%d/%Y"]), "2023-10-26")
+
+        # Test a date that raises ValueError for logical reasons (e.g., Feb 29 on non-leap year)
+        self.assertEqual(format_date("2023-02-29", input_formats=["%Y-%m-%d"]), "")
+
+        # Test a date that raises ValueError for the first format but succeeds on the second
+        # (leap year case)
+        self.assertEqual(format_date("2024-02-29", input_formats=["%m/%d/%Y", "%Y-%m-%d"]), "2024-02-29")
+
+        # Test complete exhaustion of formats due to ValueError
+        self.assertEqual(format_date("2023-13-01", input_formats=["%Y-%m-%d", "%m/%d/%Y"]), "")
+
+    def test_format_date_regex_fallback(self):
+        # Test the regex fallback logic for missing zero-padding
+        self.assertEqual(format_date("2023-1-1", input_formats=["%Y/%m/%d"]), "2023-01-01")
+        # Test the regex fallback failing due to invalid date elements
+        self.assertEqual(format_date("2023-30-30", input_formats=["%Y/%m/%d"]), "")
+
 class TestStandardizeStateName(unittest.TestCase):
     # Using DEFAULT_VALID_STATES from data_cleaning for some tests
     # These are the states the function itself knows about if no list is passed

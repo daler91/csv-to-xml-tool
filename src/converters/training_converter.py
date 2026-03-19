@@ -167,18 +167,25 @@ class TrainingConverter(BaseConverter):
         total = len(df)
         demographics['total'] = max(total, 2) # XSD minimum
 
+        # Helper to resolve a config column key to the actual DataFrame column name
+        def resolve_column(column_key):
+            possible = self.config.COLUMN_MAPPING.get(column_key, [])
+            if isinstance(possible, str):
+                possible = [possible]
+            return next((c for c in possible if c in df.columns), None)
+
         # Helper to count matches for a given set of keywords in a specified column
         def count_matches(column_key, keywords_map):
-            column_name = self._get_column_value(df.iloc[0], column_key)
-            if not column_name or column_name not in df.columns:
+            column_name = resolve_column(column_key)
+            if not column_name:
                 return 0
 
             pattern = '|'.join(keywords_map)
             return sum(df[column_name].fillna('').astype(str).str.lower().str.contains(pattern))
 
         # Business Status
-        business_status_col = self._get_column_value(df.iloc[0], 'business_status')
-        if business_status_col and business_status_col in df.columns:
+        business_status_col = resolve_column('business_status')
+        if business_status_col:
             currently_in_business = sum(df[business_status_col].fillna('').astype(str).str.lower().str.contains('yes|true|1|y'))
             demographics['currently_in_business'] = currently_in_business
             demographics['not_in_business'] = total - currently_in_business
@@ -198,9 +205,9 @@ class TrainingConverter(BaseConverter):
 
         # Ethnicity
         hispanic_count = count_matches('ethnicity', self.config.DEMOGRAPHIC_KEYWORDS['ethnicity']['hispanic'])
-        ethnicity_col_name = self._get_column_value(df.iloc[0], 'ethnicity')
+        ethnicity_col_name = resolve_column('ethnicity')
         non_hispanic_count = 0
-        if ethnicity_col_name and ethnicity_col_name in df.columns:
+        if ethnicity_col_name:
             non_hispanic_mask = (~df[ethnicity_col_name].fillna('').astype(str).str.lower().str.contains('hispanic|latino')) & (df[ethnicity_col_name] != '')
             non_hispanic_count = sum(non_hispanic_mask)
         demographics['ethnicity'] = {'hispanic': hispanic_count, 'non_hispanic': non_hispanic_count}

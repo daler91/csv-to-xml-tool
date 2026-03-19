@@ -5,7 +5,6 @@ Handles the conversion of Salesforce counseling data (Form 641) from CSV to XML.
 import csv
 import xml.etree.ElementTree as ET
 import re
-from datetime import datetime
 
 from .base_converter import BaseConverter
 from ..config import CounselingConfig, GeneralConfig, ValidationCategory

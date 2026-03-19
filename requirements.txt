@@ -1,2 +1,4 @@
 pandas
 pytest
+defusedxml
+lxml

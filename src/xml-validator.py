@@ -7,6 +7,7 @@ import os
 import sys
 import xml.etree.ElementTree as ET
 from lxml import etree
+from defusedxml.lxml import parse as defused_parse
 import logging # Keep standard logging import for levels like logging.INFO
 import re
 
@@ -28,11 +29,11 @@ def validate_against_xsd(xml_file, xsd_file):
     """
     try:
         # Parse the XSD schema
-        xmlschema_doc = etree.parse(xsd_file)
+        xmlschema_doc = defused_parse(xsd_file)
         xmlschema = etree.XMLSchema(xmlschema_doc)
         
         # Parse the XML file
-        xml_doc = etree.parse(xml_file)
+        xml_doc = defused_parse(xml_file)
         
         # Validate
         is_valid = xmlschema.validate(xml_doc)

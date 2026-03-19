@@ -6,7 +6,6 @@ import csv
 import xml.etree.ElementTree as ET
 import os
 import re
-from datetime import datetime
 
 from .base_converter import BaseConverter
 from ..config import CounselingConfig, GeneralConfig, ValidationCategory

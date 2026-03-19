@@ -127,12 +127,8 @@ def build_client_request_section(counseling_record, row, record_id, logger):
         signature_onfile = 'No'
     create_element(signature, 'OnFile', signature_onfile)
 
-def build_client_intake_section(counseling_record, row, record_id, logger):
-    """
-    Builds the ClientIntake section of the XML with comprehensive defaults.
-    """
-    client_intake = create_element(counseling_record, 'ClientIntake')
-    
+
+def _build_race_info(client_intake, row):
     # Race information (multi-value field)
     race = create_element(client_intake, 'Race')
     race_codes = split_multi_value(row.get('Race', ''))
@@ -143,7 +139,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
         for code in race_codes:
             create_element(race, 'Code', code)
     create_element(race, 'SelfDescribedRace', '')
-    
+
+def _build_demographics_info(client_intake, row):
     # Demographics - required fields with defaults
     ethnicity = get_value_with_default(row, 'Ethnicity', DEFAULT_ETHNICITY)
     create_element(client_intake, 'Ethnicity', ethnicity)
@@ -155,7 +152,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
     
     disability = get_value_with_default(row, 'Disability', DEFAULT_DISABILITY)
     create_element(client_intake, 'Disability', disability)
-    
+
+def _build_military_info(client_intake, row):
     # Military information - required with default
     military_status = get_value_with_default(row, 'Veteran Status', DEFAULT_MILITARY_STATUS)
     create_element(client_intake, 'MilitaryStatus', military_status)
@@ -164,7 +162,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
     if military_status not in ['Prefer not to say', 'No military service']:
         branch = get_value_with_default(row, 'Branch Of Service', 'Prefer not to say')
         create_element(client_intake, 'BranchOfService', branch)
-    
+
+def _build_media_info(client_intake, row):
     # Referral information (Media)
     media_codes = split_multi_value(row.get('What Prompted you to contact us?', ''))
     if media_codes or row.get('Internet (specify)'):
@@ -174,7 +173,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
         media_other = row.get('Internet (specify)', '')
         if media_other:
             create_element(media, 'Other', media_other)
-    
+
+def _build_business_info(client_intake, row):
     # Business information - required fields with defaults
     currently_in_business = get_value_with_default(row, 'Currently in Business?', DEFAULT_BUSINESS_STATUS)
     create_element(client_intake, 'CurrentlyInBusiness', currently_in_business)
@@ -200,7 +200,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
     
     certified_8a = get_value_with_default(row, '8(a) Certified?', DEFAULT_BUSINESS_STATUS)
     create_element(client_intake, 'ClientIntake_Certified8a', certified_8a)
-    
+
+def _build_financial_info(client_intake, row):
     # Employee and financial information
     employees = row.get('Total Number of Employees', '0')
     create_element(client_intake, 'TotalNumberOfEmployees', clean_numeric(employees))
@@ -214,7 +215,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
     create_element(client_annual_income, 'ProfitLoss', clean_numeric(profit_loss))
     
     create_element(client_annual_income, 'ExportGrossRevenuesOrSales', '0')
-    
+
+def _build_legal_entity_info(client_intake, row):
     # Legal entity information
     legal_entity_codes = split_multi_value(row.get('Legal Entity of Business', ''))
     if legal_entity_codes or row.get('Other legal entity (specify)'):
@@ -224,10 +226,8 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
         legal_entity_other = row.get('Other legal entity (specify)', '')
         if legal_entity_other:
             create_element(legal_entity, 'Other', legal_entity_other)
-    
-    # Rural/Urban status - required with default
-    create_element(client_intake, 'Rural_vs_Urban', 'Undetermined')
-    
+
+def _build_counseling_seeking_info(client_intake, row):
     # Counseling seeking information
     counseling_seeking_codes = split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
     if counseling_seeking_codes:
@@ -235,6 +235,26 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
         for code in counseling_seeking_codes:
             create_element(counseling_seeking, 'Code', code)
         create_element(counseling_seeking, 'Other', '')
+
+
+def build_client_intake_section(counseling_record, row, record_id, logger):
+    """
+    Builds the ClientIntake section of the XML with comprehensive defaults.
+    """
+    client_intake = create_element(counseling_record, 'ClientIntake')
+
+    _build_race_info(client_intake, row)
+    _build_demographics_info(client_intake, row)
+    _build_military_info(client_intake, row)
+    _build_media_info(client_intake, row)
+    _build_business_info(client_intake, row)
+    _build_financial_info(client_intake, row)
+    _build_legal_entity_info(client_intake, row)
+
+    # Rural/Urban status - required with default
+    create_element(client_intake, 'Rural_vs_Urban', 'Undetermined')
+
+    _build_counseling_seeking_info(client_intake, row)
 
 
 def _add_training_contact_info(counselor_record, row):

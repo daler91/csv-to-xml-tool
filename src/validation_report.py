@@ -23,11 +23,6 @@ class ValidationTracker:
 
     def set_current_record_id(self, record_id):
         self.current_record_id = record_id
-
-        
-        # Track processed records
-        self.total_records = 0
-        self.successful_records = 0
     
     def add_issue(self, record_id, severity, category, field_name, message):
         """

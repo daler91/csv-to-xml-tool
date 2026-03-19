@@ -23,11 +23,6 @@ class ValidationTracker:
 
     def set_current_record_id(self, record_id):
         self.current_record_id = record_id
-
-        
-        # Track processed records
-        self.total_records = 0
-        self.successful_records = 0
     
     def add_issue(self, record_id, severity, category, field_name, message):
         """
@@ -162,7 +157,7 @@ class ValidationTracker:
 </head>
 <body>
     <h1>CSV to XML Conversion Validation Report</h1>
-    <p>Generated on: {{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}</p>
+    <p>Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
 """
 
     def _generate_summary_section(self, summary):
@@ -170,11 +165,11 @@ class ValidationTracker:
         return f"""
     <div class="summary">
         <h2>Summary</h2>
-        <p>Total records processed: <strong>{{summary['total_records']}}</strong></p>
-        <p>Successfully processed: <strong class="success">{{summary['successful_records']}} ({{summary['success_rate']:.1f}}%)</strong></p>
-        <p>Failed records: <strong class="error">{{summary['failed_records']}}</strong></p>
-        <p>Total errors: <strong class="error">{{summary['error_count']}}</strong></p>
-        <p>Total warnings: <strong class="warning">{{summary['warning_count']}}</strong></p>
+        <p>Total records processed: <strong>{summary['total_records']}</strong></p>
+        <p>Successfully processed: <strong class="success">{summary['successful_records']} ({summary['success_rate']:.1f}%)</strong></p>
+        <p>Failed records: <strong class="error">{summary['failed_records']}</strong></p>
+        <p>Total errors: <strong class="error">{summary['error_count']}</strong></p>
+        <p>Total warnings: <strong class="warning">{summary['warning_count']}</strong></p>
     </div>
 """
 
@@ -184,7 +179,7 @@ class ValidationTracker:
             return ""
 
         html_content = f"""
-    <h2>{{title}}</h2>
+    <h2>{title}</h2>
     <table>
         <tr>
             <th>Category</th>
@@ -193,8 +188,8 @@ class ValidationTracker:
 """
         for category, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
             html_content += f"""        <tr>
-            <td>{{category}}</td>
-            <td>{{count}}</td>
+            <td>{category}</td>
+            <td>{count}</td>
         </tr>
 """
         html_content += "    </table>\n"
@@ -223,11 +218,11 @@ class ValidationTracker:
         for issue in sorted_issues:
             severity_class = "error" if issue['severity'] == 'error' else "warning"
             html_content += f"""        <tr>
-            <td>{{issue['record_id']}}</td>
-            <td class="{{severity_class}}">{{issue['severity'].upper()}}</td>
-            <td>{{issue['category']}}</td>
-            <td>{{issue['field_name']}}</td>
-            <td>{{issue['message']}}</td>
+            <td>{issue['record_id']}</td>
+            <td class="{severity_class}">{issue['severity'].upper()}</td>
+            <td>{issue['category']}</td>
+            <td>{issue['field_name']}</td>
+            <td>{issue['message']}</td>
         </tr>
 """
 

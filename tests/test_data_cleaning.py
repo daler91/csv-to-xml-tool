@@ -231,3 +231,41 @@ class TestCleanPercentage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestCleanNumeric(unittest.TestCase):
+
+    def test_clean_numeric_valid(self):
+        from src.data_cleaning import clean_numeric
+
+        self.assertEqual(clean_numeric("1000"), "1000")
+        self.assertEqual(clean_numeric("10.5"), "10.5")
+        self.assertEqual(clean_numeric("10.0"), "10") # Removes redundant .0
+        self.assertEqual(clean_numeric("0"), "0")
+        self.assertEqual(clean_numeric(100), "100")
+        self.assertEqual(clean_numeric(10.5), "10.5")
+
+    def test_clean_numeric_with_symbols(self):
+        from src.data_cleaning import clean_numeric
+
+        self.assertEqual(clean_numeric("1,000"), "1000")
+        self.assertEqual(clean_numeric("1,234,567.89"), "1234567.89")
+        self.assertEqual(clean_numeric("$10.5"), "10.5")
+        self.assertEqual(clean_numeric("$1,000.00"), "1000")
+        self.assertEqual(clean_numeric(" $ 1,000.50 "), "1000.5")
+        self.assertEqual(clean_numeric("-$500"), "-500")
+
+    def test_clean_numeric_empty_none_nan(self):
+        from src.data_cleaning import clean_numeric
+
+        self.assertEqual(clean_numeric(""), "")
+        self.assertEqual(clean_numeric(None), "")
+        self.assertEqual(clean_numeric("   "), "")
+        self.assertEqual(clean_numeric("NaN"), "")
+        self.assertEqual(clean_numeric("nan"), "")
+
+    def test_clean_numeric_invalid(self):
+        from src.data_cleaning import clean_numeric
+
+        self.assertEqual(clean_numeric("invalid_string"), "")
+        self.assertEqual(clean_numeric("1000a"), "")
+        self.assertEqual(clean_numeric("abc"), "")

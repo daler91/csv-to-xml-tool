@@ -331,19 +331,18 @@ def split_multi_value(value, delimiter=";"):
 
 def clean_numeric(value):
     """
-    Cleans numeric values to ensure they're valid.
-    Returns empty string if invalid or None.
+    Cleans a numeric string by removing commas, currency symbols, and whitespace.
+    Extracts digits and optional decimal point.
     """
-    if not value or str(value).strip() == "" or str(value).lower() == "nan":
+    if value is None or str(value).strip() == "" or str(value).strip().lower() == "nan":
         return ""
     
+    cleaned_str = str(value).replace(" ", "").replace("$", "").replace(",", "")
+
     try:
-        # Try to convert to float and then string (removes redundant .0)
-        float_val = float(value)
-        # If it's a whole number, return it as an integer
+        float_val = float(cleaned_str)
         if float_val.is_integer():
             return str(int(float_val))
-        # Otherwise return as float
         return str(float_val)
     except (ValueError, TypeError):
         return ""

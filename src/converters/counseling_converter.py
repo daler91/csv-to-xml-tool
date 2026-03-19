@@ -143,14 +143,18 @@ class CounselingConverter(BaseConverter):
         if internet_usage:
             create_element(client_intake, 'Internet', internet_usage)
 
-        in_business_val = row.get('Currently In Business?', self.general_config.DEFAULT_BUSINESS_STATUS)
+        in_business_raw = row.get('Currently In Business?', '').strip()
+        in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
         create_element(client_intake, 'CurrentlyInBusiness', in_business_val)
 
-        exporting_val = row.get('Are you currently exporting?(old)', self.general_config.DEFAULT_BUSINESS_STATUS)
+        exporting_raw = row.get('Are you currently exporting?(old)', '').strip()
+        exporting_val = exporting_raw if exporting_raw in ('Yes', 'No') else self.general_config.DEFAULT_BUSINESS_STATUS
         create_element(client_intake, 'CurrentlyExporting', exporting_val)
 
         create_element(client_intake, 'CompanyName', row.get('Account Name', ''))
-        create_element(client_intake, 'BusinessType', row.get('Type of Business', ''))
+        business_type = row.get('Type of Business', '').strip()
+        if business_type:
+            create_element(client_intake, 'BusinessType', business_type)
 
         bo_element = create_element(client_intake, 'BusinessOwnership')
         female_ownership_val = data_cleaning.clean_percentage(row.get('Business Ownership - % Female(old)', '0'))
@@ -158,14 +162,18 @@ class CounselingConverter(BaseConverter):
 
         create_element(client_intake, 'ConductingBusinessOnline', row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS))
         create_element(client_intake, 'ClientIntake_Certified8a', row.get('8(a) Certified?(old)', self.general_config.DEFAULT_BUSINESS_STATUS))
-        create_element(client_intake, 'TotalNumberOfEmployees', data_cleaning.clean_numeric(row.get('Total Number of Employees', '0')))
+        total_emp_intake = data_cleaning.clean_numeric(row.get('Total Number of Employees', ''))
+        if total_emp_intake:
+            create_element(client_intake, 'TotalNumberOfEmployees', total_emp_intake)
         exporting_employees1 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
         if exporting_employees1 and float(exporting_employees1) > 0:
             create_element(client_intake, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees1))))
 
         income_part2 = create_element(client_intake, 'ClientAnnualIncomePart2')
-        create_element(income_part2, 'GrossRevenues', data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', '0')))
-        create_element(income_part2, 'ProfitLoss', data_cleaning.clean_numeric(row.get('Profits/Losses', '0')))
+        gross_rev = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', ''))
+        create_element(income_part2, 'GrossRevenues', gross_rev if gross_rev else '0')
+        profit_loss = data_cleaning.clean_numeric(row.get('Profits/Losses', ''))
+        create_element(income_part2, 'ProfitLoss', profit_loss if profit_loss else '0')
         create_element(income_part2, 'ExportGrossRevenuesOrSales', '0')
 
         if in_business_val.lower() == 'yes':
@@ -205,7 +213,11 @@ class CounselingConverter(BaseConverter):
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = create_element(parent, 'CounselorRecord')
         create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))
-        create_element(counselor_record, 'FundingSource', '')
+
+        # FundingSource is an enum - only emit if a valid value is present
+        funding_source = row.get('Funding Source', '').strip()
+        if funding_source:
+            create_element(counselor_record, 'FundingSource', funding_source)
 
         counselor_name_part3 = create_element(counselor_record, 'ClientNamePart3')
         create_element(counselor_name_part3, 'Last', row.get('Last Name', ''))
@@ -219,7 +231,12 @@ class CounselingConverter(BaseConverter):
         self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
         create_element(counselor_record, 'VerifiedToBeInBusiness', 'Undetermined')
-        create_element(counselor_record, 'ReportableImpact', row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS))
+
+        # ReportableImpact must be Yes/No
+        reportable_raw = row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS).strip()
+        reportable_impact = reportable_raw if reportable_raw in ('Yes', 'No') else 'No'
+        create_element(counselor_record, 'ReportableImpact', reportable_impact)
+
         impact_date = data_cleaning.format_date(row.get('Reportable Impact Date', ''))
         if impact_date:
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
@@ -229,21 +246,71 @@ class CounselingConverter(BaseConverter):
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
-        create_element(counselor_record, 'TotalNumberOfEmployees', data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0'))))
+        total_employees = data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0')))
+        if total_employees:
+            create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
+
         exporting_employees2 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
         if exporting_employees2 and float(exporting_employees2) > 0:
             create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
 
+        # ClientAnnualIncomePart3 - only emit sub-elements with valid values
+        gross_rev_part3 = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '')))
+        profit_loss_part3 = data_cleaning.clean_numeric(row.get('Profit & Loss (Meeting)', row.get('Profits/Losses', '')))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
-        create_element(income_part3, 'GrossRevenues', data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '0'))))
-        create_element(income_part3, 'ProfitLoss', data_cleaning.clean_numeric(row.get('Profit & Loss (Meeting)', row.get('Profits/Losses', '0'))))
+        create_element(income_part3, 'GrossRevenues', gross_rev_part3 if gross_rev_part3 else '0')
+        create_element(income_part3, 'ProfitLoss', profit_loss_part3 if profit_loss_part3 else '0')
         create_element(income_part3, 'ExportGrossRevenuesOrSales', '0')
-        create_element(income_part3, 'GrowthIndicator', '')
+
+        # ResourcePartnerServiceContributed - XSD expects this wrapper around loan amounts
+        sba_loan = data_cleaning.clean_numeric(row.get('SBA Loan Amount', '0'))
+        non_sba_loan = data_cleaning.clean_numeric(row.get('Non-SBA Loan Amount', '0'))
+        equity_capital = data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', '0'))
+        rpsc = create_element(counselor_record, 'ResourcePartnerServiceContributed')
+        create_element(rpsc, 'SBALoanAmount', sba_loan if sba_loan else '0')
+        create_element(rpsc, 'NonSBALoanAmount', non_sba_loan if non_sba_loan else '0')
+        create_element(rpsc, 'EquityCapitalReceived', equity_capital if equity_capital else '0')
+
+        # Certifications - only emit if CSV has values
+        cert_codes = data_cleaning.split_multi_value(row.get('Certifications (SDB, HUBZONE, etc)', ''))
+        cert_other = row.get('Other Certifications', '').strip()
+        if cert_codes or cert_other:
+            cert_element = create_element(counselor_record, 'Certifications')
+            for code in cert_codes:
+                create_element(cert_element, 'Code', code)
+            if not cert_codes and cert_other:
+                create_element(cert_element, 'Code', 'Other')
+            if cert_other:
+                create_element(cert_element, 'Other', cert_other)
+
+        # SBAFinancialAssistance - only emit if CSV has values
+        sba_fa_codes = data_cleaning.split_multi_value(row.get('SBA Financial Assistance', ''))
+        sba_fa_other = row.get('Other SBA Financial Assistance', '').strip()
+        if sba_fa_codes or sba_fa_other:
+            sba_fa_element = create_element(counselor_record, 'SBAFinancialAssistance')
+            for code in sba_fa_codes:
+                create_element(sba_fa_element, 'Code', code)
+            if not sba_fa_codes and sba_fa_other:
+                create_element(sba_fa_element, 'Code', 'Other(SBIR, SBIC, 7(a) 504, etc)')
+            if sba_fa_other:
+                create_element(sba_fa_element, 'Other', sba_fa_other)
 
         cp_element = create_element(counselor_record, 'CounselingProvided')
         provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
         for code in provided_codes:
             create_element(cp_element, 'Code', code)
+
+        # ReferredClient - only emit if CSV has values
+        referred_codes = data_cleaning.split_multi_value(row.get('Referred Client to', ''))
+        referred_other = row.get('Other (Referred Client to)', '').strip()
+        if referred_codes or referred_other:
+            referred_element = create_element(counselor_record, 'ReferredClient')
+            for code in referred_codes:
+                create_element(referred_element, 'Code', code)
+            if not referred_codes and referred_other:
+                create_element(referred_element, 'Code', 'Other')
+            if referred_other:
+                create_element(referred_element, 'Other', referred_other)
 
         session_type_raw = row.get('Type of Session', self.config.DEFAULT_SESSION_TYPE)
         session_type = "Update Only" if session_type_raw.strip() == "Update" else session_type_raw.strip()
@@ -255,10 +322,17 @@ class CounselingConverter(BaseConverter):
         lang_element = create_element(counselor_record, 'Language')
         for code in data_cleaning.split_multi_value(row.get('Language(s) Used', self.general_config.DEFAULT_LANGUAGE)):
             create_element(lang_element, 'Code', code)
-        create_element(lang_element, 'Other', row.get('Language(s) Used (Other)', ''))
+        lang_other = row.get('Language(s) Used (Other)', '').strip()
+        if lang_other:
+            create_element(lang_element, 'Other', lang_other)
 
-        create_element(counselor_record, 'DateCounseled', data_cleaning.format_date(row.get('Date', '')))
-        create_element(counselor_record, 'CounselorName', row.get('Name of Counselor', ''))
+        date_counseled = data_cleaning.format_date(row.get('Date', ''))
+        if date_counseled:
+            create_element(counselor_record, 'DateCounseled', date_counseled)
+
+        counselor_name = row.get('Name of Counselor', '').strip()
+        if counselor_name:
+            create_element(counselor_record, 'CounselorName', counselor_name)
 
         ch_element = create_element(counselor_record, 'CounselingHours')
         contact_val = data_cleaning.clean_numeric(row.get('Duration (hours)', '0'))
@@ -268,11 +342,9 @@ class CounselingConverter(BaseConverter):
         create_element(ch_element, 'Prepare', data_cleaning.clean_numeric(row.get('Prep Hours', '0')))
         create_element(ch_element, 'Travel', data_cleaning.clean_numeric(row.get('Travel Hours', '0')))
 
-        create_element(counselor_record, 'CounselorNotes', data_cleaning.truncate_counselor_notes(row.get('Comments', ''), self.config.MAX_FIELD_LENGTHS["CounselorNotes"]))
-
-        create_element(counselor_record, 'SBALoanAmount', data_cleaning.clean_numeric(row.get('SBA Loan Amount', '0')))
-        create_element(counselor_record, 'NonSBALoanAmount', data_cleaning.clean_numeric(row.get('Non-SBA Loan Amount', '0')))
-        create_element(counselor_record, 'EquityCapitalReceived', data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', '0')))
+        counselor_notes = data_cleaning.truncate_counselor_notes(row.get('Comments', ''), self.config.MAX_FIELD_LENGTHS["CounselorNotes"])
+        if counselor_notes:
+            create_element(counselor_record, 'CounselorNotes', counselor_notes)
 
 
     def _build_address(self, parent, element_name, row, record_id):
@@ -287,13 +359,20 @@ class CounselingConverter(BaseConverter):
         if not zip_5digit and zip_full:
             self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_FORMAT, "Mailing Zip/Postal Code", f"Could not parse 5-digit ZIP from '{zip_full}'.")
         create_element(address, 'ZipCode', zip_5digit)
-        create_element(address, 'Zip4Code', '')
+        # Zip4Code requires exactly 4 digits per XSD - only emit if we have it
+        zip4_match = re.match(r'^\d{5}-(\d{4})', zip_full)
+        if zip4_match:
+            create_element(address, 'Zip4Code', zip4_match.group(1))
         country = create_element(address, 'Country')
         create_element(country, 'Code', data_cleaning.standardize_country_code(row.get('Mailing Country', 'US')))
 
     def _build_phone(self, parent, element_name, row):
-        phone = create_element(parent, element_name)
-        create_element(phone, 'Primary', data_cleaning.clean_phone_number(row.get('Contact: Phone', '')))
+        primary_phone = data_cleaning.clean_phone_number(row.get('Contact: Phone', ''))
         secondary_phone = data_cleaning.clean_phone_number(row.get('Contact: Secondary Phone', ''))
-        if secondary_phone:
-            create_element(phone, 'Secondary', secondary_phone)
+        # Only emit phone element if at least one number is present
+        if primary_phone or secondary_phone:
+            phone = create_element(parent, element_name)
+            if primary_phone:
+                create_element(phone, 'Primary', primary_phone)
+            if secondary_phone:
+                create_element(phone, 'Secondary', secondary_phone)

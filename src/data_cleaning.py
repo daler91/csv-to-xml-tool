@@ -331,35 +331,42 @@ def split_multi_value(value, delimiter=";"):
 
 def clean_numeric(value):
     """
-    Cleans numeric values to ensure they're valid.
-    Returns empty string if invalid or None.
+    Cleans a numeric string by removing commas, currency symbols, and whitespace.
+    Extracts digits and optional decimal point.
     """
-    if not value or str(value).strip() == "" or str(value).lower() == "nan":
+    if value is None or str(value).strip() == "" or str(value).strip().lower() == "nan":
         return ""
     
+    cleaned_str = str(value).replace(" ", "").replace("$", "").replace(",", "")
+
     try:
-        # Try to convert to float and then string (removes redundant .0)
-        float_val = float(value)
-        # If it's a whole number, return it as an integer
+        float_val = float(cleaned_str)
         if float_val.is_integer():
             return str(int(float_val))
-        # Otherwise return as float
         return str(float_val)
     except (ValueError, TypeError):
         return ""
 
 def clean_percentage(value):
     """
-    Cleans percentage values ensuring they're valid.
+    Cleans a percentage string, removing the % symbol and converting to a decimal.
     Returns a number between 0 and 100.
     """
     if not value or str(value).strip() == "" or str(value).lower() == "nan":
         return "0"
     
+    value_str = str(value).strip()
+    if value_str.endswith('%'):
+        value_str = value_str[:-1].strip()
+
     try:
-        float_val = float(value)
+        float_val = float(value_str)
         # Ensure it's between 0 and 100
         float_val = max(0, min(100, float_val))
+
+        if float_val.is_integer():
+            return str(int(float_val))
+
         return str(float_val)
     except (ValueError, TypeError):
         raise ValueError(f"Invalid percentage value: {value}")

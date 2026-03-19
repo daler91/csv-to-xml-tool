@@ -7,6 +7,7 @@ import os
 import sys
 import xml.etree.ElementTree as ET
 from lxml import etree
+from defusedxml.lxml import parse as defused_parse
 import logging # Keep standard logging import for levels like logging.INFO
 import re
 

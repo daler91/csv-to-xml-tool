@@ -362,14 +362,14 @@ def clean_percentage(value):
     try:
         float_val = float(value_str)
         # Ensure it's between 0 and 100
-        float_val = max(0, min(100, float_val))
+        float_val = float(max(0, min(100, float_val)))
 
         if float_val.is_integer():
             return str(int(float_val))
 
         return str(float_val)
     except (ValueError, TypeError):
-        raise ValueError(f"Invalid percentage value: {value}")
+        return "0"
 
 def truncate_counselor_notes(notes, max_length=CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"]):
     """

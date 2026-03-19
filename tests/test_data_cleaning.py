@@ -222,12 +222,9 @@ class TestCleanPercentage(unittest.TestCase):
         self.assertEqual(clean_percentage(150), "100")
 
     def test_clean_percentage_invalid_strings(self):
-        with self.assertRaises(ValueError):
-            clean_percentage("abc")
-        with self.assertRaises(ValueError):
-            clean_percentage("50 percent")
-        with self.assertRaises(ValueError):
-            clean_percentage("10.5.5")
+        self.assertEqual(clean_percentage("abc"), "0")
+        self.assertEqual(clean_percentage("50 percent"), "0")
+        self.assertEqual(clean_percentage("10.5.5"), "0")
 
 if __name__ == '__main__':
     unittest.main()

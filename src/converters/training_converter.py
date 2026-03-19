@@ -11,7 +11,7 @@ import re
 from .base_converter import BaseConverter
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
-from ..xml_utils import create_element, escape_xml
+from ..xml_utils import create_element
 
 class TrainingConverter(BaseConverter):
     """
@@ -84,7 +84,7 @@ class TrainingConverter(BaseConverter):
                 # FundingSource - optional element based on XSD, but placing it correctly.
                 funding_source = self._get_column_value(first_record, 'funding_source')
                 if funding_source:
-                    create_element(record, 'FundingSource', escape_xml(funding_source))
+                    create_element(record, 'FundingSource', funding_source)
 
                 location = create_element(record, 'Location')
                 create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
@@ -99,7 +99,7 @@ class TrainingConverter(BaseConverter):
                 title_val = self._get_column_value(first_record, "event_name")
                 if not title_val:
                     title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
-                create_element(record, 'TrainingTitle', escape_xml(title_val))
+                create_element(record, 'TrainingTitle', title_val)
 
                 self._build_location_section(record, first_record)
                 demographics = self._calculate_demographics(group_df)
@@ -123,7 +123,7 @@ class TrainingConverter(BaseConverter):
 
                 cosponsor_name = self._get_column_value(first_record, "cosponsor")
                 if cosponsor_name and cosponsor_name.lower() != 'n/a':
-                    create_element(record, 'CosponsorsName', escape_xml(cosponsor_name))
+                    create_element(record, 'CosponsorsName', cosponsor_name)
 
                 self.validator.record_processed(success=True)
 
@@ -156,9 +156,9 @@ class TrainingConverter(BaseConverter):
             state = self.config.DEFAULT_LOCATION['state']
             zip_code = self.config.DEFAULT_LOCATION['zip']
 
-        create_element(training_location, 'City', escape_xml(city))
+        create_element(training_location, 'City', city)
         create_element(training_location, 'State', data_cleaning.standardize_state_name(state))
-        create_element(training_location, 'ZipCode', escape_xml(zip_code))
+        create_element(training_location, 'ZipCode', zip_code)
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 
@@ -167,18 +167,25 @@ class TrainingConverter(BaseConverter):
         total = len(df)
         demographics['total'] = max(total, 2) # XSD minimum
 
+        # Helper to resolve a config column key to the actual DataFrame column name
+        def resolve_column(column_key):
+            possible = self.config.COLUMN_MAPPING.get(column_key, [])
+            if isinstance(possible, str):
+                possible = [possible]
+            return next((c for c in possible if c in df.columns), None)
+
         # Helper to count matches for a given set of keywords in a specified column
         def count_matches(column_key, keywords_map):
-            column_name = self._get_column_value(df.iloc[0], column_key)
-            if not column_name or column_name not in df.columns:
+            column_name = resolve_column(column_key)
+            if not column_name:
                 return 0
 
             pattern = '|'.join(keywords_map)
             return sum(df[column_name].fillna('').astype(str).str.lower().str.contains(pattern))
 
         # Business Status
-        business_status_col = self._get_column_value(df.iloc[0], 'business_status')
-        if business_status_col and business_status_col in df.columns:
+        business_status_col = resolve_column('business_status')
+        if business_status_col:
             currently_in_business = sum(df[business_status_col].fillna('').astype(str).str.lower().str.contains('yes|true|1|y'))
             demographics['currently_in_business'] = currently_in_business
             demographics['not_in_business'] = total - currently_in_business
@@ -198,9 +205,9 @@ class TrainingConverter(BaseConverter):
 
         # Ethnicity
         hispanic_count = count_matches('ethnicity', self.config.DEMOGRAPHIC_KEYWORDS['ethnicity']['hispanic'])
-        ethnicity_col_name = self._get_column_value(df.iloc[0], 'ethnicity')
+        ethnicity_col_name = resolve_column('ethnicity')
         non_hispanic_count = 0
-        if ethnicity_col_name and ethnicity_col_name in df.columns:
+        if ethnicity_col_name:
             non_hispanic_mask = (~df[ethnicity_col_name].fillna('').astype(str).str.lower().str.contains('hispanic|latino')) & (df[ethnicity_col_name] != '')
             non_hispanic_count = sum(non_hispanic_mask)
         demographics['ethnicity'] = {'hispanic': hispanic_count, 'non_hispanic': non_hispanic_count}

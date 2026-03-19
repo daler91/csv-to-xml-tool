@@ -5,7 +5,7 @@ This module helps validate and fix common XML structure issues.
 
 import os
 import sys
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from lxml import etree
 import logging # Keep standard logging import for levels like logging.INFO
 import re

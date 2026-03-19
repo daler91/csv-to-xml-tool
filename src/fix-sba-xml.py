@@ -8,7 +8,7 @@ SBA_NEXUS_Counseling XSD schema.
 
 import os
 import sys
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 import argparse
 import logging # Keep standard logging import for levels like logging.INFO
 from datetime import datetime

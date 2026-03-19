@@ -350,16 +350,24 @@ def clean_numeric(value):
 
 def clean_percentage(value):
     """
-    Cleans percentage values ensuring they're valid.
+    Cleans a percentage string, removing the % symbol and converting to a decimal.
     Returns a number between 0 and 100.
     """
     if not value or str(value).strip() == "" or str(value).lower() == "nan":
         return "0"
     
+    value_str = str(value).strip()
+    if value_str.endswith('%'):
+        value_str = value_str[:-1].strip()
+
     try:
-        float_val = float(value)
+        float_val = float(value_str)
         # Ensure it's between 0 and 100
         float_val = max(0, min(100, float_val))
+
+        if float_val.is_integer():
+            return str(int(float_val))
+
         return str(float_val)
     except (ValueError, TypeError):
         raise ValueError(f"Invalid percentage value: {value}")

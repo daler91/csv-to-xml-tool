@@ -6,7 +6,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data_cleaning import format_date, standardize_state_name, map_value
+from src.data_cleaning import format_date, standardize_state_name, map_value, clean_percentage
 
 class TestFormatDate(unittest.TestCase):
 
@@ -167,6 +167,46 @@ class TestStandardizeCountryCode(unittest.TestCase):
         for value, expected in test_values.items():
             with self.subTest(value=value):
                 self.assertEqual(standardize_country_code(value), expected)
+
+
+class TestCleanPercentage(unittest.TestCase):
+    def test_clean_percentage_valid_strings(self):
+        self.assertEqual(clean_percentage("50"), "50")
+        self.assertEqual(clean_percentage("50%"), "50")
+        self.assertEqual(clean_percentage("0.5"), "0.5")
+        self.assertEqual(clean_percentage(" 0.5% "), "0.5")
+        self.assertEqual(clean_percentage("100"), "100")
+        self.assertEqual(clean_percentage("100%"), "100")
+
+    def test_clean_percentage_valid_numbers(self):
+        self.assertEqual(clean_percentage(50), "50")
+        self.assertEqual(clean_percentage(0.5), "0.5")
+        self.assertEqual(clean_percentage(100), "100")
+        self.assertEqual(clean_percentage(100.0), "100")
+        self.assertEqual(clean_percentage(0), "0")
+
+    def test_clean_percentage_empty_and_none(self):
+        self.assertEqual(clean_percentage(""), "0")
+        self.assertEqual(clean_percentage(None), "0")
+        self.assertEqual(clean_percentage("   "), "0")
+        self.assertEqual(clean_percentage("nan"), "0")
+        self.assertEqual(clean_percentage("NaN"), "0")
+
+    def test_clean_percentage_out_of_bounds(self):
+        self.assertEqual(clean_percentage("-10"), "0")
+        self.assertEqual(clean_percentage("-10%"), "0")
+        self.assertEqual(clean_percentage("-0.5"), "0")
+        self.assertEqual(clean_percentage("150"), "100")
+        self.assertEqual(clean_percentage("150%"), "100")
+        self.assertEqual(clean_percentage(150), "100")
+
+    def test_clean_percentage_invalid_strings(self):
+        with self.assertRaises(ValueError):
+            clean_percentage("abc")
+        with self.assertRaises(ValueError):
+            clean_percentage("50 percent")
+        with self.assertRaises(ValueError):
+            clean_percentage("10.5.5")
 
 if __name__ == '__main__':
     unittest.main()

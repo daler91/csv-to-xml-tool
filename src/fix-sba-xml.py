@@ -23,7 +23,6 @@ from .logging_util import ConversionLogger # Import ConversionLogger
 try:
     from .xml_validator import fix_client_intake_element_order as validator_fix_order
     from .xml_validator import process_directory as validator_process_directory
-    from .xml_validator import validate_against_xsd
 except ImportError:
     # Fallback or error handling if xml_validator is not found directly
     # This might happen if they are not in the same directory and PYTHONPATH isn't set up.

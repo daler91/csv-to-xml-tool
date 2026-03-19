@@ -159,7 +159,9 @@ class CounselingConverter(BaseConverter):
         create_element(client_intake, 'ConductingBusinessOnline', row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS))
         create_element(client_intake, 'ClientIntake_Certified8a', row.get('8(a) Certified?(old)', self.general_config.DEFAULT_BUSINESS_STATUS))
         create_element(client_intake, 'TotalNumberOfEmployees', data_cleaning.clean_numeric(row.get('Total Number of Employees', '0')))
-        create_element(client_intake, 'NumberOfEmployeesInExportingBusiness', '0')
+        exporting_employees1 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
+        if exporting_employees1 and float(exporting_employees1) > 0:
+            create_element(client_intake, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees1))))
 
         income_part2 = create_element(client_intake, 'ClientAnnualIncomePart2')
         create_element(income_part2, 'GrossRevenues', data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', '0')))
@@ -218,7 +220,9 @@ class CounselingConverter(BaseConverter):
 
         create_element(counselor_record, 'VerifiedToBeInBusiness', 'Undetermined')
         create_element(counselor_record, 'ReportableImpact', row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS))
-        create_element(counselor_record, 'DateOfReportableImpact', data_cleaning.format_date(row.get('Reportable Impact Date', '')))
+        impact_date = data_cleaning.format_date(row.get('Reportable Impact Date', ''))
+        if impact_date:
+            create_element(counselor_record, 'DateOfReportableImpact', impact_date)
         create_element(counselor_record, 'CurrentlyExporting', self.general_config.DEFAULT_BUSINESS_STATUS)
 
         business_start_date = data_cleaning.format_date(row.get('Business Start Date', '')) or data_cleaning.format_date(row.get('Date Started (Meeting)', ''))
@@ -226,7 +230,9 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
         create_element(counselor_record, 'TotalNumberOfEmployees', data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0'))))
-        create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', '0')
+        exporting_employees2 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
+        if exporting_employees2 and float(exporting_employees2) > 0:
+            create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
 
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
         create_element(income_part3, 'GrossRevenues', data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '0'))))
@@ -288,4 +294,6 @@ class CounselingConverter(BaseConverter):
     def _build_phone(self, parent, element_name, row):
         phone = create_element(parent, element_name)
         create_element(phone, 'Primary', data_cleaning.clean_phone_number(row.get('Contact: Phone', '')))
-        create_element(phone, 'Secondary', '')
+        secondary_phone = data_cleaning.clean_phone_number(row.get('Contact: Secondary Phone', ''))
+        if secondary_phone:
+            create_element(phone, 'Secondary', secondary_phone)

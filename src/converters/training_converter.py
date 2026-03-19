@@ -1,3 +1,4 @@
+from .. import data_validation
 """
 Handles the conversion of SBA Management Training Reports from CSV to XML.
 """
@@ -79,6 +80,12 @@ class TrainingConverter(BaseConverter):
                 record = create_element(root, 'ManagementTrainingRecord')
 
                 create_element(record, 'PartnerTrainingNumber', str(event_id))
+
+                # FundingSource - optional element based on XSD, but placing it correctly.
+                funding_source = self._get_column_value(first_record, 'funding_source')
+                if funding_source:
+                    create_element(record, 'FundingSource', escape_xml(funding_source))
+
                 location = create_element(record, 'Location')
                 create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
 

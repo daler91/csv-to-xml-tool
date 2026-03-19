@@ -11,13 +11,19 @@ from collections import defaultdict, Counter
 class ValidationTracker:
     """Tracks validation issues during the conversion process."""
     
+
     def __init__(self):
         """Initialize the validation tracker."""
-        # Store validation issues as a list of dictionaries
         self.issues = []
-        
-        # Track counts by category and type
         self.issue_counts = defaultdict(Counter)
+        self.total_records = 0
+        self.successful_records = 0
+        self.failed_records = 0
+        self.current_record_id = None
+
+    def set_current_record_id(self, record_id):
+        self.current_record_id = record_id
+
         
         # Track processed records
         self.total_records = 0

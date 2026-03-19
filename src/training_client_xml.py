@@ -236,27 +236,9 @@ def build_client_intake_section(counseling_record, row, record_id, logger):
             create_element(counseling_seeking, 'Code', code)
         create_element(counseling_seeking, 'Other', '')
 
-def build_training_counselor_record_section(counseling_record, row, record_id, logger, training_hours=DEFAULT_TRAINING_HOURS):
-    """
-    Builds the CounselorRecord section with training-specific elements and defaults.
-    
-    Args:
-        counseling_record: The parent XML element
-        row: Dictionary of field values
-        record_id: ID of the record
-        logger: Logger instance
-        training_hours: Default training hours to use if not specified in CSV
-    """
-    counselor_record = create_element(counseling_record, 'CounselorRecord')
-    
-    # CHANGE 3: Use Class Member ID as the PartnerSessionNumber, generate if missing
-    session_number = get_value_with_default(row, 'Class Member ID', f"TRN{record_id}")
-    create_element(counselor_record, 'PartnerSessionNumber', session_number)
-    
-    # Still need Class/Event ID for the training section
-    class_id = get_value_with_default(row, 'Class/Event ID', f"CLS{record_id}")
-    
-    # Contact information - repeat from ClientRequest with defaults
+
+def _add_training_contact_info(counselor_record, row):
+    """Helper to add contact information to a counselor record."""
     counselor_name = create_element(counselor_record, 'ClientNamePart3')
     create_element(counselor_name, 'Last', get_value_with_default(row, 'Last Name', DEFAULT_LAST_NAME))
     create_element(counselor_name, 'First', get_value_with_default(row, 'First Name', DEFAULT_FIRST_NAME))
@@ -268,8 +250,10 @@ def build_training_counselor_record_section(counseling_record, row, record_id, l
     phone = create_element(counselor_record, 'PhonePart3')
     create_element(phone, 'Primary', clean_phone_number(row.get('Phone', '')))
     create_element(phone, 'Secondary', '')
-    
-    # Address information (optional but adding for completeness)
+
+
+def _add_training_address_info(counselor_record, row):
+    """Helper to add address information to a counselor record."""
     address = create_element(counselor_record, 'AddressPart3')
     create_element(address, 'Street1', row.get('Mailing Street', ''))
     create_element(address, 'Street2', '')
@@ -290,6 +274,52 @@ def build_training_counselor_record_section(counseling_record, row, record_id, l
     country_value = get_value_with_default(row, 'Mailing Country', DEFAULT_COUNTRY)
     standardized_country = standardize_country_code(country_value)
     create_element(country, 'Code', standardized_country)
+
+
+def _add_training_session_info(counselor_record, row, class_id, training_hours):
+    """Helper to add training session specific information."""
+    training_session = create_element(counselor_record, 'TrainingSession')
+
+    # DateTrainingStarted - use the Start Date or current date if missing
+    training_date = format_date(row.get('Start Date', ''))
+    if not training_date:
+        training_date = datetime.now().strftime("%Y-%m-%d")
+    create_element(training_session, 'DateTrainingStarted', training_date)
+
+    # Partner Training Number - use Class/Event ID or generate one
+    create_element(training_session, 'PartnerTrainingNumber', class_id)
+
+    # Employees Trained - default to 1 (the attendee)
+    create_element(training_session, 'EmployeesTrained', str(DEFAULT_EMPLOYEES_TRAINED))
+
+    # Hours Trained - use default value
+    create_element(training_session, 'HoursTrained', str(training_hours))
+
+def build_training_counselor_record_section(counseling_record, row, record_id, logger, training_hours=DEFAULT_TRAINING_HOURS):
+    """
+    Builds the CounselorRecord section with training-specific elements and defaults.
+
+    Args:
+        counseling_record: The parent XML element
+        row: Dictionary of field values
+        record_id: ID of the record
+        logger: Logger instance
+        training_hours: Default training hours to use if not specified in CSV
+    """
+    counselor_record = create_element(counseling_record, 'CounselorRecord')
+
+    # CHANGE 3: Use Class Member ID as the PartnerSessionNumber, generate if missing
+    session_number = get_value_with_default(row, 'Class Member ID', f"TRN{record_id}")
+    create_element(counselor_record, 'PartnerSessionNumber', session_number)
+
+    # Still need Class/Event ID for the training section
+    class_id = get_value_with_default(row, 'Class/Event ID', f"CLS{record_id}")
+
+    # Contact information - repeat from ClientRequest with defaults
+    _add_training_contact_info(counselor_record, row)
+
+    # Address information (optional but adding for completeness)
+    _add_training_address_info(counselor_record, row)
     
     # Status fields (optional but recommended)
     create_element(counselor_record, 'VerifiedToBeInBusiness', 'Undetermined')
@@ -324,22 +354,7 @@ def build_training_counselor_record_section(counseling_record, row, record_id, l
     create_element(counseling_provided, 'Code', counseling_type)
     
     # Training-specific section (required for training clients)
-    training_session = create_element(counselor_record, 'TrainingSession')
-    
-    # DateTrainingStarted - use the Start Date or current date if missing
-    training_date = format_date(row.get('Start Date', ''))
-    if not training_date:
-        training_date = datetime.now().strftime("%Y-%m-%d")
-    create_element(training_session, 'DateTrainingStarted', training_date)
-    
-    # Partner Training Number - use Class/Event ID or generate one
-    create_element(training_session, 'PartnerTrainingNumber', class_id)
-    
-    # Employees Trained - default to 1 (the attendee)
-    create_element(training_session, 'EmployeesTrained', str(DEFAULT_EMPLOYEES_TRAINED))
-    
-    # Hours Trained - use default value
-    create_element(training_session, 'HoursTrained', str(training_hours))
+    _add_training_session_info(counselor_record, row, class_id, training_hours)
 
 def create_training_xml_from_csv(csv_file_path, xml_file_path, training_hours=DEFAULT_TRAINING_HOURS, logger=None):
     """

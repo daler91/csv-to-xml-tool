@@ -12,15 +12,15 @@ import argparse
 import logging # Keep standard logging import for levels like logging.INFO
 
 # Import data cleaning functions from existing module
-from data_cleaning import (
+from .data_cleaning import (
     clean_phone_number, format_date, clean_whitespace, 
     map_gender_to_sex, split_multi_value, clean_numeric, clean_percentage,
     truncate_counselor_notes, standardize_country_code, standardize_state_name
 )
 
-# Import constants from config (if needed)
-from config import (
-    DEFAULT_LOCATION_CODE, DEFAULT_LANGUAGE, ValidationCategory
+# Import constants from .config (if needed)
+from .config import (
+    DEFAULT_LOCATION_CODE, DEFAULT_LANGUAGE
 )
 
 # ================ DEFAULT VALUES ================
@@ -69,7 +69,7 @@ def get_value_with_default(row, field_name, default_value):
     return value
 
 # ================ XML GENERATION FUNCTIONS ================
-from xml_utils import create_element
+from .xml_utils import create_element
 
 def build_client_request_section(counseling_record, row, record_id, logger):
     """
@@ -387,7 +387,7 @@ def create_training_xml_from_csv(csv_file_path, xml_file_path, training_hours=DE
                 
             # Location section
             location = create_element(counseling_record, 'Location')
-            create_element(location, 'LocationCode', DEFAULT_LOCATION_CODE)  # Use default from config
+            create_element(location, 'LocationCode', DEFAULT_LOCATION_CODE)  # Use default from .config
             
             # Build ClientRequest section
             build_client_request_section(counseling_record, row, record_id, logger)
@@ -427,7 +427,7 @@ def main():
     args = parser.parse_args()
     
     # Setup logger using ConversionLogger
-    from logging_util import ConversionLogger
+    from .logging_util import ConversionLogger
     log_level_val = getattr(logging, args.log_level.upper(), logging.INFO)
     # For this script, file logging is not explicitly configured via CLI.
     # Defaulting log_to_file=False for now, or add a --log-file arg if needed.

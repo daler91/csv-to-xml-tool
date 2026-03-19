@@ -24,7 +24,7 @@ The tool includes robust data cleaning, validation reporting, and a fixer utilit
   * **Validation & Reporting**:
       * During conversion, it generates comprehensive validation reports in both CSV and HTML formats, detailing any issues found in the source data.
   * **XML Fixer Utility**:
-      * Includes a standalone script (`fix-sba-xml.py`) to correct element ordering issues in existing XML files that do not conform to the schema.
+      * Includes a standalone script (`fix_sba_xml.py`) to correct element ordering issues in existing XML files that do not conform to the schema.
 
 -----
 
@@ -44,8 +44,8 @@ The tool includes robust data cleaning, validation reporting, and a fixer utilit
 │   ├── config.py                   # Central configuration for field mappings, defaults, and validation rules
 │   ├── validation_report.py        # Module for tracking and reporting validation issues
 │   ├── logging_util.py             # Configures application-wide logging
-│   ├── fix-sba-xml.py              # Utility to fix element order in existing SBA XML files
-│   └── xml-validator.py            # Utility to validate XML files against an XSD
+│   ├── fix_sba_xml.py              # Utility to fix element order in existing SBA XML files
+│   └── xml_validator.py            # Utility to validate XML files against an XSD
 ├── tests/
 │   ├── test_counseling_converter.py
 │   ├── test_data_cleaning.py
@@ -85,10 +85,10 @@ The primary entry point for the conversion is `src/main.py`.
 
 ### Fixing an Existing XML File
 
-If you have an XML file that fails validation due to incorrect element order, use the `fix-sba-xml.py` script:
+If you have an XML file that fails validation due to incorrect element order, use the `fix_sba_xml.py` script:
 
 ```bash
-python -m src.fix-sba-xml --file /path/to/your/invalid.xml --output /path/to/output/fixed.xml
+python -m src.fix_sba_xml --file /path/to/your/invalid.xml --output /path/to/output/fixed.xml
 ```
 
 This will re-order the elements to match the schema requirements.

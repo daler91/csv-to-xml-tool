@@ -2,13 +2,12 @@ import unittest
 from unittest.mock import patch
 import sys
 import os
-import importlib
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-# Import using importlib because of the dash in the filename
-xml_validator = importlib.import_module("xml-validator")
+# Import xml_validator module (renamed from xml-validator.py to xml_validator.py)
+import xml_validator
 
 class TestValidateAgainstXsd(unittest.TestCase):
 

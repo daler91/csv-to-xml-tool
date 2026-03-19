@@ -263,6 +263,3 @@ class ValidationTracker:
             f.write(html_content)
         
         return html_file
-
-# Create a default validator instance
-validator = ValidationTracker()  

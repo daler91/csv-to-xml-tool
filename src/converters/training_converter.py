@@ -1,8 +1,8 @@
-from .. import data_validation
 """
 Handles the conversion of SBA Management Training Reports from CSV to XML.
 """
 
+from .. import data_validation
 import pandas as pd
 import xml.dom.minidom as md
 from xml.etree.ElementTree import Element, tostring

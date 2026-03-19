@@ -22,16 +22,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from logging_util import ConversionLogger # Import ConversionLogger
 
-# Import necessary functions from xml-validator
-# Note: Since the file name is xml-validator.py (with a hyphen), we use importlib.
-import importlib
-try:
-    xml_validator = importlib.import_module("xml-validator")
-    validator_fix_order = xml_validator.fix_client_intake_element_order
-    validator_process_directory = xml_validator.process_directory
-except ImportError:
-    print("Error: Could not import from xml-validator. Ensure it's in the same directory.")
-    sys.exit(1)
+# Import necessary functions from xml_validator
+from xml_validator import fix_client_intake_element_order as validator_fix_order
+from xml_validator import process_directory as validator_process_directory
 
 
 def parse_arguments():

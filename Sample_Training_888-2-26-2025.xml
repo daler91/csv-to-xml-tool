@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ManagementTrainingReport xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<ManagementTrainingRecord>
+<PartnerTrainingNumber>93747</PartnerTrainingNumber>
+<Location><LocationCode>250009</LocationCode></Location>
+<FundingSource>Severe Winter Storm and Flooding (NV) – 1738</FundingSource>
+<DateTrainingStarted>2023-12-12</DateTrainingStarted>
+<NumberOfSessions>6</NumberOfSessions>
+<TotalTrainingHours>0.1</TotalTrainingHours>
+ <TrainingTitle>International Sales for Small Business - Webinar</TrainingTitle>
+<TrainingLocation><City>Aurora</City><State>Alabama</State><ZipCode>07501</ZipCode><Country><Code>United States</Code></Country><PostalCode></PostalCode><StateOrProvince></StateOrProvince></TrainingLocation>
+ <TrainingLocation><ZipCode>07501</ZipCode></TrainingLocation> 
+<NumberTrained>
+<Total>2</Total>
+<CurrentlyInBusiness>3</CurrentlyInBusiness>
+<NotYetInBusiness>3</NotYetInBusiness>
+<PersonWithDisabilities>5</PersonWithDisabilities>
+<Female>3</Female>
+<Male>4</Male>
+<ActiveDuty>0</ActiveDuty>
+<Veterans>0</Veterans>
+<ServiceDisabledVeterans>0</ServiceDisabledVeterans>
+<MemberOfReserveOrNationalGuard>0</MemberOfReserveOrNationalGuard>
+<SpouseOfMilitaryMember>20</SpouseOfMilitaryMember>
+<Race>
+<Asian>3</Asian>
+<BlackOrAfricanAmerican>3</BlackOrAfricanAmerican>
+<NativeAmericanOrAlaskaNative>6</NativeAmericanOrAlaskaNative>
+<NativeHawaiianOrPacificIslander>7</NativeHawaiianOrPacificIslander>
+<White>5</White>
+<MiddleEastern>20</MiddleEastern>
+<NorthAfrican>30</NorthAfrican>
+</Race>
+<Ethnicity>
+<HispanicOrLatinoOrigin>10</HispanicOrLatinoOrigin>
+<NonHispanicOrLatinoOrigin>6</NonHispanicOrLatinoOrigin>
+</Ethnicity>
+</NumberTrained>
+<NumberMinoritiesTrained>
+<Total>6</Total>
+</NumberMinoritiesTrained>
+<TrainingTopic>
+<Code>Technology</Code>
+</TrainingTopic>
+<TrainingPartners>
+<Code>SBA</Code>
+<Code>Other Government Agency</Code>
+<Code>Educational Institution</Code>
+<Code>Other</Code>
+<OtherSBA>Denver SBA office</OtherSBA>
+<OtherAgency>new agency1 </OtherAgency>
+<Other>other partners</Other>
+</TrainingPartners>
+<ProgramFormat>Seminar</ProgramFormat> 
+<ProgramFormatType>In-person</ProgramFormatType>
+<DollarAmountOfFees>100</DollarAmountOfFees>
+<Language><Code>English</Code><Code>Spanish</Code></Language>
+<SponsorName>test</SponsorName>
+<CosponsorsName>test</CosponsorsName>
+</ManagementTrainingRecord>
+</ManagementTrainingReport>

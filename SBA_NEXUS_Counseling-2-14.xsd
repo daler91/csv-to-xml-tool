@@ -1,0 +1,4739 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Schema Name: SBA_EDMIS_Counseling.xsd
+
+Description: This is a XSD for Counseling Information Form (641).
+
+Application: Nexus
+
+Modification Log:
+Change#		Date		Author			Modification
+*********** *********** *************** *****************
+1. Removed length restriction of 2 character from "CountryList" values
+2. Add enumeration restriction for all possible country codes in "CountryList" Values
+3. Removed length restriction of 2 character from "State" List values
+4. Add enumeration restriction for all possible state codes in "State" List Values
+5. In all addresses, made "PostalCode" optional
+6. In all addresses, updated length restriction of "PostalCode" from exact length of 20 characters to max length of 20 characters
+7. In all addresses, made "StateOrProvince" optional
+8. In all addresses, updated length restriction of "StateOrProvince" from exact length of 60 characters to max length of 60 characters
+9. Updated "ExportCountryList" to be optional and to have more than one code.
+10. Removed length restriction of 3 character from  "ExportCountryList" values
+11. Add enumeration restriction for all possible country code in  "ExportCountryList" Values
+12. Updated "Certifications" list to have more than one code
+13. Updated "SBAFinancialAssistance" list to have more than one code
+14. Updated "ReferredClient" list to have more than one code
+15. Updated "Language" list to have more than one code
+16. ***Made "ClientType" mandatory***
+17. Made "CounselingSeeking" mandatory
+18. Made "ClientSignature"- "Date" optional.
+19. Made "Race" mandatory
+20. Made "Ethnicity" mandatory
+21. Made "Gender" mandatory
+22. Made "Disability" mandatory
+23. Made "MilitaryStatus" mandatory
+24. Made "CurrentlyInBusiness" elements mandatory
+25. Made "SessionType" mandatory
+26. Made "Language" mandatory
+27. ***Made "History" mandatory***
+28. Made "Date Counseled" mandatory
+29. Made "Counselor Name" mandatory
+30. Made "Contact Hours" optional
+31. Made "First Name" and "Last Name" mandatory
+32. In all addresses, updated "Zip Code" to be optional
+33. Updated "Code" inside "Country List" to be optional
+34. Made "Answer" under "More Than One Counselor Attend" optional
+35. Made "Partner Training Number", "Employees Trained" and "Hours Trained" optional
+36. Removed element "ClientType"
+37. Removed element "Fax"
+38. Updated "Race" enum list to contain literal descriptive values instead of code
+39. Added a new element "SelfDesribedRace"
+40. Added new options for "Race" as - "Prefer to Self-Describe", "Middle Eastern", "North African"
+41. For "Race", updated option "Unknown/Not Stated" to "Prefer not to say"
+42. Updated "Ethnicity" enum list to contain literal descriptive values instead of code
+43. For "Ethnicity", updated option "Unknown/Not Stated" to "Prefer not to say"
+44. Updated "Gender" enum list to contain literal descriptive values instead of code
+45. Added new options for "Gender" as - "Prefer to Self-Describe", "Non-binary"
+46. For "Gender", updated option "Unknown/Not Stated" to "Prefer not to say"
+47. Added a new element "SelfDescribedGender"
+48. Added new elements "Sexual Orientation" and "Self Described Sexual Orientation"
+49. Updated "Disability" enum list to contain literal descriptive values instead of code
+50. Updated "MilitaryStatus" enum list to contain literal descriptive values instead of code
+51. For "MilitaryStatus", updated option "Unknown/Not Stated" to "Prefer not to say"
+52. For "MilitaryStatus", updated option "On Active Duty" to "Active Duty"
+53. For "MilitaryStatus", updated option "No military, Reserve,or National Guard service" to "No military service"
+54. Updated "Media" enum list to contain literal descriptive values instead of codes
+55. Updated "Business Type" enum list to contain literal descriptive values instead of code
+56. Updated "Legal Entity" enum list to contain literal descriptive values instead of code
+57. Updated "Counseling Seeking" enum list to contain literal descriptive values instead of code
+58. Updated "Funding Source" enum list to contain literal descriptive values instead of code
+59. Updated "Certification" enum list to contain literal descriptive values instead of code
+60. Updated "SBA Financial Assistance" enum list to contain literal descriptive values instead of code
+61. Updated "Counseling Provided" enum list to contain literal descriptive values instead of code
+62. Updated "Referred Client" enum list to contain literal descriptive values instead of code
+63. Updated "SessionType" enum list to contain literal descriptive values instead of code
+64. Updated "Language" enum list to contain literal descriptive values instead of code
+65. ***Updated "History" enum list to contain literal descriptive values instead of code***
+66. Updated "State" enum list to contain literal descriptive values instead of code
+67. Updated "YesNoType" enum list to contain literal descriptive values instead of code
+68. Updated "ActiveIndicatorType" enum list to contain literal descriptive values instead of code
+69. Updated "Export Country List" enum list to contain literal descriptive values instead of code
+70. Updated "Country List" enum list to contain literal descriptive values instead of code
+71. Added a new element "Branch of Service"
+72. Updated "SBA Loan Amount Txn Number", "Non SBA Loan Amount Txn Number" and "Equity Capital Received Txn Number" to have a minimum value of 0 and maximum value of 99999
+73. Made "Counseling Provided" mandatory
+74. ***Added a new element "ResourcePartnerType"***
+75. Renamed the enum value "American Indian or Alaska Native" to "Native American/Alaska Native" under "Race"
+76. Updated element "CurrentlyInBusiness" to have a new enum value "Undetermined"
+77. Updated "BusinessStartDatePart3" to be of type Date, instead of previous configuration of Month and Year fields. Removed "BusinessStartDatePart2".
+78. ***Removed "TotalNumberOfEmployees" from Part 3.***
+79. Added these languages to the enum list for "Language" - English,Spanish,Chinese-Cantonese,Chinese-Mandarin,Chinese-Other,Vietnamese,Tagalog/Filipino,Arabic,Armenian,ASL-American Sign Language,Czech,Farsi,French,Fukien,German,Hmong,Inupiat/Inupiaq,Italian,Japanese,Korean,Portuguese,Russian,Somali,Swahili,Thai,Yiddish
+80. For "Ethnicity", updated option "Not Hispanic or Latino" to "Non Hispanic or Latino"
+81. For "Disability", updated option "Unknown/Not Stated" to "Prefer not to say"
+82. Updated values for the enum list for "Media"
+83. For "BusinessType", updated option "Waste Management and Remediation/Administrative and Support" to 2 different options "Waste Management and Remediation Services", "Administrative and Support"
+84. Updated "GrossRevenues", "ExportGrossRevenuesOrSales" to have a minimum value of 0 and a maximum value of 1000000000
+85. For "ExportCountryList", updated option "SOUTHA AFRICA" to "SOUTH AFRICA"
+86. For "ExportCountryList", removed options "Sell to fill-freight", "Sub contractor for Exporter"
+87. For "MilitaryStatus", removed option "Member of Reserve or National Guard"
+88. Updated values for the enum list for "Legal Entity"
+89. Made "Date Counseled" optional.
+90. Added a new element "DateTrainingStarted" under "TrainingSession"
+91. Updated "ProfitLoss" to have a minimum value of -922337203685477685477.00 and a maximum value of 1000000000
+92. Updated "SBA Loan Amount", "Non SBA Loan Amount" and "Equity Capital Received" to have a minimum value of 0 and maximum value of 1000000000
+93. Updated "Government Contract Value" to have a minimum value of 0 and maximum value of 1000000000
+94. Updated values for the enum list for "Counseling Provided"
+95. For "Referred Client", update option "Department of Commerce" to "Department of Commerce/Commercial Services"
+96. Renamed "CurrentlyInBusiness" element in Part 3 to "VerifiedToBeInBusiness"
+97. Added new field "ReportableImpact" and "DateOfReportableImpact" in Part 3
+98. Updated "CounselingSeeking" and "CounselingProvided" enum list to be same as that of "TrainingTopics" from Training XML
+99. Remove History element
+100. Make Race to max occurrences unbounded
+101. Remove Version element 
+102. Removed ResourcePartnerType as we don't need the validation for specific partners
+103. For Referred Client replaced APEX Accelerator instead of Procurement Technical Assistance Center. 	 	
+104. Adding back TotalNumberOfEmployees in part 3 
+105. Adding Operation order to update individual parts in 641.
+106. Updated "FundingSource" to the latest list 
+107. Updated list of Languages.
+108. Removed Male Business Ownership element.
+109. Updated Certificaitons picklist based on Resource Partners feedback.
+110. Updated Preferred Appointment Time to be a list of enumerated appointment time slots.
+111. Updated list of countries and export countries to the standard Salesforce country list.
+112. Removed field "MoreThanOneCounsellorAttended".
+113. Added a new element Preferred Appointment Timezone.
+114. Removing ActiveIndicatorType 
+115. Adding Rural, Urban, Undetermined to Rural_vs_Urban  10/13/2023
+116. Updating Export country, country and state picklist 10/13/2023
+116. Adding FIPS_Code fields conditional mandatory when Rural or Urban  10/13/2023 
+117. Adding "2023 Portable Assistance - PA2023" to funding Source 10/13/2023
+118. Removing Preferred Appointment Time,Date and TimeZone 10/13/2023
+119. Adding Prefer to Self-Describe within core component for following elements- SexualOrientation, Race, Gender 10/13/2023
+120. Adding Economically Disadvantaged Women-Owned Small Business, Service-Disabled Veteran-Owned Small Business, Veteran Owned Small Business, Women-Owned Small Business to Certification -10/13/2023
+121. changed BusinessOnline to ConductingBusinessOnline -10/13/2023
+122. changing Technology/Computers to Technology from Counseling seeking/provided - 10/13/2023
+123. removed HomeBasedBusiness - 10/13/2023
+124. removed Payroll Protection Program (PPP) from SBAFinancialAssistance - 10/13/2023
+125. Training and counseling date cannot be before 2023-10-01 - 10/13/2023
+126. changed the country list to match the SF list  - 10/24/2023
+127. added Business type Agriculture, Forestry, Fishing and Hunting  - 10/24/2023
+128. Added minOccurs=0 for Export country and country list. - 11/06/2023
+129. Removed Unknown/Not Stated from Media(Reffered by) -11/06/2023
+130. Made contact hours optional in case or training/Prepare only and Update only values for session type. -11/06/2023
+131. Total Number of Employees Engaged in Exporting now accepts 0 as a valid value. -11/06/2023
+132. Added SBA Office of International Trade (OIT) to the Referred Client to - 11/10/2023
+133. Adding minOccurs="0" for elements SBALoanAmountTxnNmb, NonSBALoanAmountTxnNmb and EquityCapitalReceivedTxnNmb
+134. Added minOccurs=0 for elements VerifiedToBeInBusiness,CounselingProvided, SessionType, Language, CounselorName -2/27/2024
+135. Changed the maxOccurs from "unbounded" to 100 for Export Country
+136. Adding VRE value to Referred by(Media) -08/20/24
+137. updated maxInclusive to 99 for SBALoanAmountTxnNmb,NonSBALoanAmountTxnNmb,EquityCapitalReceivedTxnNmb,NumberOfContractsReceived -09/03/24
+138. Added Funding source 2024 SBDC Supplemental Program - SP2024 - 09/16/24
+139. Added Optional Employee_Owned field - 11/19/24
+140. Changed Gender to Sex an optional field with Female and male as the options - 02/05/25
+141. Removed Sexual orientation and Self decribe sexual orientation - 02/11/25
+
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	<!-- Form 641: Counseling Information Form -->
+	<xs:element name="CounselingInformation">
+		<xs:complexType>
+			<xs:sequence>
+				<!--  <xs:element name="Version"/> -->
+				<xs:element name="CounselingRecord" type="CounselingInformationType" maxOccurs="unbounded"/>
+			</xs:sequence>
+			
+		</xs:complexType>
+	</xs:element>
+	<xs:complexType name="CounselingInformationType">
+		<xs:sequence>
+		<xs:element name="Operation" nillable="true"  minOccurs="0" maxOccurs="unbounded">
+                                 	 <xs:simpleType>
+                    			   		 <xs:restriction base="xs:string">
+                           				 	<xs:enumeration value="Delete_Client"/>
+                           				 	<xs:enumeration value="Delete_Session"/>
+                           				 	<xs:enumeration value="Update_Part1"/>
+                           				 	<xs:enumeration value="Update_Part2"/>
+                           				 	<xs:enumeration value="Update_Part3"/>
+                          				 	<xs:enumeration value="" />
+                       					 </xs:restriction>
+                   					 </xs:simpleType>
+         </xs:element>
+		<xs:element name="PartnerClientNumber" type="String20Type"/>
+		<xs:element name="Location">
+				<xs:complexType>
+					<xs:choice>
+						<xs:element name="LocationCode">
+							<xs:simpleType>
+								<xs:restriction base="xs:integer">
+									<xs:minInclusive value="1"/>
+									<xs:maxInclusive value="9999999"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+					</xs:choice>
+				</xs:complexType>
+			</xs:element>
+			<!-- <xs:element name="ResourcePartnerType">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Type of Resource Partner		
+									
+							SBDC		
+							WBC				
+							SCORE			
+                       	</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="SBDC"/>
+						<xs:enumeration value="WBC"/>
+						<xs:enumeration value="SCORE"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			 <xs:element name="ClientType">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Type of client		value
+							
+							Face-to-Face		1
+							Online				2
+							Telephone			3
+                           	Training         	4
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:integer">
+						<xs:enumeration value="1"/>
+						<xs:enumeration value="2"/>
+						<xs:enumeration value="3"/>
+            			<xs:enumeration value="4"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element> -->
+			<!-- <xs:element name="ClientType">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Type of client		
+									
+							Face-to-Face		
+							Online				
+							Telephone			
+                           	Training         	
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="Face-to-Face"/>
+						<xs:enumeration value="Online"/>
+						<xs:enumeration value="Telephone"/>
+            			<xs:enumeration value="Training"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element> -->
+			<!-- Part 1: Client Request for Counseling -->
+			<xs:element name="ClientRequest" minOccurs="0">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="ClientNamePart1" type="PersonType" minOccurs="0"/>
+						<xs:element name="Email" type="EmailType" minOccurs="0"/>
+						<xs:element name="PhonePart1" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Primary" type="PhoneType" minOccurs="0"/>
+									<xs:element name="Secondary" type="PhoneType" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="Fax" type="PhoneType" minOccurs="0"/> -->
+						<xs:element name="AddressPart1" type="AddressType"/>
+						<xs:element name="SurveyAgreement" type="YesNoType"/>
+		<!-- 	 <xs:element name="PreferredAppointment" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									
+									<xs:element name="Date" type="xs:date"/>
+									<xs:element name="Time">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Time slots										
+																				
+													5:00 AM
+													5:15 AM
+													5:30 AM
+													5:45 AM
+													6:00 AM
+													6:15 AM
+													6:30 AM
+													6:45 AM
+													7:00 AM
+													7:15 AM
+													7:30 AM
+													7:45 AM
+													8:00 AM
+													8:15 AM
+													8:30 AM
+													8:45 AM
+													9:00 AM
+													9:15 AM
+													9:30 AM
+													9:45 AM
+													10:00 AM
+													10:15 AM
+													10:30 AM
+													10:45 AM
+													11:00 AM
+													11:15 AM
+													11:30 AM
+													11:45 AM
+													12:00 PM
+													12:15 PM
+													12:30 PM
+													12:45 PM
+													1:00 PM
+													1:15 PM
+													1:30 PM
+													1:45 PM
+													2:00 PM
+													2:15 PM
+													2:30 PM
+													2:45 PM
+													3:00 PM
+													3:15 PM
+													3:30 PM
+													3:45 PM
+													4:00 PM
+													4:15 PM
+													4:30 PM
+													4:45 PM
+													5:00 PM
+													5:15 PM
+													5:30 PM
+													5:45 PM
+													6:00 PM
+													6:15 PM
+													6:30 PM
+													6:45 PM
+													7:00 PM
+													7:15 PM
+													7:30 PM
+													7:45 PM
+													8:00 PM
+													8:15 PM
+													8:30 PM
+													8:45 PM
+													9:00 PM
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="5:00 AM"/>
+												<xs:enumeration value="5:15 AM"/>
+												<xs:enumeration value="5:30 AM"/>
+												<xs:enumeration value="5:45 AM"/>
+												<xs:enumeration value="6:00 AM"/>
+												<xs:enumeration value="6:15 AM"/>
+												<xs:enumeration value="6:30 AM"/>
+												<xs:enumeration value="6:45 AM"/>
+												<xs:enumeration value="7:00 AM"/>
+												<xs:enumeration value="7:15 AM"/>
+												<xs:enumeration value="7:30 AM"/>
+												<xs:enumeration value="7:45 AM"/>
+												<xs:enumeration value="8:00 AM"/>
+												<xs:enumeration value="8:15 AM"/>
+												<xs:enumeration value="8:30 AM"/>
+												<xs:enumeration value="8:45 AM"/>
+												<xs:enumeration value="9:00 AM"/>
+												<xs:enumeration value="9:15 AM"/>
+												<xs:enumeration value="9:30 AM"/>
+												<xs:enumeration value="9:45 AM"/>
+												<xs:enumeration value="10:00 AM"/>
+												<xs:enumeration value="10:15 AM"/>
+												<xs:enumeration value="10:30 AM"/>
+												<xs:enumeration value="10:45 AM"/>
+												<xs:enumeration value="11:00 AM"/>
+												<xs:enumeration value="11:15 AM"/>
+												<xs:enumeration value="11:30 AM"/>
+												<xs:enumeration value="11:45 AM"/>
+												<xs:enumeration value="12:00 PM"/>
+												<xs:enumeration value="12:15 PM"/>
+												<xs:enumeration value="12:30 PM"/>
+												<xs:enumeration value="12:45 PM"/>
+												<xs:enumeration value="1:00 PM"/>
+												<xs:enumeration value="1:15 PM"/>
+												<xs:enumeration value="1:30 PM"/>
+												<xs:enumeration value="1:45 PM"/>
+												<xs:enumeration value="2:00 PM"/>
+												<xs:enumeration value="2:15 PM"/>
+												<xs:enumeration value="2:30 PM"/>
+												<xs:enumeration value="2:45 PM"/>
+												<xs:enumeration value="3:00 PM"/>
+												<xs:enumeration value="3:15 PM"/>
+												<xs:enumeration value="3:30 PM"/>
+												<xs:enumeration value="3:45 PM"/>
+												<xs:enumeration value="4:00 PM"/>
+												<xs:enumeration value="4:15 PM"/>
+												<xs:enumeration value="4:30 PM"/>
+												<xs:enumeration value="4:45 PM"/>
+												<xs:enumeration value="5:00 PM"/>
+												<xs:enumeration value="5:15 PM"/>
+												<xs:enumeration value="5:30 PM"/>
+												<xs:enumeration value="5:45 PM"/>
+												<xs:enumeration value="6:00 PM"/>
+												<xs:enumeration value="6:15 PM"/>
+												<xs:enumeration value="6:30 PM"/>
+												<xs:enumeration value="6:45 PM"/>
+												<xs:enumeration value="7:00 PM"/>
+												<xs:enumeration value="7:15 PM"/>
+												<xs:enumeration value="7:30 PM"/>
+												<xs:enumeration value="7:45 PM"/>
+												<xs:enumeration value="8:00 PM"/>
+												<xs:enumeration value="8:15 PM"/>
+												<xs:enumeration value="8:30 PM"/>
+												<xs:enumeration value="8:45 PM"/>
+												<xs:enumeration value="9:00 PM"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="TimeZone" minOccurs="0">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													TimeZones										
+																					
+													(Arabic) Egypt Standard Time (ART)
+													Alaska Standard Time (AST)
+													Australia Central Time (ACT)
+													Australia Eastern Time (AET)
+													Bangladesh Standard Time (BST)
+													China Taiwan Time (CTT)
+													Eastern African Time (EAT)
+													Eastern European Time (EET)
+													European Central Time (ECT)
+													Greenwich Mean Time (GMT)
+													Hawaii Standard Time (HST)
+													India Standard Time (IST)
+													Japan Standard Time (JST)
+													Middle East Time (MET)
+													Midway Islands Time (MIT)
+													Mountain Standard Time (MST)
+													Near East Time (NET)
+													New Zealand Standard Time (NST)
+													Pacific Standard Time (PST)
+													Pakistan Lahore Time (PLT)
+													Phoenix Standard Time (PNT)
+													Solomon Standard Time (SST)
+													Universal Coordinated Time (UTC)
+													Vietnam Standard Time (VST)
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="(Arabic) Egypt Standard Time (ART)"/>
+												<xs:enumeration value="Alaska Standard Time (AST)"/>
+												<xs:enumeration value="Australia Central Time (ACT)"/>
+												<xs:enumeration value="Australia Eastern Time (AET)"/>
+												<xs:enumeration value="Bangladesh Standard Time (BST)"/>
+												<xs:enumeration value="China Taiwan Time (CTT)"/>
+												<xs:enumeration value="Eastern African Time (EAT)"/>
+												<xs:enumeration value="Eastern European Time (EET)"/>
+												<xs:enumeration value="European Central Time (ECT)"/>
+												<xs:enumeration value="Greenwich Mean Time (GMT)"/>
+												<xs:enumeration value="Hawaii Standard Time (HST)"/>
+												<xs:enumeration value="India Standard Time (IST)"/>
+												<xs:enumeration value="Japan Standard Time (JST)"/>
+												<xs:enumeration value="Middle East Time (MET)"/>
+												<xs:enumeration value="Midway Islands Time (MIT)"/>
+												<xs:enumeration value="Mountain Standard Time (MST)"/>
+												<xs:enumeration value="Near East Time (NET)"/>
+												<xs:enumeration value="New Zealand Standard Time (NST)"/>
+												<xs:enumeration value="Pacific Standard Time (PST)"/>
+												<xs:enumeration value="Pakistan Lahore Time (PLT)"/>
+												<xs:enumeration value="Phoenix Standard Time (PNT)"/>
+												<xs:enumeration value="Solomon Standard Time (SST)"/>
+												<xs:enumeration value="Universal Coordinated Time (UTC)"/>
+												<xs:enumeration value="Vietnam Standard Time (VST)"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									</xs:sequence>
+							</xs:complexType>
+						</xs:element>   -->
+				
+						<xs:element name="ClientSignature">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Date" type="xs:date" minOccurs="0"/>
+									<xs:element name="OnFile" type="YesNoType"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+					</xs:sequence>
+				</xs:complexType>
+			</xs:element>
+			<!-- Part 2: Client Intake -->
+			<xs:element name="ClientIntake" minOccurs="0">
+				<xs:complexType>
+					<xs:sequence>
+						<!-- <xs:element name="Race" maxOccurs="5">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Race										Value
+										
+										Black or African American					0
+										American Indian or Alaska Native			2
+										Asian										4
+										Unknown/Not Stated							6
+										White										7
+										Native Hawaiian or Other Pacific Islander	9
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:integer">
+									<xs:enumeration value="0"/>
+									<xs:enumeration value="2"/>
+									<xs:enumeration value="4"/>
+									<xs:enumeration value="6"/>
+									<xs:enumeration value="7"/>
+									<xs:enumeration value="9"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="Race">
+							<xs:complexType>
+								<xs:sequence>
+								<xs:element name="Code" maxOccurs="unbounded">
+									<xs:simpleType>
+										<xs:annotation>
+											<xs:documentation>
+												Race										
+												--------------								
+												Asian
+												Black or African American
+												Middle Eastern
+												Native American/Alaska Native
+												Native Hawaiian/Other Pacific Islander
+												North African
+												White
+												Prefer not to say
+												Prefer to Self-Describe
+											</xs:documentation>
+										</xs:annotation>
+										<xs:restriction base="xs:string">
+											<xs:enumeration value="Asian"/>
+											<xs:enumeration value="Black or African American"/>
+											<xs:enumeration value="Middle Eastern"/>
+											<xs:enumeration value="Native American/Alaska Native"/>
+											<xs:enumeration value="Native Hawaiian/Other Pacific Islander"/>
+											<xs:enumeration value="North African"/>
+											<xs:enumeration value="White"/>
+											<xs:enumeration value="Prefer not to say"/>
+											<xs:enumeration value="Prefer to Self-Describe"/>
+										</xs:restriction>
+									</xs:simpleType>
+								</xs:element>
+								<xs:element name="SelfDescribedRace" type="String80Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+							</xs:element>
+						
+						<!-- <xs:element name="Ethnicity">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Ethnicity					Value
+										
+										Not Hispanic or Latino			HN
+										Hispanic or Latino				HY
+										Unknown/Not Stated				UN
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="HN"/>
+									<xs:enumeration value="HY"/>
+									<xs:enumeration value="UN"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="Ethnicity" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Ethnicity					
+										--------------				
+										Hispanic or Latino
+										Non Hispanic or Latino
+										Prefer not to say				
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Hispanic or Latino"/>
+									<xs:enumeration value="Non Hispanic or Latino"/>
+									<xs:enumeration value="Prefer not to say"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+		
+				
+						<xs:element name="Sex" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Sex				
+										--------------			
+										Male						
+										Female	
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Male"/>
+									<xs:enumeration value="Female"/>
+									<xs:enumeration value=""/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="Disability" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Disability				
+										--------------			
+										Yes						
+										No						
+										Prefer not to say		
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Yes"/>
+									<xs:enumeration value="No"/>
+									<xs:enumeration value="Prefer not to say"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<!-- <xs:element name="MilitaryStatus">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Military										Value
+										
+										Member of Reserve or National Guard				1
+										On Active Duty									2
+										Unknown/Not Stated								3
+										Veteran											4
+										Service Disabled Veteran						5
+										Member of National Guard						6
+										Spouse of Military Member						7
+										No military, Reserve,or National Guard service  8
+										Member of the Reserve							9
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:positiveInteger">
+									<xs:enumeration value="1"/>
+									<xs:enumeration value="2"/>
+									<xs:enumeration value="3"/>
+									<xs:enumeration value="4"/>
+									<xs:enumeration value="5"/>
+									<xs:enumeration value="6"/>
+									<xs:enumeration value="7"/>
+									<xs:enumeration value="8"/>
+									<xs:enumeration value="9"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="MilitaryStatus" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Military										
+										--------------									
+										Active Duty
+										Member of National Guard
+										Member of the Reserve
+										No military service 
+										Service Disabled Veteran
+										Spouse of Military Member
+										Veteran 
+										Prefer not to say							
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Active Duty"/>
+									<xs:enumeration value="Member of National Guard"/>
+									<xs:enumeration value="Member of the Reserve"/>
+									<xs:enumeration value="No military service"/>
+									<xs:enumeration value="Service Disabled Veteran"/>
+									<xs:enumeration value="Spouse of Military Member"/>
+									<xs:enumeration value="Veteran"/>
+									<xs:enumeration value="Prefer not to say"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="BranchOfService"  minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Branch Of Service										
+										--------------									
+										Air Force
+										Army
+										Coast Guard
+										Marine Corps
+										Navy
+										Space Force
+										Prefer not to say	
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Air Force"/>
+									<xs:enumeration value="Army"/>
+									<xs:enumeration value="Coast Guard"/>
+									<xs:enumeration value="Marine Corps"/>
+									<xs:enumeration value="Navy"/>
+									<xs:enumeration value="Space Force"/>
+									<xs:enumeration value="Prefer not to say"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<!-- Media is also known as Referred By -->
+						<xs:element name="Media" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code" maxOccurs="13">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Media									Value
+													
+													SBA										1
+													Bank									2
+													Business Owner							3
+													Television/Radio						4
+													Other Client							5
+													Magazine								6
+													Internet								7
+													Newspaper								8	
+													Chamber of Commerce						9
+													Educational Institution					10
+													Local Economic Development Official		11
+													Word of Mouth							12
+													SBA Website								13
+													Small Business Development Center		14
+													US Export Assistance Center				15
+													SCORE Chapter							16
+													Women's Business Center					17
+													Magazines or Newspapers					18
+													VBOC									19
+													Boots to Business						20
+													Unknown/Not Stated						98
+													Other									99
+																										
+													Note: If media is "Other" (99), please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:positiveInteger">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="5"/>
+												<xs:enumeration value="6"/>
+												<xs:enumeration value="7"/>
+												<xs:enumeration value="8"/>
+												<xs:enumeration value="9"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="11"/>
+												<xs:enumeration value="12"/>
+												<xs:enumeration value="13"/>
+												<xs:enumeration value="14"/>
+												<xs:enumeration value="15"/>
+												<xs:enumeration value="16"/>
+												<xs:enumeration value="17"/>
+												<xs:enumeration value="18"/>
+												<xs:enumeration value="19"/>
+												<xs:enumeration value="20"/>
+												<xs:enumeration value="98"/>
+												<xs:enumeration value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code" maxOccurs="13">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Media									
+													--------------							
+													Boots to Business
+													Business Owner
+													Chamber of Commerce
+													Educational Institution
+													Internet
+													Lender
+													Local Economic Development Official
+													Magazine/Newspaper
+													SBA District
+													SBA Web site
+													SBDC
+													SCORE
+													Television/Radio
+													USEAC
+													VBOC
+													VRE
+													WBC
+													Word of Mouth
+													Other Client
+													Other
+													
+																										
+													Note: If media is "Other", please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="Boots to Business"/>
+												<xs:enumeration value="Business Owner"/>
+												<xs:enumeration value="Chamber of Commerce"/>
+												<xs:enumeration value="Educational Institution"/>
+												<xs:enumeration value="Internet"/>
+												<xs:enumeration value="Lender"/>
+												<xs:enumeration value="Local Economic Development Official"/>
+												<xs:enumeration value="Magazine/Newspaper"/>
+												<xs:enumeration value="SBA District"/>
+												<xs:enumeration value="SBA Web site"/>
+												<xs:enumeration value="SBDC"/>
+												<xs:enumeration value="SCORE"/>
+												<xs:enumeration value="Television/Radio"/>
+												<xs:enumeration value="USEAC"/>
+												<xs:enumeration value="VBOC"/>
+												<xs:enumeration value="VRE"/>
+												<xs:enumeration value="WBC"/>
+												<xs:enumeration value="Word of Mouth"/>
+												<xs:enumeration value="Other Client"/>
+												<xs:enumeration value="Other"/>
+												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String80Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<xs:element name="Internet" type="String80Type" minOccurs="0"/>
+						<xs:element name="CurrentlyInBusiness" type="YesNoUndeterminedType"/>
+						<xs:element name="CurrentlyExporting" type="YesNoType" minOccurs="0"/>
+						<xs:element name="CompanyName" type="String80Type" minOccurs="0"/>
+						<!-- <xs:element name="BusinessType" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Type of business																	Value
+										
+										Agriculture, Forestry, Fishing and Hunting											11
+										Mining																				21
+										Utilities																			22
+										Construction																		23
+										Manufacturing																		31
+										Wholesale Trade																		42
+										Retail Trade																		44
+										Transportation and Warehousing														48
+										Information																			51
+										Finance and Insurance																52
+										Real Estate and Rental and Leasing													53
+										Professional, Scientific, and Technical Services									54
+										Management of Companies and Enterprises												55
+										Waste Management and Remediation/Administrative and Support							56
+										Educational Services																61
+										Health Care and Social Assistance													62
+										Arts, Entertainment, and Recreation													71
+										Accommodation and Food Services														72
+										Other Services (except Public Administration)										81
+										Public Administration																92
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:integer">
+									<xs:enumeration value="11"/>
+									<xs:enumeration value="21"/>
+									<xs:enumeration value="22"/>
+									<xs:enumeration value="23"/>
+									<xs:enumeration value="31"/>
+									<xs:enumeration value="42"/>
+									<xs:enumeration value="44"/>
+									<xs:enumeration value="48"/>
+									<xs:enumeration value="51"/>
+									<xs:enumeration value="52"/>
+									<xs:enumeration value="53"/>
+									<xs:enumeration value="54"/>
+									<xs:enumeration value="55"/>
+									<xs:enumeration value="56"/>
+									<xs:enumeration value="61"/>
+									<xs:enumeration value="62"/>
+									<xs:enumeration value="71"/>
+									<xs:enumeration value="72"/>
+									<xs:enumeration value="81"/>
+									<xs:enumeration value="92"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="BusinessType" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Type of business																	
+										--------------------------------------------------									
+										Agriculture, Forestry, Fishing and Hunting
+										Accommodation and Food Services									
+										Administrative and Support									
+										Arts, Entertainment, and Recreation									
+										Construction									
+										Educational Services									
+										Finance and Insurance									
+										Health Care and Social Assistance									
+										Information									
+										Management of Companies and Enterprises									
+										Manufacturing									
+										Mining									
+										Professional, Scientific, and Technical Services									
+										Public Administration									
+										Real Estate and Rental and Leasing									
+										Retail Trade									
+										Transportation and Warehousing									
+										Utilities									
+										Waste Management and Remediation Services									
+										Wholesale Trade									
+										Other Services (except Public Administration)		
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Agriculture, Forestry, Fishing and Hunting"/>
+									<xs:enumeration value="Accommodation and Food Services"/>
+									<xs:enumeration value="Administrative and Support"/>
+									<xs:enumeration value="Arts, Entertainment, and Recreation"/>
+									<xs:enumeration value="Construction"/>
+									<xs:enumeration value="Educational Services"/>
+									<xs:enumeration value="Finance and Insurance"/>
+									<xs:enumeration value="Health Care and Social Assistance"/>
+									<xs:enumeration value="Information"/>
+									<xs:enumeration value="Management of Companies and Enterprises"/>
+									<xs:enumeration value="Manufacturing"/>
+									<xs:enumeration value="Mining"/>
+									<xs:enumeration value="Professional, Scientific, and Technical Services"/>
+									<xs:enumeration value="Public Administration"/>
+									<xs:enumeration value="Real Estate and Rental and Leasing"/>
+									<xs:enumeration value="Retail Trade"/>
+									<xs:enumeration value="Transportation and Warehousing"/>
+									<xs:enumeration value="Utilities"/>
+									<xs:enumeration value="Waste Management and Remediation Services"/>
+									<xs:enumeration value="Wholesale Trade"/>
+									<xs:enumeration value="Other Services (except Public Administration)"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="BusinessOwnership" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Male" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0.0"/>
+												<xs:maxInclusive value="100.00"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Female" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0.0"/>
+												<xs:maxInclusive value="100.00"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="BusinessStartDatePart2" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Month" type="xs:gMonth"/>
+									<xs:element name="Month">
+										<xs:simpleType>
+                        					<xs:restriction base="xs:string">
+                            					<xs:pattern value="^(0?[1-9]|1[012])$"/>
+                        					</xs:restriction>
+                        					<xs:restriction base="xs:string">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="5"/>
+												<xs:enumeration value="6"/>
+												<xs:enumeration value="7"/>
+												<xs:enumeration value="8"/>
+												<xs:enumeration value="9"/>
+												<xs:enumeration value="01"/>
+												<xs:enumeration value="02"/>
+												<xs:enumeration value="03"/>
+												<xs:enumeration value="04"/>
+												<xs:enumeration value="05"/>
+												<xs:enumeration value="06"/>
+												<xs:enumeration value="07"/>
+												<xs:enumeration value="08"/>
+												<xs:enumeration value="09"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="11"/>
+												<xs:enumeration value="12"/>
+											</xs:restriction>
+                   						 </xs:simpleType>
+									</xs:element>
+									<xs:element name="Year" type="xs:gYear"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element> -->
+						<!-- <xs:element name="BusinessStartDatePart2" type="xs:date" minOccurs="0"/> -->
+						<xs:element name="ConductingBusinessOnline" type="YesNoType" minOccurs="0"/>
+						<!-- <xs:element name="HomeBasedBusiness" type="YesNoType" minOccurs="0"/> -->
+						<xs:element name="ClientIntake_Certified8a" type="YesNoType" minOccurs="0"/>
+						<xs:element name="Employee_Owned" type="YesNoType" minOccurs="0"/>
+						<xs:element name="TotalNumberOfEmployees" type="PositiveDecimalType" minOccurs="0"/>
+						<xs:element name="NumberOfEmployeesInExportingBusiness" type="PositiveDecimalType" minOccurs="0"/>
+						<xs:element name="ClientAnnualIncomePart2" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="GrossRevenues" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="ProfitLoss" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="-922337203685477685477.00"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="ExportGrossRevenuesOrSales" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						
+						<xs:element name="LegalEntity" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code" maxOccurs="6">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Legal	Entity						Value
+													
+													Sole Proprietorship					1
+													Partnership							2
+													Corporation							3
+													Limited Liability Company(LLC)		4
+													S Corporation						10
+													Other Legal entity					99
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:positiveInteger">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code" maxOccurs="6">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Legal	Entity						
+													---------------------------------	
+													Corporation
+													LLC
+													Partnership
+													S-Corporation
+													Sole Proprietor
+													Other
+					
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="Corporation"/>
+												<xs:enumeration value="LLC"/>
+												<xs:enumeration value="Partnership"/>
+												<xs:enumeration value="S-Corporation"/>
+												<xs:enumeration value="Sole Proprietor"/>
+												<xs:enumeration value="Other"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String80Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<xs:element name="Rural_vs_Urban" minOccurs="0">
+							<xs:simpleType>
+							<xs:restriction base="xs:string">
+									<xs:enumeration value="Rural"/>
+									<xs:enumeration value="Urban"/>
+									<xs:enumeration value="Undetermined"/>
+								</xs:restriction>
+                   			</xs:simpleType>
+						</xs:element>
+						
+					<xs:element name="FIPS_Code" minOccurs="0">
+						<xs:simpleType>
+							<xs:restriction base="xs:int">
+      							<xs:pattern value="\d{5}"/>
+   							</xs:restriction>
+   						</xs:simpleType>
+					</xs:element>
+<!-- 					<xs:element name="County" type="String255Type" minOccurs="0"/>
+ -->						<!-- CounselingSeeking is also known as Nature of Counseling Sought -->
+						<xs:element name="CounselingSeeking" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Nature of counseling Seeking			Value
+													
+													Start-up Assistance						1
+													Business Plan							2
+													Financing/Capital						3
+													Managing Business						4
+													Human Resources/Managing Employees		5
+													Customer Relations						6
+													Business Accounting/Budget				7
+													Cash Flow Management					8
+													Tax Planning							9
+													Marketing/Sales							10
+													Government Contracting					11
+													Franchising								12
+													Buy/Sell a Business						13
+													Technology/Computers					14
+													eCommerce								15
+													Legal Issues							16
+													International Trade						17
+													COVID-19 Financing/Capital				18
+													COVID-19 General Support				19	
+													Intellectual Property Training          20
+													Unknown/Not Stated						98
+													Other									99
+													
+													Note: if other, please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:positiveInteger">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="5"/>
+												<xs:enumeration value="6"/>
+												<xs:enumeration value="7"/>
+												<xs:enumeration value="8"/>
+												<xs:enumeration value="9"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="11"/>
+												<xs:enumeration value="12"/>
+												<xs:enumeration value="13"/>
+												<xs:enumeration value="14"/>
+												<xs:enumeration value="15"/>
+												<xs:enumeration value="16"/>
+												<xs:enumeration value="17"/>
+												<xs:enumeration value="18"/>
+												<xs:enumeration value="19"/>
+												<xs:enumeration value="20"/>
+												<xs:enumeration value="98"/>
+												<xs:enumeration value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Nature of counseling Seeking			
+													-------------------------------------	
+													Business Accounting/Budget
+													Business Financial/Cash Flow
+													Business Financing/Capital Sources
+													Business Operations/Management
+													Business Plan
+													Business Start-up/Preplanning
+													Buy/Sell Business
+													Credit Counseling
+													Customer Relations
+													Cyber Security/Cyber Awareness
+													Disaster Planning/Recovery
+													eCommerce
+													Franchising
+													Government Contracting
+													Human Resources/Managing Employees
+													Intellectual Property Training
+													International Trade
+													Legal Issues
+													Marketing/Sales
+													Tax Planning
+													Technology
+													Other
+													//Unknown/Not Stated									
+													
+													Note: if other, please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="Business Accounting/Budget"/>
+												<xs:enumeration value="Business Financial/Cash Flow"/>
+												<xs:enumeration value="Business Financing/Capital Sources"/>
+												<xs:enumeration value="Business Operations/Management"/>
+												<xs:enumeration value="Business Plan"/>
+												<xs:enumeration value="Business Start-up/Preplanning"/>
+												<xs:enumeration value="Buy/Sell Business"/>
+												<xs:enumeration value="Credit Counseling"/>
+												<xs:enumeration value="Customer Relations"/>
+												<xs:enumeration value="Cyber Security/Cyber Awareness"/>
+												<xs:enumeration value="Disaster Planning/Recovery"/>
+												<xs:enumeration value="eCommerce"/>
+												<xs:enumeration value="Franchising"/>
+												<xs:enumeration value="Government Contracting"/>
+												<xs:enumeration value="Human Resources/Managing Employees"/>
+												<xs:enumeration value="Intellectual Property Training"/>
+												<xs:enumeration value="International Trade"/>
+												<xs:enumeration value="Legal Issues"/>
+												<xs:enumeration value="Marketing/Sales"/>
+												<xs:enumeration value="Tax Planning"/>
+												<xs:enumeration value="Technology"/> 
+												<xs:enumeration value="Other"/>
+												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String255Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<xs:element name="ExportCountries" type="ExportCountryList"  minOccurs="0"/>
+					<!--  	<xs:element name="ClientActiveInactive" type="ActiveIndicatorType"/> -->
+
+					</xs:sequence>
+				</xs:complexType>
+			</xs:element>
+			<!-- Part 3: Counselor Record -->
+			<xs:element name="CounselorRecord" minOccurs="0">
+				<xs:complexType>
+					<xs:sequence>
+					<!-- Session Key -->
+						<xs:element name="PartnerSessionNumber" type="String20Type"/>
+						<!-- <xs:element name="FundingSource" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+									Type of Funding Source										          value
+									
+									Severe Winter Storm and Flooding (NV)                         		  1738
+                            	    Severe Winter Storm and Flooding (IN)                                 1740  
+ 									Severe Storms, Tornadoes, and Flooding (AR)                           1744  
+ 									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (TN)      1745  
+ 									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (KY)      1746  
+ 									Severe Storms, and Flooding (IL)                                      1747  
+ 									Severe Storms, and Flooding (MO)                                      1749  
+ 									Severe Storms, and Tornadoes (GA)                                     1750  
+									Severe Storms, Tornadoes, and Flooding (AR)                           1751  
+ 									Severe Storms, and Flooding (MS)                                      1753  
+ 									Severe Storms, Tornadoes, and Flooding (AR)                           1758  
+									Severe Storms, and Tornadoes (MO)                                     1760  
+  							  	    Severe Storms, and Flooding (GA)                                      1761  
+									Severe Storms, and Tornadoes (CO)                                     1762  
+ 									Severe Storms, Tornadoes, and Flooding (IA)                           1763  
+									Severe Storms, and Tornadoes (MS)                                     1764  
+ 									Severe Storms, and Flooding (IN))                                     1766  
+ 									Severe Storms, Tornadoes, and Flooding (WI)                           1768  
+									Severe Storms, Tornadoes, Flooding, Mudslides, and Landslides (WV)    1769  
+ 									Severe Storms, Tornadoes, and Flooding (NE)                           1770  
+ 									Severe Storms, and Flooding (IL)                                      1771  
+									Severe Storms, and Flooding (MO)                                      1773  
+ 									Hurricane Dolly (TX)                                                  1780  
+ 									Tropical Storm Fay (FL)                                               1785  
+									Hurricane Gustav (LA)                                                 1786  
+									Hurricane Ike (TX)                                                    1791  
+ 									Hurricane Ike (LA)                                                    1792  
+ 									Hurricane Gustav (MS)                                                 1794  
+									Severe Storms, and Flooding (IN)                                      1795  
+ 									Severe Storms, and Flooding (PR)                                      1798  
+ 									Severe Storms, and Flooding (IL)                                      1800  
+									Severe Storms, and Flooding, Tornadoes (MO)                           1809  
+ 									Wildfires (CA)                                                        1810  
+ 									Energy Efficiency                                                     EN09  
+									Portable Assistance                                                   PA09  
+ 									Veterans Assistance                                                   VA09 
+									Hurricane Sandy - Phase 1	                                        SANDY1
+									Hurricane Sandy - Phase 2	                                        SANDY2
+									Portability Assistance 2015	                                        PA1503
+									2016 Portable Assistance											PA1605
+									Small Business Jobs Act 2010										SBJA10
+									2018 Portable Assistance grants										PA1801
+									2017 SCORE USDA Project	17											SUSDA
+									2017 SBDC Portable Assistance Project								PA1703
+									2019 SBDC Portable Assistance										PA1903
+ 									CARES Act Funding (COVID19)											CARES
+									2020 SBDC Portable Assistance										PA2003
+									Resiliency and Recovery Demonstration Grant                         CARESRRD
+									</xs:documentation>
+								</xs:annotation>
+							<xs:restriction base="String20Type">
+								<xs:enumeration value="1738"/>
+								<xs:enumeration value="1740"/>
+								<xs:enumeration value="1744"/>
+								<xs:enumeration value="1745"/>
+								<xs:enumeration value="1746"/>
+								<xs:enumeration value="1747"/>
+								<xs:enumeration value="1749"/>
+								<xs:enumeration value="1750"/>
+								<xs:enumeration value="1751"/>
+								<xs:enumeration value="1753"/>
+								<xs:enumeration value="1758"/>
+								<xs:enumeration value="1760"/>
+								<xs:enumeration value="1761"/>
+								<xs:enumeration value="1762"/>
+								<xs:enumeration value="1763"/>
+								<xs:enumeration value="1764"/>
+								<xs:enumeration value="1766"/>
+								<xs:enumeration value="1768"/>
+								<xs:enumeration value="1769"/>
+								<xs:enumeration value="1770"/>
+								<xs:enumeration value="1771"/>
+								<xs:enumeration value="1773"/>
+								<xs:enumeration value="1780"/>
+								<xs:enumeration value="1785"/>
+								<xs:enumeration value="1786"/>
+								<xs:enumeration value="1791"/>
+								<xs:enumeration value="1792"/>
+								<xs:enumeration value="1794"/>
+								<xs:enumeration value="1795"/>
+								<xs:enumeration value="1798"/>
+								<xs:enumeration value="1800"/>
+								<xs:enumeration value="1809"/>
+								<xs:enumeration value="1810"/>
+								<xs:enumeration value="EN09"/>
+								<xs:enumeration value="PA09"/>
+								<xs:enumeration value="VA09"/>
+								<xs:enumeration value="SANDY1"/>
+								<xs:enumeration value="SANDY2"/>
+								<xs:enumeration value="PA1503"/>
+								<xs:enumeration value="PA1605"/>
+								<xs:enumeration value="SBJA10"/>
+								<xs:enumeration value="PA1801"/>
+								<xs:enumeration value="SUSDA"/>
+								<xs:enumeration value="PA1703"/>
+								<xs:enumeration value="PA1903"/>
+								<xs:enumeration value="CARES"/>
+								<xs:enumeration value="PA2003"/>
+								<xs:enumeration value="CARESRRD"/>
+              </xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="FundingSource" minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+									Type of Funding Source										          
+									----------------------										          
+									2020 SBDC Portable Assistance – PA2003
+									2023 Portable Assistance - PA2023
+									2024 SBDC Supplemental Program - SP2024
+									Hurricane Dolly (TX) – 1780
+									Hurricane Gustav (LA) – 1786
+									Hurricane Gustav (MS) – 1794
+									Hurricane Ike (LA) – 1792
+									Hurricane Ike (TX) – 1791
+									Hurricane Sandy - Phase 1 – SANDY1
+									Hurricane Sandy - Phase 2 – SANDY2
+									Resiliency and Recovery Demonstration Grant – CARESRRD
+									Severe Storms, and Flooding (GA) – 1761
+									Severe Storms, and Flooding (IL) – 1747
+									Severe Storms, and Flooding (IL) – 1771
+									Severe Storms, and Flooding (IL) – 1800
+									Severe Storms, and Flooding (IN) – 1795
+									Severe Storms, and Flooding (IN) – 1766
+									Severe Storms, and Flooding (MO) – 1749
+									Severe Storms, and Flooding (MO) – 1773
+									Severe Storms, and Flooding (MS) – 1753
+									Severe Storms, and Flooding (PR) – 1798
+									Severe Storms, and Flooding, Tornadoes (MO) – 1809
+									Severe Storms, and Tornadoes (CO) – 1762
+									Severe Storms, and Tornadoes (GA) – 1750
+									Severe Storms, and Tornadoes (MO) – 1760
+									Severe Storms, and Tornadoes (MS) – 1764
+									Severe Storms, Tornadoes, and Flooding (AR) – 1744
+									Severe Storms, Tornadoes, and Flooding (AR) – 1751
+									Severe Storms, Tornadoes, and Flooding (AR) – 1758
+									Severe Storms, Tornadoes, and Flooding (IA) – 1763
+									Severe Storms, Tornadoes, and Flooding (NE) – 1770
+									Severe Storms, Tornadoes, and Flooding (WI) – 1768
+									Severe Storms, Tornadoes, Flooding, Mudslides, and Landslides (WV) – 1769
+									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (KY) – 1746
+									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (TN) – 1745
+									Severe Winter Storm and Flooding (IN) – 1740       
+									Severe Winter Storm and Flooding (NV) – 1738
+									Tropical Storm Fay (FL) – 1785
+									Wildfires (CA) – 1810           
+									
+									</xs:documentation>
+								</xs:annotation>
+							<xs:restriction base="xs:string">
+									<xs:enumeration value="2020 SBDC Portable Assistance – PA2003"/>
+									<xs:enumeration value="2023 Portable Assistance - PA2023"/>
+									<xs:enumeration value="2024 SBDC Supplemental Program - SP2024"/>
+									<xs:enumeration value="Hurricane Dolly (TX) – 1780"/>
+									<xs:enumeration value="Hurricane Gustav (LA) – 1786"/>
+									<xs:enumeration value="Hurricane Gustav (MS) – 1794"/>
+									<xs:enumeration value="Hurricane Ike (LA) – 1792"/>
+									<xs:enumeration value="Hurricane Ike (TX) – 1791"/>
+									<xs:enumeration value="Hurricane Sandy - Phase 1 – SANDY1"/>
+									<xs:enumeration value="Hurricane Sandy - Phase 2 – SANDY2"/>
+									<xs:enumeration value="Resiliency and Recovery Demonstration Grant – CARESRRD"/>
+									<xs:enumeration value="Severe Storms, and Flooding (GA) – 1761"/>
+									<xs:enumeration value="Severe Storms, and Flooding (IL) – 1747"/>
+									<xs:enumeration value="Severe Storms, and Flooding (IL) – 1771"/>
+									<xs:enumeration value="Severe Storms, and Flooding (IL) – 1800"/>
+									<xs:enumeration value="Severe Storms, and Flooding (IN) – 1795"/>
+									<xs:enumeration value="Severe Storms, and Flooding (IN) – 1766"/>
+									<xs:enumeration value="Severe Storms, and Flooding (MO) – 1749"/>
+									<xs:enumeration value="Severe Storms, and Flooding (MO) – 1773"/>
+									<xs:enumeration value="Severe Storms, and Flooding (MS) – 1753"/>
+									<xs:enumeration value="Severe Storms, and Flooding (PR) – 1798"/>
+									<xs:enumeration value="Severe Storms, and Flooding, Tornadoes (MO) – 1809"/>
+									<xs:enumeration value="Severe Storms, and Tornadoes (CO) – 1762"/>
+									<xs:enumeration value="Severe Storms, and Tornadoes (GA) – 1750"/>
+									<xs:enumeration value="Severe Storms, and Tornadoes (MO) – 1760"/>
+									<xs:enumeration value="Severe Storms, and Tornadoes (MS) – 1764"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (AR) – 1744"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (AR) – 1751"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (AR) – 1758"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (IA) – 1763"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (NE) – 1770"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, and Flooding (WI) – 1768"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, Flooding, Mudslides, and Landslides (WV) – 1769"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, Straight Line Winds, and Flooding (KY) – 1746"/>
+									<xs:enumeration value="Severe Storms, Tornadoes, Straight Line Winds, and Flooding (TN) – 1745"/>
+									<xs:enumeration value="Severe Winter Storm and Flooding (IN) – 1740"/>
+									<xs:enumeration value="Severe Winter Storm and Flooding (NV) – 1738"/>
+									<xs:enumeration value="Tropical Storm Fay (FL) – 1785"/>
+									<xs:enumeration value="Wildfires (CA) – 1810"/>
+              				</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="ClientNamePart3" type="PersonType" minOccurs="0"/>
+						<xs:element name="Email" type="EmailType" minOccurs="0"/>
+						<xs:element name="PhonePart3" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Primary" type="PhoneType" minOccurs="0"/>
+									<xs:element name="Secondary" type="PhoneType" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="Fax" type="PhoneType" minOccurs="0"/> -->
+						<xs:element name="AddressPart3" type="AddressType" minOccurs="0"/>
+						<xs:element name="VerifiedToBeInBusiness" type="YesNoUndeterminedType" minOccurs="0"/>
+						<xs:element name="ReportableImpact" type="YesNoType" minOccurs="0"/>
+						<xs:element name="DateOfReportableImpact" type="xs:date" minOccurs="0"/>
+						<xs:element name="CurrentlyExporting" type="YesNoType" minOccurs="0"/>
+						<!-- <xs:element name="BusinessStartDatePart3" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Month" type="xs:gMonth"/>
+									<xs:element name="Month">
+										<xs:simpleType>
+                        					<xs:restriction base="xs:string">
+                            					<xs:pattern value="^(0?[1-9]|1[012])$"/>
+                        					</xs:restriction>
+                        					<xs:restriction base="xs:string">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="5"/>
+												<xs:enumeration value="6"/>
+												<xs:enumeration value="7"/>
+												<xs:enumeration value="8"/>
+												<xs:enumeration value="9"/>
+												<xs:enumeration value="01"/>
+												<xs:enumeration value="02"/>
+												<xs:enumeration value="03"/>
+												<xs:enumeration value="04"/>
+												<xs:enumeration value="05"/>
+												<xs:enumeration value="06"/>
+												<xs:enumeration value="07"/>
+												<xs:enumeration value="08"/>
+												<xs:enumeration value="09"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="11"/>
+												<xs:enumeration value="12"/>
+											</xs:restriction>
+                   						 </xs:simpleType>
+									</xs:element>
+									<xs:element name="Year" type="xs:gYear"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element> -->
+						<xs:element name="BusinessStartDatePart3" type="xs:date" minOccurs="0"/>
+						<xs:element name="TotalNumberOfEmployees" type="PositiveSmallIntegerType" minOccurs="0"/> 
+						<xs:element name="NumberOfEmployeesInExportingBusiness" type="PositiveSmallIntegerType" minOccurs="0"/>
+						<xs:element name="ClientAnnualIncomePart3" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="GrossRevenues" type="PositiveMoneyType" minOccurs="0"/>
+									<xs:element name="ProfitLoss" type="MoneyType" minOccurs="0"/>
+									<xs:element name="ExportGrossRevenuesOrSales" type="PositiveMoneyType" minOccurs="0"/>
+									<xs:element name="GrowthIndicator" type="YesNoType" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+                        	 		
+						<xs:element name="ResourcePartnerServiceContributed" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="SBALoanAmount" type="PositiveMoneyType" minOccurs="0"/> -->
+									<xs:element name="SBALoanAmount" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<!-- <xs:element name="NonSBALoanAmount" type="PositiveMoneyType" minOccurs="0"/> -->
+									<xs:element name="NonSBALoanAmount" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<!-- <xs:element name="EquityCapitalReceived" type="PositiveMoneyType" minOccurs="0"/> -->
+									<xs:element name="EquityCapitalReceived" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<!-- <xs:element name="SBALoanAmountTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
+									<xs:element name="SBALoanAmountTxnNmb" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:integer">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> 
+									<!-- <xs:element name="NonSBALoanAmountTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
+									<xs:element name="NonSBALoanAmountTxnNmb" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:integer">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> 
+									<!-- <xs:element name="EquityCapitalReceivedTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
+									<xs:element name="EquityCapitalReceivedTxnNmb" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:integer">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="NumberOfContractsReceived"  minOccurs="0">
+									<xs:simpleType>
+											<xs:restriction base="xs:integer">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+										</xs:element>
+									<!-- <xs:element name="GovernmentContractValue" type="PositiveMoneyType" minOccurs="0"/> -->
+									<xs:element name="GovernmentContractValue" minOccurs="0">
+										<xs:simpleType>
+											<xs:restriction base="xs:decimal">
+												<xs:minInclusive value="0"/>
+												<xs:maxInclusive value="1000000000"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>	
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>									
+						<xs:element name="Certifications" minOccurs="0">
+										<xs:complexType>
+											<xs:sequence>
+												<!-- <xs:element name="Code" maxOccurs="unbounded">
+													<xs:simpleType>
+														<xs:annotation>
+															<xs:documentation>
+																Name of Certification		Value
+																
+																8(a)						1
+																Hubzones					2
+																SDB							3
+																Other						99
+																
+																Note: if other, please specify it.
+															</xs:documentation>
+														</xs:annotation>
+														<xs:restriction base="xs:positiveInteger">
+															<xs:enumeration value="1"/>
+															<xs:enumeration value="2"/>
+															<xs:enumeration value="3"/>
+															<xs:enumeration value="99"/>
+														</xs:restriction>
+													</xs:simpleType>
+												</xs:element> -->
+												<xs:element name="Code" maxOccurs="unbounded">
+													<xs:simpleType>
+														<xs:annotation>
+															<xs:documentation>
+																Name of Certification		
+																--------------------------	
+																8(a)
+																Hubzones
+																Small Disadvantage Business
+																Economically Disadvantaged Women-Owned Small Business
+																Service-Disabled Veteran-Owned Small Business
+																Veteran Owned Small Business
+																Women-Owned Small Business
+																Other
+																Note: if other, please specify it.
+															</xs:documentation>
+														</xs:annotation>
+														<xs:restriction base="xs:string">
+															<xs:enumeration value="8(a)"/>
+															<xs:enumeration value="Hubzones"/>
+															<xs:enumeration value="Small Disadvantage Business"/>
+															<xs:enumeration value="Economically Disadvantaged Women-Owned Small Business"/>
+															<xs:enumeration value="Service-Disabled Veteran-Owned Small Business"/>
+															<xs:enumeration value="Veteran Owned Small Business"/>
+															<xs:enumeration value="Women-Owned Small Business"/>
+															<xs:enumeration value="Other"/>
+														</xs:restriction>
+													</xs:simpleType>
+												</xs:element>
+												<xs:element name="Other" type="String255Type" minOccurs="0"/>
+											</xs:sequence>
+										</xs:complexType>
+									</xs:element>
+						<xs:element name="SBAFinancialAssistance" minOccurs="0">
+										<xs:complexType>
+											<xs:sequence>
+												<!-- <xs:element name="Code" maxOccurs="unbounded">
+													<xs:simpleType>
+														<xs:annotation>
+															<xs:documentation>
+																Name of Certification						Value
+																
+																Micro Loan									2
+																Export Express								3					
+																Export Working Capital						4
+																Community Advantage							5
+																SBIR										6
+																Other(SBIR, SBIC, 7(a) 504, etc)			99
+																State/Local COVID-19 Loans or Grants		10
+																Payroll Protection Program (PPP)			7
+																Economic Impact Disaster Loan (EIDL)		8
+																Other SBA Disaster Loan for COVID-19		9
+																
+																Note: if other, please specify it.
+															</xs:documentation>
+														</xs:annotation>
+														<xs:restriction base="xs:positiveInteger">															
+															<xs:enumeration value="2"/>
+															<xs:enumeration value="3"/>
+															<xs:enumeration value="4"/>
+															<xs:enumeration value="5"/>
+															<xs:enumeration value="6"/>
+															<xs:enumeration value="99"/>
+															<xs:enumeration value="10"/>
+															<xs:enumeration value="7"/>
+															<xs:enumeration value="8"/>
+															<xs:enumeration value="9"/>
+														</xs:restriction>
+													</xs:simpleType>
+												</xs:element> -->
+												<xs:element name="Code" maxOccurs="unbounded">
+													<xs:simpleType>
+														<xs:annotation>
+															<xs:documentation>
+																Name of Certification						
+																--------------------------					
+																Community Advantage
+																Economic Impact Disaster Loan (EIDL)
+																Export Express
+																Export Working Capital
+																Micro Loan
+																<!-- Payroll Protection Program (PPP) -->
+																SBIR
+																State/Local COVID-19 Loans or Grants
+																Other(SBIR, SBIC, 7(a) 504, etc)
+		
+																																
+																Note: if other, please specify it.
+															</xs:documentation>
+														</xs:annotation>
+														<xs:restriction base="xs:string">	
+															<xs:enumeration value="Community Advantage"/>	
+															<xs:enumeration value="Economic Impact Disaster Loan (EIDL)"/>	
+															<xs:enumeration value="Export Express"/>
+															<xs:enumeration value="Export Working Capital"/>												
+															<xs:enumeration value="Micro Loan"/>
+													<!-- 		<xs:enumeration value="Payroll Protection Program (PPP)"/> -->
+															<xs:enumeration value="SBIR"/>
+															<xs:enumeration value="State/Local COVID-19 Loans or Grants"/>
+															<xs:enumeration value="Other(SBIR, SBIC, 7(a) 504, etc)"/>
+														</xs:restriction>
+													</xs:simpleType>
+												</xs:element>
+												<xs:element name="Other" type="String255Type" minOccurs="0"/>
+											</xs:sequence>
+										</xs:complexType>
+									</xs:element>
+						<xs:element name="CounselingProvided"  minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Nature of your counseling provided		Value
+													
+													Start-up Assistance						1
+													Business Plan							2
+													Financing/Capital						3
+													Managing Business						4
+													Human Resources/Managing Employees		5
+													Customer Relations						6
+													Business Accounting/Budget				7
+													Cash Flow Management					8
+													Tax Planning							9
+													Marketing/Sales							10
+													Government Contracting					11
+													Franchising								12
+													Buy/Sell a Business						13
+													Technology/Computers					14
+													eCommerce								15
+													Legal Issues							16
+													International Trade						17
+													COVID-19 Financing/Capital				18
+													COVID-19 General Support				19
+													Intellectual Property Training          20
+													Unknown/Not Stated						98
+													Other									99
+																									
+													Note: if other, please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:positiveInteger">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+												<xs:enumeration value="4"/>
+												<xs:enumeration value="5"/>
+												<xs:enumeration value="6"/>
+												<xs:enumeration value="7"/>
+												<xs:enumeration value="8"/>
+												<xs:enumeration value="9"/>
+												<xs:enumeration value="10"/>
+												<xs:enumeration value="11"/>
+												<xs:enumeration value="12"/>
+												<xs:enumeration value="13"/>
+												<xs:enumeration value="14"/>
+												<xs:enumeration value="15"/>
+												<xs:enumeration value="16"/>
+												<xs:enumeration value="17"/>
+												<xs:enumeration value="18"/>
+												<xs:enumeration value="19"/>
+												<xs:enumeration value="20"/>
+												<xs:enumeration value="98"/>
+												<xs:enumeration value="99"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Nature of your counseling provided		Value
+													--------------------------------------	-----
+													Business Accounting/Budget
+													Business Financial/Cash Flow
+													Business Financing/Capital Sources
+													Business Operations/Management
+													Business Plan
+													Business Start-up/Preplanning
+													Buy/Sell Business
+													Credit Counseling
+													Customer Relations
+													Cyber Security/Cyber Awareness
+													Disaster Planning/Recovery
+													eCommerce
+													Franchising
+													Government Contracting
+													Human Resources/Managing Employees
+													Intellectual Property Training
+													International Trade
+													Legal Issues
+													Marketing/Sales
+													Tax Planning
+													Technology
+													Other
+													//Unknown/Not Stated			
+													
+													Note: if other, please specify it.
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="Business Accounting/Budget"/>
+												<xs:enumeration value="Business Financial/Cash Flow"/>
+												<xs:enumeration value="Business Financing/Capital Sources"/>
+												<xs:enumeration value="Business Operations/Management"/>
+												<xs:enumeration value="Business Plan"/>
+												<xs:enumeration value="Business Start-up/Preplanning"/>
+												<xs:enumeration value="Buy/Sell Business"/>
+												<xs:enumeration value="Credit Counseling"/>
+												<xs:enumeration value="Customer Relations"/>
+												<xs:enumeration value="Cyber Security/Cyber Awareness"/>
+												<xs:enumeration value="Disaster Planning/Recovery"/>
+												<xs:enumeration value="eCommerce"/>
+												<xs:enumeration value="Franchising"/>
+												<xs:enumeration value="Government Contracting"/>
+												<xs:enumeration value="Human Resources/Managing Employees"/>
+												<xs:enumeration value="Intellectual Property Training"/>
+												<xs:enumeration value="International Trade"/>
+												<xs:enumeration value="Legal Issues"/>
+												<xs:enumeration value="Marketing/Sales"/>
+												<xs:enumeration value="Tax Planning"/>
+												<xs:enumeration value="Technology"/>
+												<xs:enumeration value="Other"/>
+												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String255Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<xs:element name="ReferredClient" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code" maxOccurs="unbounded">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Referred Client Type	                    Value
+													
+													U.S. Trade And Development Agency	   		USTDA
+													Women's Business Center			    		WBC
+													SCORE Chapter				    			SCORE
+													Small Business Development Center	   		SBDC			
+													SBA District Office 			   			SBADO
+													US Export Assistance Center		    		USEAC
+													State Trade Agency       	            	STA
+													Export/Import Bank	         	    		EIB
+													Overseas Private Investment Corporation     OPIC
+													Department of Agriculture		    		DOA
+													Department of Commerce			    		DOC
+													Department of State			    			DOS
+													Other					    				Other
+													Veterans Business Outreach Center	    	VBOC
+													Procurement Technical Assistance Center	    PTAC
+													SBA Disaster Assistance						SBADA
+													State/Local COVID-19 Assistance				LOCAL
+													SBA Capital Access (PPP)					SBACA
+													
+
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="USTDA"/>
+												<xs:enumeration value="WBC"/>
+												<xs:enumeration value="SCORE"/>
+												<xs:enumeration value="SBDC"/>
+												<xs:enumeration value="SBADO"/>
+												<xs:enumeration value="USEAC"/>
+												<xs:enumeration value="STA"/>
+												<xs:enumeration value="EIB"/>
+												<xs:enumeration value="OPIC"/>
+												<xs:enumeration value="DOA"/>
+												<xs:enumeration value="DOC"/>
+												<xs:enumeration value="DOS"/>
+												<xs:enumeration value="OTH"/>
+												<xs:enumeration value="VBOC"/>
+												<xs:enumeration value="PTAC"/>
+												<xs:enumeration value="SBADA"/>
+												<xs:enumeration value="LOCAL"/>
+												<xs:enumeration value="SBACA"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code" maxOccurs="unbounded">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Referred Client Type	                    
+													-----------------------	                    
+													APEX Accelerator
+													Department of Agriculture
+													Department of Commerce/Commercial Services
+													Department of State
+													Export/Import Bank
+													Overseas Private Investment Corporation     
+													SBA Capital Access (PPP)
+													SBA Disaster Assistance
+													SBA District Office
+													SBA Office of International Trade (OIT)
+													SCORE Chapter
+													Small Business Development Center
+													State Trade Agency       
+													U.S. Trade And Development Agency
+													US Export Assistance Center
+													Veterans Business Outreach Center
+													Women's Business Center
+													Other					
+													
+
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="APEX Accelerator"/>
+												<xs:enumeration value="Department of Agriculture"/>
+												<xs:enumeration value="Department of Commerce/Commercial Services"/>
+												<xs:enumeration value="Department of State"/>
+												<xs:enumeration value="Export/Import Bank"/>
+												<xs:enumeration value="Overseas Private Investment Corporation"/>
+												<xs:enumeration value="SBA Capital Access (PPP)"/>
+												<xs:enumeration value="SBA Disaster Assistance"/>
+												<xs:enumeration value="SBA District Office"/>
+												<xs:enumeration value="SBA Office of International Trade (OIT)"/>
+												<xs:enumeration value="SCORE Chapter"/>
+												<xs:enumeration value="Small Business Development Center"/>
+												<xs:enumeration value="State Trade Agency"/>
+												<xs:enumeration value="U.S. Trade And Development Agency"/>
+												<xs:enumeration value="US Export Assistance Center"/>
+												<xs:enumeration value="Veterans Business Outreach Center"/>
+												<xs:enumeration value="Women's Business Center"/>
+												<xs:enumeration value="Other"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String255Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="SessionType">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Type of session		Value
+										
+										Face-to-face		1
+										Online				2
+										Telephone			3
+										Prepare Only		4
+										Update Only			5
+										Training            6
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:integer">
+									<xs:enumeration value="1"/>
+									<xs:enumeration value="2"/>
+									<xs:enumeration value="3"/>
+									<xs:enumeration value="4"/>
+									<xs:enumeration value="5"/>
+									<xs:enumeration value="6"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> -->
+						<xs:element name="SessionType"  minOccurs="0">
+							<xs:simpleType>
+								<xs:annotation>
+									<xs:documentation>
+										Type of session		
+										-----------------------	
+										Face-to-face
+										Online
+										Prepare Only
+										Telephone
+										Training
+										Update Only
+            
+									</xs:documentation>
+								</xs:annotation>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Face-to-face"/>
+									<xs:enumeration value="Online"/>
+									<xs:enumeration value="Prepare Only"/>
+									<xs:enumeration value="Telephone"/>
+									<xs:enumeration value="Training"/>
+									<xs:enumeration value="Update Only"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="Language"  minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<!-- <xs:element name="Code" maxOccurs="unbounded">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Language				Value
+													
+													English					1
+													Spanish					2
+													Other 					3
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:integer">
+												<xs:enumeration value="1"/>
+												<xs:enumeration value="2"/>
+												<xs:enumeration value="3"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element> -->
+									<xs:element name="Code" maxOccurs="unbounded">
+										<xs:simpleType>
+											<xs:annotation>
+												<xs:documentation>
+													Language				
+													--------------			
+													English
+													Spanish
+													Arabic
+													Armenian
+													ASL-American Sign Language
+													Assamese
+													Borana
+													Burmese
+													Catalan/Valencian
+													Chinese-Cantonese
+													Chinese-Mandarin
+													Chinese-Other
+													Chuukese
+													Croatian
+													Czech
+													Farsi
+													Finnish
+													French
+													Fukien
+													Galician
+													German
+													Hmong
+													Hungarian
+													Inupiat/Inupiaq
+													Italian
+													Japanese
+													Kamba
+													Kannada
+													Khmer
+													Kikuyu/Gikuyu
+													Korean
+													Kosraean
+													Luo
+													Marshallese
+													Palauan
+													Panjabi/Punjabi
+													Pohnpein
+													Portuguese
+													Russian
+													Slovenian
+													Somali
+													Swahili
+													Tagalog/Filipino
+													Tajik
+													Tamil
+													Thai
+													Vietnamese
+													Yapese
+													Yiddish
+													Other 					
+												</xs:documentation>
+											</xs:annotation>
+											<xs:restriction base="xs:string">
+												<xs:enumeration value="English"/>
+												<xs:enumeration value="Spanish"/>
+												<xs:enumeration value="Arabic"/>
+												<xs:enumeration value="Armenian"/>
+												<xs:enumeration value="ASL-American Sign Language"/>
+												<xs:enumeration value="Assamese"/>
+												<xs:enumeration value="Borana"/>
+												<xs:enumeration value="Burmese"/>
+												<xs:enumeration value="Catalan/Valencian"/>
+												<xs:enumeration value="Chinese-Cantonese"/>
+												<xs:enumeration value="Chinese-Mandarin"/>
+												<xs:enumeration value="Chinese-Other"/>
+												<xs:enumeration value="Chuukese"/>
+												<xs:enumeration value="Croatian"/>
+												<xs:enumeration value="Czech"/>
+												<xs:enumeration value="Farsi"/>
+												<!-- <xs:enumeration value="Filipino"/> -->
+												<xs:enumeration value="Finnish"/>
+												<xs:enumeration value="French"/>
+												<xs:enumeration value="Fukien"/>
+												<xs:enumeration value="Galician"/>
+												<xs:enumeration value="German"/>
+												<xs:enumeration value="Hmong"/>
+												<xs:enumeration value="Hungarian"/>
+												<xs:enumeration value="Inupiat/Inupiaq"/>
+												<xs:enumeration value="Italian"/>
+												<xs:enumeration value="Japanese"/>
+												<xs:enumeration value="Kamba"/>
+												<xs:enumeration value="Kannada"/>
+												<xs:enumeration value="Khmer"/>
+												<xs:enumeration value="Kikuyu/Gikuyu"/>
+												<xs:enumeration value="Korean"/>
+												<xs:enumeration value="Kosraean"/>
+												<xs:enumeration value="Luo"/>
+												<xs:enumeration value="Marshallese"/>
+												<xs:enumeration value="Palauan"/>
+												<xs:enumeration value="Panjabi/Punjabi"/>
+												<xs:enumeration value="Pohnpein"/>
+												<xs:enumeration value="Portuguese"/>
+												<xs:enumeration value="Russian"/>
+												<xs:enumeration value="Slovenian"/>
+												<xs:enumeration value="Somali"/>
+												<xs:enumeration value="Swahili"/>
+												<xs:enumeration value="Tagalog/Filipino"/>
+												<xs:enumeration value="Tajik"/>
+												<xs:enumeration value="Tamil"/>
+												<xs:enumeration value="Thai"/>
+												<xs:enumeration value="Vietnamese"/>
+												<xs:enumeration value="Yapese"/>
+												<xs:enumeration value="Yiddish"/>
+												<xs:enumeration value="Other"/>
+											</xs:restriction>
+										</xs:simpleType>
+									</xs:element>
+									<xs:element name="Other" type="String80Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="History">
+							<xs:simpleType>
+								<xs:restriction base="xs:integer">
+									<xs:annotation>
+										<xs:documentation>
+											History					Value
+											
+											New Case				1
+											Follow-up				2
+											Case Close Out			3
+											One Time				4
+										</xs:documentation>
+									</xs:annotation>
+									<xs:enumeration value="1"/>
+									<xs:enumeration value="2"/>
+									<xs:enumeration value="3"/>
+									<xs:enumeration value="4"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element> 
+						-->
+						<xs:element name="DateCounseled" type="xs:date" minOccurs="0"/>
+						<xs:element name="CounselorName" type="String80Type"  minOccurs="0"/>
+						<xs:element name="CounselingHours" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Contact" type="HourType" minOccurs="0"/>
+									<xs:element name="Prepare" type="HourType" minOccurs="0"/>
+									<xs:element name="Travel" type="HourType" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element>
+						<!-- <xs:element name="MoreThanOneCounselorAttend" minOccurs="0">
+							<xs:complexType>
+								<xs:sequence>
+									<xs:element name="Answer" type="YesNoType" minOccurs="0"/>
+									<xs:element name="NumberOfCounselors" type="String80Type" minOccurs="0"/>
+								</xs:sequence>
+							</xs:complexType>
+						</xs:element> -->
+						<!-- <xs:element name="NumberOfCounselors" type="String80Type" minOccurs="0" default="1"/> -->
+						<xs:element name="CounselorNotes" minOccurs="0">
+							<xs:simpleType>
+								<xs:restriction base="xs:string">
+									<xs:maxLength value="1000"/>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:element>
+						<xs:element name="ExportCountries" type="ExportCountryList" minOccurs="0"/>
+					<!-- 	<xs:element name="ClientActiveInactive" type="ActiveIndicatorType"/> -->
+					
+			            <xs:element name="TrainingSession" minOccurs="0">
+                            <xs:complexType>
+                                <xs:sequence>
+                                	<xs:element name="DateTrainingStarted" type="xs:date" minOccurs="0"/>
+                                    <xs:element name="PartnerTrainingNumber" type="String20Type" minOccurs="0"/>
+                                    <xs:element name="EmployeesTrained" type="PositiveIntegerType" minOccurs="0"/>
+                                    <xs:element name="HoursTrained" type="HourType" minOccurs="0"/>                                   
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+		          </xs:sequence>
+	         </xs:complexType>
+	<!-- definition of complex elements -->
+			</xs:element>
+	</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="PersonType">
+		<xs:sequence>
+			<xs:element name="Last">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="40"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="First">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="40"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Middle" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="1"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="EmailType">
+		<xs:restriction base="xs:string">
+			<xs:pattern value="([\.a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(([a-zA-Z0-9_-])*\.([a-zA-Z0-9_-])+)+"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="PhoneType">
+		<xs:restriction base="xs:integer">
+			<xs:pattern value="[0-9]{10}"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:complexType name="AddressType">
+		<xs:sequence>
+			<xs:element name="Street1" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="80"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Street2" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="80"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="City" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="80"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<!-- <xs:element name="State" minOccurs="0">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							State Name				State Code
+							
+							Alaska					AK
+							Alabama					AL
+							Arkansas				AR
+							American Samoa			AS
+							Arizona					AZ
+							California				CA
+							Colorado				CO
+							Connecticut				CT
+							Dist. of Columbia		DC
+							Delaware				DE
+							Florida					FL
+							Micronesia				FM
+							Georgia					GA
+							Guam					GU
+							Hawaii					HI
+							Iowa					IA
+							Idaho					ID
+							Illinois				IL
+							Indiana					IN
+							Kansas					KS
+							Kentucky				KY
+							Louisiana				LA
+							Massachusetts			MA
+							Maryland				MD
+							Maine					ME
+							Marshall Islands		MH
+							Michigan				MI
+							Minnesota				MN
+							Missouri				MO
+							N Mariana Islands		MP
+							Mississippi				MS
+							Montana					MT
+							North Carolina			NC
+							North Dakota			ND
+							Nebraska				NE
+							New Hampshire			NH
+							New Jersey				NJ
+							New Mexico				NM
+							Nevada					NV
+							New York				NY
+							Ohio					OH
+							Oklahoma				OK
+							Oregon					OR
+							Pennsylvania			PA
+							Puerto Rico				PR
+							Palau					PW
+							Rhode Island			RI
+							South Carolina			SC
+							South Dakota			SD
+							Tennessee				TN
+							Texas					TX
+							Utah					UT
+							Virginia				VA
+							Virgin Island			VI
+							Vermont					VT
+							Washington				WA
+							Wisconsin				WI
+							West Virginia			WV
+							Wyoming					WY
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="AK"/>
+						<xs:enumeration value="AL"/>
+						<xs:enumeration value="AR"/>
+						<xs:enumeration value="AS"/>
+						<xs:enumeration value="AZ"/>
+						<xs:enumeration value="CA"/>
+						<xs:enumeration value="CO"/>
+						<xs:enumeration value="CT"/>
+						<xs:enumeration value="DC"/>
+						<xs:enumeration value="DE"/>
+						<xs:enumeration value="FL"/>
+						<xs:enumeration value="FM"/>
+						<xs:enumeration value="GA"/>
+						<xs:enumeration value="GU"/>
+						<xs:enumeration value="HI"/>
+						<xs:enumeration value="IA"/>
+						<xs:enumeration value="ID"/>
+						<xs:enumeration value="IL"/>
+						<xs:enumeration value="IN"/>
+						<xs:enumeration value="KS"/>
+						<xs:enumeration value="KY"/>
+						<xs:enumeration value="LA"/>
+						<xs:enumeration value="MA"/>
+						<xs:enumeration value="MD"/>
+						<xs:enumeration value="ME"/>
+						<xs:enumeration value="MH"/>
+						<xs:enumeration value="MI"/>
+						<xs:enumeration value="MN"/>
+						<xs:enumeration value="MO"/>
+						<xs:enumeration value="MP"/>
+						<xs:enumeration value="MS"/>
+						<xs:enumeration value="MT"/>
+						<xs:enumeration value="NC"/>
+						<xs:enumeration value="ND"/>
+						<xs:enumeration value="NE"/>
+						<xs:enumeration value="NH"/>
+						<xs:enumeration value="NJ"/>
+						<xs:enumeration value="NM"/>
+						<xs:enumeration value="NV"/>
+						<xs:enumeration value="NY"/>
+						<xs:enumeration value="OH"/>
+						<xs:enumeration value="OK"/>
+						<xs:enumeration value="OR"/>
+						<xs:enumeration value="PA"/>
+						<xs:enumeration value="PR"/>
+						<xs:enumeration value="PW"/>
+						<xs:enumeration value="RI"/>
+						<xs:enumeration value="SC"/>
+						<xs:enumeration value="SD"/>
+						<xs:enumeration value="TN"/>
+						<xs:enumeration value="TX"/>
+						<xs:enumeration value="UT"/>
+						<xs:enumeration value="VA"/>
+						<xs:enumeration value="VI"/>
+						<xs:enumeration value="VT"/>
+						<xs:enumeration value="WA"/>
+						<xs:enumeration value="WI"/>
+						<xs:enumeration value="WV"/>
+						<xs:enumeration value="WY"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element> -->
+			<xs:element name="State" minOccurs="0">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							State Name				
+							--------------			
+							Alabama
+							Alaska
+							American Samoa
+							Arizona
+							Arkansas
+							Armed Forces Europe
+							Armed Forces Pacific
+							Armed Forces the Americas
+							California
+							Colorado
+							Connecticut
+							Delaware
+							District of Columbia
+							Federated States of Micronesia
+							Florida
+							Georgia
+							Guam
+							Hawaii
+							Idaho
+							Illinois
+							Indiana
+							Iowa
+							Kansas
+							Kentucky
+							Louisiana
+							Maine
+							Marshall Islands
+							Maryland
+							Massachusetts
+							Michigan
+							Minnesota
+							Mississippi
+							Missouri
+							Montana
+							Nebraska
+							Nevada
+							New Hampshire
+							New Jersey
+							New Mexico
+							New York
+							North Carolina
+							North Dakota
+							Northern Mariana Islands
+							Ohio
+							Oklahoma
+							Oregon
+							Pennsylvania
+							Puerto Rico
+							Republic of Palau
+							Rhode Island
+							South Carolina
+							South Dakota
+							Tennessee
+							Texas
+							United States Minor Outlying Islands
+							U.S. Virgin Islands
+							Utah
+							Vermont
+							Virginia
+							Washington
+							West Virginia
+							Wisconsin
+							Wyoming
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="Alabama"/>
+						<xs:enumeration value="Alaska"/>
+						<xs:enumeration value="American Samoa"/>
+						<xs:enumeration value="Arizona"/>
+						<xs:enumeration value="Arkansas"/>
+						<xs:enumeration value="Armed Forces Europe"/>
+						<xs:enumeration value="Armed Forces Pacific"/>
+						<xs:enumeration value="Armed Forces the Americas"/>
+						<xs:enumeration value="California"/>
+						<xs:enumeration value="Colorado"/>
+						<xs:enumeration value="Connecticut"/>
+						<xs:enumeration value="Delaware"/>
+						<xs:enumeration value="District of Columbia"/>
+						<xs:enumeration value="Federated States of Micronesia"/>
+						<xs:enumeration value="Florida"/>
+						<xs:enumeration value="Georgia"/>
+						<xs:enumeration value="Guam"/>
+						<xs:enumeration value="Hawaii"/>
+						<xs:enumeration value="Idaho"/>
+						<xs:enumeration value="Illinois"/>
+						<xs:enumeration value="Indiana"/>
+						<xs:enumeration value="Iowa"/>
+						<xs:enumeration value="Kansas"/>
+						<xs:enumeration value="Kentucky"/>
+						<xs:enumeration value="Louisiana"/>
+						<xs:enumeration value="Maine"/>
+						<xs:enumeration value="Marshall Islands"/>
+						<xs:enumeration value="Maryland"/>
+						<xs:enumeration value="Massachusetts"/>
+						<xs:enumeration value="Michigan"/>
+						<xs:enumeration value="Minnesota"/>
+						<xs:enumeration value="Mississippi"/>
+						<xs:enumeration value="Missouri"/>
+						<xs:enumeration value="Montana"/>
+						<xs:enumeration value="Nebraska"/>
+						<xs:enumeration value="Nevada"/>
+						<xs:enumeration value="New Hampshire"/>
+						<xs:enumeration value="New Jersey"/>
+						<xs:enumeration value="New Mexico"/>
+						<xs:enumeration value="New York"/>
+						<xs:enumeration value="North Carolina"/>
+						<xs:enumeration value="North Dakota"/>
+						<xs:enumeration value="Northern Mariana Islands"/>
+						<xs:enumeration value="Ohio"/>
+						<xs:enumeration value="Oklahoma"/>
+						<xs:enumeration value="Oregon"/>
+						<xs:enumeration value="Pennsylvania"/>
+						<xs:enumeration value="Puerto Rico"/>
+						<xs:enumeration value="Republic of Palau"/>
+						<xs:enumeration value="Rhode Island"/>
+						<xs:enumeration value="South Carolina"/>
+						<xs:enumeration value="South Dakota"/>
+						<xs:enumeration value="Tennessee"/>
+						<xs:enumeration value="Texas"/>
+						<xs:enumeration value="U.S. Virgin Islands"/>
+						<xs:enumeration value="United States Minor Outlying Islands"/>
+						<xs:enumeration value="Utah"/>
+						<xs:enumeration value="Vermont"/>
+						<xs:enumeration value="Virginia"/>
+						<xs:enumeration value="Washington"/>
+						<xs:enumeration value="West Virginia"/>
+						<xs:enumeration value="Wisconsin"/>
+						<xs:enumeration value="Wyoming"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="ZipCode" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="\d{5}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Zip4Code" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:pattern value="\d{4}"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Country" type="CountryList" minOccurs="0"/>
+			<xs:element name="PostalCode" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="20"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="StateOrProvince" minOccurs="0">
+				<xs:simpleType>
+					<xs:restriction base="xs:string">
+						<xs:maxLength value="60"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<!-- <xs:simpleType name="YesNoType">
+		<xs:annotation>
+			<xs:documentation>
+				Value					Meaning
+				
+				Y						Yes
+				N						No
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Y"/>
+			<xs:enumeration value="N"/>
+		</xs:restriction>
+	</xs:simpleType> -->
+	<xs:simpleType name="YesNoType">
+		<xs:annotation>
+			<xs:documentation>
+				Value					
+				--------------			
+				Yes						
+				No						
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Yes"/>
+			<xs:enumeration value="No"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="YesNoUndeterminedType">
+		<xs:annotation>
+			<xs:documentation>
+				Value					
+				--------------			
+				Yes						
+				No
+				Undetermined					
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Yes"/>
+			<xs:enumeration value="No"/>
+			<xs:enumeration value="Undetermined"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<!-- <xs:simpleType name="ActiveIndicatorType">
+		<xs:annotation>
+			<xs:documentation>
+				Value					Meaning
+				
+				A						Activate
+				I						Inactivate
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="A"/>
+			<xs:enumeration value="I"/>
+		</xs:restriction>
+	</xs:simpleType> 
+	<xs:simpleType name="ActiveIndicatorType">
+		<xs:annotation>
+			<xs:documentation>
+				Value							
+				Activate						
+				Inactivate						
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Activate"/>
+			<xs:enumeration value="Inactivate"/>
+		</xs:restriction>
+	</xs:simpleType> -->
+	<xs:simpleType name="String20Type">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="20"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="String40Type">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="40"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="String80Type">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="80"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="String255Type">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="255"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="PositiveSmallIntegerType">
+		<xs:restriction base="xs:integer">
+			<xs:minInclusive value="0"/>
+			<xs:maxInclusive value="32767"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="PositiveIntegerType">
+		<xs:restriction base="xs:integer">
+			<xs:minInclusive value="0"/>
+			<xs:maxInclusive value="2147483647"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="PositiveMoneyType">
+		<xs:restriction base="xs:decimal">
+			<xs:minInclusive value="0"/>
+			<xs:maxInclusive value="922337203685477685477"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="MoneyType">
+		<xs:restriction base="xs:decimal">
+			<xs:minInclusive value="-922337203685477685477.00"/>
+			<xs:maxInclusive value="922337203685477685477.00"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="HourType">
+		<xs:restriction base="xs:decimal">
+			<xs:minInclusive value="0.00"/>
+			<xs:maxInclusive value="9999.99"/>
+		</xs:restriction>
+	</xs:simpleType>
+	 <xs:simpleType name="PositiveDecimalType">
+        <xs:restriction base="xs:decimal">
+	        <xs:minInclusive value="0.00"/>
+        </xs:restriction>
+	</xs:simpleType>
+	<xs:complexType name="ExportCountryList">
+		<xs:sequence>
+			<!-- <xs:element name="Code" minOccurs="0" maxOccurs="unbounded">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Country Name				Value
+							
+							AFGHNISTAN											AF
+							ALBANIA												AL
+							ALGERIA												DZ          
+							ANGOLA												AO         
+							ANGUILLA											AI           
+							ANTIGUA AND BARBUDA									AG         
+							COOK ISLANDS										CK          
+							COSTA RICA											CR          
+							COTE D'IVOIRE										CI           
+							CROATIA												HR         
+							AZERBAIJAN											AZ          
+							BANGLADESH											BD         
+							BARBADOS											BB          
+							BELARUS												BY    
+							BHUTAN												BT          
+							CAYMAN ISLANDS										KY          
+							CZECH REPUBLIC										CZ          
+							DJIBOUTI											DJ          
+							DOMINICAN REPUBLIC									DO         
+							TIMOR-LESTE											TL           
+							GREECE												GR         
+							HONG KONG											HK         
+							HUNGARY												HU         
+							ICELAND												IS           
+							INDIA												IN          
+							INDONESIA											ID           
+							IRAN, ISLAMIC REPUBLIC OF							IR           
+							IRAQ												IQ          
+							IRELAND												IE           
+							ISRAEL												IL            
+							JAMAICA												JM         
+							JAPAN												JP           
+							JORDAN												JO          
+							KAZAKHSTAN											KZ          
+							KENYA												KE          
+							KIRIBATI											KI           
+							KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF				KP          
+							KOREA, REPUBLIC OF									KR          
+							KUWAIT												KW        
+							KYRGYZSTAN											KG         
+							LAO PEOPLE'S DEMOCRATIC REPUBLIC					LA          
+							LATVIA												LV          
+							LEBANON												LB          
+							LESOTHO												LS           
+							LIBERIA												LR       
+							LIBYAN ARAB JAMAHIRIYA								LY           
+							LIECHTENSTEIN										LI            
+							LITHUANIA											LT           
+							LUXEMBOURG											LU          
+							MACAO												MO       
+							MACEDONIA, THE FORMER YUGOSLAV REPUBLIC OF			MK        
+							MADAGASCAR											MG       
+							MALAWI												MW      
+							MALAYSIA											MY        
+							MALDIVES											MV        
+							MALI												ML         
+							MALTA												MT        
+							MARSHALL ISLANDS									MH        
+							MAURITANIA											MR        
+							MAURITIUS											MU 
+							MEXICO												MX   
+							MICRONESIA, FEDERATED STATES OF						FM        
+							MOLDOVA, REPUBLIC OF								MD  
+							MONACO												MC  
+							MONGOLIA											MN  
+							MONTENEGRO											ME        
+							MONTSERRAT											MS  
+							MOROCCO												MA     
+							MOZAMBIQUE											MZ     
+							NAMIBIA												NA
+							NAURU												NR         
+							NEPAL												NP
+							NETHERLANDS											NL
+							NEW ZEALAND											NZ 
+							NICARAGUA											NI         
+							NIGER												NE         
+							NIGERIA												NG        
+							NORWAY												NO        
+							OMAN												OM       
+							PAKISTAN											PK 
+							PALAU												PW         
+							PANAMA												PA         
+							PAPUA NEW GUINEA									PG          
+							PARAGUAY											PY           
+							PERU												PE           
+							PHILIPPINES											PH         
+							POLAND												PL           
+							PORTUGAL											PT           
+							QATAR												QA          
+							ROMANIA												RO          
+							RUSSIAN FEDERATION									RU          
+							RWANDA												RW         
+							SAMOA												WS        
+							SAO TOME AND PRINCIPE								ST           
+							SAUDI ARABIA										SA           
+							SELL TO FILL-FREIGHT								S1           
+							SENEGAL												SN          
+							SERBIA												RS           
+							SEYCHELLES											SC           
+							SIERRA LEONE										SL            
+							SINGAPORE											SG          
+							SLOVAKIA											SK           
+							SLOVENIA											SI            
+							SOLOMAN ISLANDS										SB           
+							SOMALIA												SO          
+							SOUTHA AFRICA										ZA           
+							SPAIN												ES           
+							SRI LANKA											LK          
+							SAINT KITTS AND NEVIS								KN          
+							SAINT VINCENT AND THE GRENADINES					VC          
+							SUB CONTRACTOR FOR EXPORT							S2           
+							SUDAN												SD           
+							SURINAME											SR           
+							SWAZILAND											SZ           
+							SWEDEN												SE           
+							SWITZERLAND											CH          
+							SYRIAN ARAB REPUBLIC								SY           
+							TAIWAN, PROVINCE OF CHINA							TW         
+							TAJIKISTAN											TJ            
+							TANZANIA, UNITED REPUBLIC OF						TZ           
+							THAILAND											TH           
+							TOGO												TG          
+							TONGA												TO         
+							TRINIDAD AND TOBAGO									TT           
+							TUNISIA												TN          
+							TURKEY												TR           
+							TURKMENISTAN										TM         
+							TUVALU												TV           
+							UGANDA												UG         
+							UKRAINE												UA          
+							UNITED ARAB EMIRATES								AE           
+							UNITED KINGDOM										GB          
+							URUGUAY												UY          
+							UZBEKISTAN											UZ          
+							VANUATU												VU          
+							VATICAN CITY STATE OR HOLY SEE						VA          
+							VENEZUELA, BOLIVARIAN REPUBLIC OF					VE           
+							VIETNAM												VN          
+							VIRGIN ISLANDS, BRITISH								VG          
+							YEMEN												YE           
+							ZAMBIA												ZM         
+							ZIMBABWE											ZW         
+							ALAND ISLANDS										AX          
+							ANDORRA												AD          
+							ANTARCTICA											AQ          
+							BONAIRE, SAINT EUSTATIUS AND SABA					BQ          
+							BOUVET ISLAND										BV          
+							BRITISH INDIAN OCEAN TERRITORY						IO           
+							ARGENTINA											AR          
+							ARMENIA												AM         
+							ARUBA												AW         
+							AUSTRALIA											AU          
+							AUSTRIA												AT           
+							BAHAMAS												BS           
+							BAHRAIN												BH          
+							BELGIUM												BE           
+							BELIZE 												BZ           
+							BENIN												BJ            
+							BERMUDA												BM         
+							BOLIVIA, PLURINATIONAL STATE OF						BO          
+							BOSNIA AND HERZEGOVINA								BA          
+							BOTSWANA											BW         
+							BRAZIL												BR           
+							BRUNEI DARUSSALAM									BN          
+							BULGARIA											BG          
+							BURKINA FASO										BF           
+							MYANMAR OR BURMA									MM       
+							BURUNDI												BI            
+							CAMBODIA											KH          
+							CAMEROON											CM         
+							COMOROS												KM         
+							CONGO												CG          
+							DOMINICA											DM         
+							ERITREA												ER           
+							FIJI												FJ            
+							GABON												GA          
+							GAMBIA												GM        
+							GEORGIA												GE          
+							GERMANY												DE           
+							GHANA												GH          
+							GUATEMALA											GT          
+							GUINEA												GN         
+							CHRISTMAS ISLAND									CX           
+							COCOS(KEELING) ISLAND								CC           
+							CURACAO												CW         
+							FALKLAND ISLANDS(MALVINAS)							FK           
+							FAROE ISLANDS										FO          
+							FRENCH GUIANA										GF          
+							FRENCH POLYNESIA									PF           
+							FRENCH SOUTHERN TERRITORIES							TF           
+							GIBRALTAR											GI           
+							GUADELOUPE											GP          
+							GUERNSEY											GG         
+							HEARD ISLAND AND MCDONALD ISLANDS					HM         
+							ISLE OF MAN											IM          
+							JERSEY												JE            
+							MARTINIQUE											MQ        
+							MAYOTTE												YT           
+							NEW CALEDONIA										NC          
+							NIUE												NU         
+							NORFOLK ISLAND										NF          
+							PALESTINIAN TERRITORY, OCCUPIED						PS           
+							PITCAIRN											PN          
+							REUNION												RE           
+							SAINT BARTHELEMY									BL           
+							SAINT HELENA, ASCENSION AND TRISTAN DA CUNHA	    SH       
+							SAINT LUCIA											LC           
+							SAINT MARTIN(FRENCH PART)							MF         
+							SAINT PIERRE AND MIQUELON							PM         
+							SAN MARINO											SM         
+							SINT MAARTEN(DUTCH PART)							SX           
+							SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS		GS          
+							SVALBARD AND JAN MAYEN								SJ            
+							TOKELAU												TK           
+							TURKS AND CAICOS ISLANDS							TC           
+							WALLIS AND FUTUNA									WF         
+							WESTERN SAHARA										EH           
+							CANADA												CA          
+							CAPE VERDE											CV          
+							CUBA												CU          
+							CYPRUS												CY           
+							CONGO, THE DEMOCRATIC REPUBLIC OF THE				CD          
+							DENMARK												DK          
+							FINLAND												FI            
+							FRANCE												FR           
+							GUINEA-BISSAU										GW        
+							GUYANA												GY          
+							HAITI												HT           
+							HONDURAS											HN          
+							CENTRAL AFRICAN REPUBLIC							CF           
+							CHAD												TD           
+							CHILE												CL           
+							CHINA												CN          
+							COLOMBIA											CO          
+							ECUADOR												EC           
+							EGYPT												EG          
+							EL SALVADOR											SV          
+							EQUATORIAL GUINEA									GQ         
+							ESTONIA												EE           
+							ETHIOPIA											ET           
+							GREENLAND											GL           
+							GRENADA												GD          
+							ITALY												IT            
+							SOUTH SUDAN											SS           
+							OTHER												XX           
+							Sell to fill-freight      						    203 
+							Sub contractor for Exporter   						202 
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="AF"/>
+						<xs:enumeration value="AL"/>
+						<xs:enumeration value="DZ"/>
+						<xs:enumeration value="AO"/>
+						<xs:enumeration value="AI"/>
+						<xs:enumeration value="AG"/>
+						<xs:enumeration value="CK"/>
+						<xs:enumeration value="CR"/>
+						<xs:enumeration value="CI"/>
+						<xs:enumeration value="HR"/>
+						<xs:enumeration value="AZ"/>
+						<xs:enumeration value="BD"/>
+						<xs:enumeration value="BB"/>
+						<xs:enumeration value="BY"/>
+						<xs:enumeration value="BT"/>
+						<xs:enumeration value="KY"/>
+						<xs:enumeration value="CZ"/>
+						<xs:enumeration value="DJ"/>
+						<xs:enumeration value="DO"/>
+						<xs:enumeration value="TL"/>
+						<xs:enumeration value="GR"/>
+						<xs:enumeration value="HK"/>
+						<xs:enumeration value="HU"/>
+						<xs:enumeration value="IS"/>
+						<xs:enumeration value="IN"/>
+						<xs:enumeration value="ID"/>
+						<xs:enumeration value="IR"/>
+						<xs:enumeration value="IQ"/>
+						<xs:enumeration value="IE"/>
+						<xs:enumeration value="IL"/>
+						<xs:enumeration value="JM"/>
+						<xs:enumeration value="JP"/>
+						<xs:enumeration value="JO"/>
+						<xs:enumeration value="KZ"/>
+						<xs:enumeration value="KE"/>
+						<xs:enumeration value="KI"/>
+						<xs:enumeration value="KP"/>
+						<xs:enumeration value="KR"/>
+						<xs:enumeration value="KW"/>
+						<xs:enumeration value="KG"/>
+						<xs:enumeration value="LA"/>
+						<xs:enumeration value="LV"/>
+						<xs:enumeration value="LB"/>
+						<xs:enumeration value="LS"/>
+						<xs:enumeration value="LR"/>
+						<xs:enumeration value="LY"/>
+						<xs:enumeration value="LI"/>
+						<xs:enumeration value="LT"/>
+						<xs:enumeration value="LU"/>
+						<xs:enumeration value="MO"/>
+						<xs:enumeration value="MK"/>
+						<xs:enumeration value="MG"/>
+						<xs:enumeration value="MW"/>
+						<xs:enumeration value="MY"/>
+						<xs:enumeration value="MV"/>
+						<xs:enumeration value="ML"/>
+						<xs:enumeration value="MT"/>
+						<xs:enumeration value="MH"/>
+						<xs:enumeration value="MR"/>
+						<xs:enumeration value="MU"/>
+						<xs:enumeration value="MX"/>
+						<xs:enumeration value="FM"/>
+						<xs:enumeration value="MD"/>
+						<xs:enumeration value="MC"/>
+						<xs:enumeration value="MN"/>
+						<xs:enumeration value="ME"/>
+						<xs:enumeration value="MS"/>
+						<xs:enumeration value="MA"/>
+						<xs:enumeration value="MZ"/>
+						<xs:enumeration value="NA"/>
+						<xs:enumeration value="NR"/>
+						<xs:enumeration value="NP"/>
+						<xs:enumeration value="NL"/>
+						<xs:enumeration value="NZ"/>
+						<xs:enumeration value="NI"/>
+						<xs:enumeration value="NE"/>
+						<xs:enumeration value="NG"/>
+						<xs:enumeration value="NO"/>
+						<xs:enumeration value="OM"/>
+						<xs:enumeration value="PK"/>
+						<xs:enumeration value="PW"/>
+						<xs:enumeration value="PA"/>
+						<xs:enumeration value="PG"/>
+						<xs:enumeration value="PY"/>
+						<xs:enumeration value="PE"/>
+						<xs:enumeration value="PH"/>
+						<xs:enumeration value="PL"/>
+						<xs:enumeration value="PT"/>
+						<xs:enumeration value="QA"/>
+						<xs:enumeration value="RO"/>
+						<xs:enumeration value="RU"/>
+						<xs:enumeration value="RW"/>
+						<xs:enumeration value="WS"/>
+						<xs:enumeration value="ST"/>
+						<xs:enumeration value="SA"/>
+						<xs:enumeration value="S1"/>
+						<xs:enumeration value="SN"/>
+						<xs:enumeration value="RS"/>
+						<xs:enumeration value="SC"/>
+						<xs:enumeration value="SL"/>
+						<xs:enumeration value="SG"/>
+						<xs:enumeration value="SK"/>
+						<xs:enumeration value="SI"/>
+						<xs:enumeration value="SB"/>
+						<xs:enumeration value="SO"/>
+						<xs:enumeration value="ZA"/>
+						<xs:enumeration value="ES"/>
+						<xs:enumeration value="LK"/>
+						<xs:enumeration value="KN"/>
+						<xs:enumeration value="VC"/>
+						<xs:enumeration value="S2"/>
+						<xs:enumeration value="SD"/>
+						<xs:enumeration value="SR"/>
+						<xs:enumeration value="SZ"/>
+						<xs:enumeration value="SE"/>
+						<xs:enumeration value="CH"/>
+						<xs:enumeration value="SY"/>
+						<xs:enumeration value="TW"/>
+						<xs:enumeration value="TJ"/>
+						<xs:enumeration value="TZ"/>
+						<xs:enumeration value="TH"/>
+						<xs:enumeration value="TG"/>
+						<xs:enumeration value="TO"/>
+						<xs:enumeration value="TT"/>
+						<xs:enumeration value="TN"/>
+						<xs:enumeration value="TR"/>
+						<xs:enumeration value="TM"/>
+						<xs:enumeration value="TV"/>
+						<xs:enumeration value="UG"/>
+						<xs:enumeration value="UA"/>
+						<xs:enumeration value="AE"/>
+						<xs:enumeration value="GB"/>
+						<xs:enumeration value="UY"/>
+						<xs:enumeration value="UZ"/>
+						<xs:enumeration value="VU"/>
+						<xs:enumeration value="VA"/>
+						<xs:enumeration value="VE"/>
+						<xs:enumeration value="VN"/>
+						<xs:enumeration value="VG"/>
+						<xs:enumeration value="YE"/>
+						<xs:enumeration value="ZM"/>
+						<xs:enumeration value="ZW"/>
+						<xs:enumeration value="AX"/>
+						<xs:enumeration value="AD"/>
+						<xs:enumeration value="AQ"/>
+						<xs:enumeration value="BQ"/>
+						<xs:enumeration value="BV"/>
+						<xs:enumeration value="IO"/>
+						<xs:enumeration value="AR"/>
+						<xs:enumeration value="AM"/>
+						<xs:enumeration value="AW"/>
+						<xs:enumeration value="AU"/>
+						<xs:enumeration value="AT"/>
+						<xs:enumeration value="BS"/>
+						<xs:enumeration value="BH"/>
+						<xs:enumeration value="BE"/>
+						<xs:enumeration value="BZ"/>
+						<xs:enumeration value="BJ"/>
+						<xs:enumeration value="BM"/>
+						<xs:enumeration value="BO"/>
+						<xs:enumeration value="BA"/>
+						<xs:enumeration value="BW"/>
+						<xs:enumeration value="BR"/>
+						<xs:enumeration value="BN"/>
+						<xs:enumeration value="BG"/>
+						<xs:enumeration value="BF"/>
+						<xs:enumeration value="MM"/>
+						<xs:enumeration value="BI"/>
+						<xs:enumeration value="KH"/>
+						<xs:enumeration value="CM"/>
+						<xs:enumeration value="KM"/>
+						<xs:enumeration value="CG"/>
+						<xs:enumeration value="DM"/>
+						<xs:enumeration value="ER"/>
+						<xs:enumeration value="FJ"/>
+						<xs:enumeration value="GA"/>
+						<xs:enumeration value="GM"/>
+						<xs:enumeration value="GE"/>
+						<xs:enumeration value="DE"/>
+						<xs:enumeration value="GH"/>
+						<xs:enumeration value="GT"/>
+						<xs:enumeration value="GN"/>
+						<xs:enumeration value="CX"/>
+						<xs:enumeration value="CC"/>
+						<xs:enumeration value="CW"/>
+						<xs:enumeration value="FK"/>
+						<xs:enumeration value="FO"/>
+						<xs:enumeration value="GF"/>
+						<xs:enumeration value="PF"/>
+						<xs:enumeration value="TF"/>
+						<xs:enumeration value="GI"/>
+						<xs:enumeration value="GP"/>
+						<xs:enumeration value="GG"/>
+						<xs:enumeration value="HM"/>
+						<xs:enumeration value="IM"/>
+						<xs:enumeration value="JE"/>
+						<xs:enumeration value="MQ"/>
+						<xs:enumeration value="YT"/>
+						<xs:enumeration value="NC"/>
+						<xs:enumeration value="NU"/>
+						<xs:enumeration value="NF"/>
+						<xs:enumeration value="PS"/>
+						<xs:enumeration value="PN"/>
+						<xs:enumeration value="RE"/>
+						<xs:enumeration value="BL"/>
+						<xs:enumeration value="SH"/>
+						<xs:enumeration value="LC"/>
+						<xs:enumeration value="MF"/>
+						<xs:enumeration value="PM"/>
+						<xs:enumeration value="SM"/>
+						<xs:enumeration value="SX"/>
+						<xs:enumeration value="GS"/>
+						<xs:enumeration value="SJ"/>
+						<xs:enumeration value="TK"/>
+						<xs:enumeration value="TC"/>
+						<xs:enumeration value="WF"/>
+						<xs:enumeration value="EH"/>
+						<xs:enumeration value="CA"/>
+						<xs:enumeration value="CV"/>
+						<xs:enumeration value="CU"/>
+						<xs:enumeration value="CY"/>
+						<xs:enumeration value="CD"/>
+						<xs:enumeration value="DK"/>
+						<xs:enumeration value="FI"/>
+						<xs:enumeration value="FR"/>
+						<xs:enumeration value="GW"/>
+						<xs:enumeration value="GY"/>
+						<xs:enumeration value="HT"/>
+						<xs:enumeration value="HN"/>
+						<xs:enumeration value="CF"/>
+						<xs:enumeration value="TD"/>
+						<xs:enumeration value="CL"/>
+						<xs:enumeration value="CN"/>
+						<xs:enumeration value="CO"/>
+						<xs:enumeration value="EC"/>
+						<xs:enumeration value="EG"/>
+						<xs:enumeration value="SV"/>
+						<xs:enumeration value="GQ"/>
+						<xs:enumeration value="EE"/>
+						<xs:enumeration value="ET"/>
+						<xs:enumeration value="GL"/>
+						<xs:enumeration value="GD"/>
+						<xs:enumeration value="IT"/>
+						<xs:enumeration value="SS"/>
+						<xs:enumeration value="XX"/>
+						<xs:enumeration value="203"/>
+						<xs:enumeration value="202"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element> -->
+			<xs:element name="Code" minOccurs="0" maxOccurs="100">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Country Name										
+							--------------------------							
+							United States
+							Canada
+							Mexico
+							Afghanistan
+							Aland Islands
+							Albania
+							Algeria
+							Andorra
+							Angola
+							Anguilla
+							Antarctica
+							Antigua and Barbuda
+							Argentina
+							Armenia
+							Aruba
+							Australia
+							Austria
+							Azerbaijan
+							Bahamas
+							Bahrain
+							Bangladesh
+							Barbados
+							Belarus
+							Belgium
+							Belize
+							Benin
+							Bermuda
+							Bhutan
+							Bolivia, Plurinational State of
+							Bonaire, Sint Eustatius, and Saba
+							Bosnia and Herzegovina
+							Botswana
+							Bouvet Island
+							Brazil
+							British Indian Ocean Territory
+							Brunei Darussalam
+							Bulgaria
+							Burkina Faso
+							Burundi
+							Cambodia
+							Cameroon
+							Cape Verde
+							Cayman Islands
+							Central African Republic
+							Chad
+							Chile
+							China
+							Christmas Island
+							Cocos (Keeling) Islands
+							Colombia
+							Comoros
+							Congo
+							Congo, the Democratic Republic of the
+							Cook Islands
+							Costa Rica
+							Cote d’Ivoire
+							Croatia
+							Cuba
+							Curaçao
+							Cyprus
+							Czechia
+							Denmark
+							Djibouti
+							Dominica
+							Dominican Republic
+							Ecuador
+							Egypt
+							El Salvador
+							Equatorial Guinea
+							Eritrea
+							Estonia
+							Eswatini
+							Ethiopia
+							Falkland Islands (Malvinas)
+							Faroe Islands
+							Fiji
+							Finland
+							France
+							French Guiana
+							French Polynesia
+							French Southern Territories
+							Gabon
+							Gambia
+							Georgia
+							Germany
+							Ghana
+							Gibraltar
+							Greece
+							Greenland
+							Grenada
+							Guadeloupe
+							Guatemala
+							Guernsey
+							Guinea
+							Guinea-Bissau
+							Guyana
+							Haiti
+							Heard Island and McDonald Islands
+							Holy See (Vatican City State)
+							Honduras
+							Hungary
+							Iceland
+							India
+							Indonesia
+							Iran, Islamic Republic of
+							Iraq
+							Ireland
+							Isle of Man
+							Israel
+							Italy
+							Jamaica
+							Japan
+							Jersey
+							Jordan
+							Kazakhstan
+							Kenya
+							Kiribati
+							Korea, Democratic People’s Republic of
+							Korea, Republic of
+							Kosovo
+							Kuwait
+							Kyrgyzstan
+							Lao People’s Democratic Republic
+							Latvia
+							Lebanon
+							Lesotho
+							Liberia
+							Libya
+							Liechtenstein
+							Lithuania
+							Luxembourg
+							Macao
+							Madagascar
+							Malawi
+							Malaysia
+							Maldives
+							Mali
+							Malta
+							Martinique
+							Mauritania
+							Mauritius
+							Mayotte
+							Moldova, Republic of
+							Monaco
+							Mongolia
+							Montenegro
+							Montserrat
+							Morocco
+							Mozambique
+							Myanmar
+							Namibia
+							Nauru
+							Nepal
+							Netherlands
+							New Caledonia
+							New Zealand
+							Nicaragua
+							Niger
+							Nigeria
+							Niue
+							Norfolk Island
+							North Macedonia
+							Norway
+							Oman
+							Pakistan
+							Palestine
+							Panama
+							Papua New Guinea
+							Paraguay
+							Peru
+							Philippines
+							Pitcairn
+							Poland
+							Portugal
+							Qatar
+							Reunion
+							Romania
+							Russian Federation
+							Rwanda
+							Saint Barthélemy
+							Saint Helena, Ascension and Tristan da Cunha
+							Saint Kitts and Nevis
+							Saint Lucia
+							Saint Martin (French part)
+							Saint Pierre and Miquelon
+							Saint Vincent and the Grenadines
+							Samoa
+							San Marino
+							Sao Tome and Principe
+							Saudi Arabia
+							Senegal
+							Serbia
+							Seychelles
+							Sierra Leone
+							Singapore
+							Sint Maarten (Dutch part)
+							Slovakia
+							Slovenia
+							Solomon Islands
+							Somalia
+							South Africa
+							South Georgia and the South Sandwich Islands
+							South Sudan
+							Spain
+							Sri Lanka
+							Sudan
+							Suriname
+							Svalbard and Jan Mayen
+							Sweden
+							Switzerland
+							Syrian Arab Republic
+							Taiwan
+							Tajikistan
+							Tanzania, United Republic of
+							Thailand
+							Timor-Leste
+							Togo
+							Tokelau
+							Tonga
+							Trinidad and Tobago
+							Tunisia
+							Türkiye
+							Turkmenistan
+							Turks and Caicos Islands
+							Tuvalu
+							Uganda
+							Ukraine
+							United Arab Emirates
+							United Kingdom
+							Uruguay
+							Uzbekistan
+							Vanuatu
+							Venezuela, Bolivarian Republic of
+							Vietnam
+							Virgin Islands, British
+							Wallis and Futuna
+							Western Sahara
+							Yemen
+							Zambia
+							Zimbabwe
+							Other										
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="United States"/>
+						<xs:enumeration value="Canada"/>
+						<xs:enumeration value="Mexico"/>
+						<xs:enumeration value="Afghanistan"/>
+						<xs:enumeration value="Aland Islands"/>
+						<xs:enumeration value="Albania"/>
+						<xs:enumeration value="Algeria"/>
+						<xs:enumeration value="Andorra"/>
+						<xs:enumeration value="Angola"/>
+						<xs:enumeration value="Anguilla"/>
+						<xs:enumeration value="Antarctica"/>
+						<xs:enumeration value="Antigua and Barbuda"/>
+						<xs:enumeration value="Argentina"/>
+						<xs:enumeration value="Armenia"/>
+						<xs:enumeration value="Aruba"/>
+						<xs:enumeration value="Australia"/>
+						<xs:enumeration value="Austria"/>
+						<xs:enumeration value="Azerbaijan"/>
+						<xs:enumeration value="Bahamas"/>
+						<xs:enumeration value="Bahrain"/>
+						<xs:enumeration value="Bangladesh"/>
+						<xs:enumeration value="Barbados"/>
+						<xs:enumeration value="Belarus"/>
+						<xs:enumeration value="Belgium"/>
+						<xs:enumeration value="Belize"/>
+						<xs:enumeration value="Benin"/>
+						<xs:enumeration value="Bermuda"/>
+						<xs:enumeration value="Bhutan"/>
+						<xs:enumeration value="Bolivia, Plurinational State of"/>
+						<xs:enumeration value="Bonaire, Sint Eustatius, and Saba"/>
+						<xs:enumeration value="Bosnia and Herzegovina"/>
+						<xs:enumeration value="Botswana"/>
+						<xs:enumeration value="Bouvet Island"/>
+						<xs:enumeration value="Brazil"/>
+						<xs:enumeration value="British Indian Ocean Territory"/>
+						<xs:enumeration value="Brunei Darussalam"/>
+						<xs:enumeration value="Bulgaria"/>
+						<xs:enumeration value="Burkina Faso"/>
+						<xs:enumeration value="Burundi"/>
+						<xs:enumeration value="Cambodia"/>
+						<xs:enumeration value="Cameroon"/>
+						<xs:enumeration value="Cape Verde"/>
+						<xs:enumeration value="Cayman Islands"/>
+						<xs:enumeration value="Central African Republic"/>
+						<xs:enumeration value="Chad"/>
+						<xs:enumeration value="Chile"/>
+						<xs:enumeration value="China"/>
+						<xs:enumeration value="Christmas Island"/>
+						<xs:enumeration value="Cocos (Keeling) Islands"/>
+						<xs:enumeration value="Colombia"/>
+						<xs:enumeration value="Comoros"/>
+						<xs:enumeration value="Congo"/>
+						<xs:enumeration value="Congo, the Democratic Republic of the"/>
+						<xs:enumeration value="Cook Islands"/>
+						<xs:enumeration value="Costa Rica"/>
+						<xs:enumeration value="Cote d’Ivoire"/>
+						<xs:enumeration value="Croatia"/>
+						<xs:enumeration value="Cuba"/>
+						<xs:enumeration value="Curaçao"/>
+						<xs:enumeration value="Cyprus"/>
+						<xs:enumeration value="Czechia"/>
+						<xs:enumeration value="Denmark"/>
+						<xs:enumeration value="Djibouti"/>
+						<xs:enumeration value="Dominica"/>
+						<xs:enumeration value="Dominican Republic"/>
+						<xs:enumeration value="Ecuador"/>
+						<xs:enumeration value="Egypt"/>
+						<xs:enumeration value="El Salvador"/>
+						<xs:enumeration value="Equatorial Guinea"/>
+						<xs:enumeration value="Eritrea"/>
+						<xs:enumeration value="Estonia"/>
+						<xs:enumeration value="Eswatini"/>
+						<xs:enumeration value="Ethiopia"/>
+						<xs:enumeration value="Falkland Islands (Malvinas)"/>
+						<xs:enumeration value="Faroe Islands"/>
+						<xs:enumeration value="Fiji"/>
+						<xs:enumeration value="Finland"/>
+						<xs:enumeration value="France"/>
+						<xs:enumeration value="French Guiana"/>
+						<xs:enumeration value="French Polynesia"/>
+						<xs:enumeration value="French Southern Territories"/>
+						<xs:enumeration value="Gabon"/>
+						<xs:enumeration value="Gambia"/>
+						<xs:enumeration value="Georgia"/>
+						<xs:enumeration value="Germany"/>
+						<xs:enumeration value="Ghana"/>
+						<xs:enumeration value="Gibraltar"/>
+						<xs:enumeration value="Greece"/>
+						<xs:enumeration value="Greenland"/>
+						<xs:enumeration value="Grenada"/>
+						<xs:enumeration value="Guadeloupe"/>
+						<xs:enumeration value="Guatemala"/>
+						<xs:enumeration value="Guernsey"/>
+						<xs:enumeration value="Guinea"/>
+						<xs:enumeration value="Guinea-Bissau"/>
+						<xs:enumeration value="Guyana"/>
+						<xs:enumeration value="Haiti"/>
+						<xs:enumeration value="Heard Island and McDonald Islands"/>
+						<xs:enumeration value="Holy See (Vatican City State)"/>
+						<xs:enumeration value="Honduras"/>
+						<xs:enumeration value="Hungary"/>
+						<xs:enumeration value="Iceland"/>
+						<xs:enumeration value="India"/>
+						<xs:enumeration value="Indonesia"/>
+						<xs:enumeration value="Iran, Islamic Republic of"/>
+						<xs:enumeration value="Iraq"/>
+						<xs:enumeration value="Ireland"/>
+						<xs:enumeration value="Isle of Man"/>
+						<xs:enumeration value="Israel"/>
+						<xs:enumeration value="Italy"/>
+						<xs:enumeration value="Jamaica"/>
+						<xs:enumeration value="Japan"/>
+						<xs:enumeration value="Jersey"/>
+						<xs:enumeration value="Jordan"/>
+						<xs:enumeration value="Kazakhstan"/>
+						<xs:enumeration value="Kenya"/>
+						<xs:enumeration value="Kiribati"/>
+						<xs:enumeration value="Korea, Democratic People’s Republic of"/>
+						<xs:enumeration value="Korea, Republic of"/>
+						<xs:enumeration value="Kosovo"/>
+						<xs:enumeration value="Kuwait"/>
+						<xs:enumeration value="Kyrgyzstan"/>
+						<xs:enumeration value="Lao People’s Democratic Republic"/>
+						<xs:enumeration value="Latvia"/>
+						<xs:enumeration value="Lebanon"/>
+						<xs:enumeration value="Lesotho"/>
+						<xs:enumeration value="Liberia"/>
+						<xs:enumeration value="Libya"/>
+						<xs:enumeration value="Liechtenstein"/>
+						<xs:enumeration value="Lithuania"/>
+						<xs:enumeration value="Luxembourg"/>
+						<xs:enumeration value="Macao"/>
+						<xs:enumeration value="Madagascar"/>
+						<xs:enumeration value="Malawi"/>
+						<xs:enumeration value="Malaysia"/>
+						<xs:enumeration value="Maldives"/>
+						<xs:enumeration value="Mali"/>
+						<xs:enumeration value="Malta"/>
+						<xs:enumeration value="Martinique"/>
+						<xs:enumeration value="Mauritania"/>
+						<xs:enumeration value="Mauritius"/>
+						<xs:enumeration value="Mayotte"/>
+						<xs:enumeration value="Moldova, Republic of"/>
+						<xs:enumeration value="Monaco"/>
+						<xs:enumeration value="Mongolia"/>
+						<xs:enumeration value="Montenegro"/>
+						<xs:enumeration value="Montserrat"/>
+						<xs:enumeration value="Morocco"/>
+						<xs:enumeration value="Mozambique"/>
+						<xs:enumeration value="Myanmar"/>
+						<xs:enumeration value="Namibia"/>
+						<xs:enumeration value="Nauru"/>
+						<xs:enumeration value="Nepal"/>
+						<xs:enumeration value="Netherlands"/>
+						<xs:enumeration value="New Caledonia"/>
+						<xs:enumeration value="New Zealand"/>
+						<xs:enumeration value="Nicaragua"/>
+						<xs:enumeration value="Niger"/>
+						<xs:enumeration value="Nigeria"/>
+						<xs:enumeration value="Niue"/>
+						<xs:enumeration value="Norfolk Island"/>
+						<xs:enumeration value="North Macedonia"/>
+						<xs:enumeration value="Norway"/>
+						<xs:enumeration value="Oman"/>
+						<xs:enumeration value="Pakistan"/>
+						<xs:enumeration value="Palestine"/>
+						<xs:enumeration value="Panama"/>
+						<xs:enumeration value="Papua New Guinea"/>
+						<xs:enumeration value="Paraguay"/>
+						<xs:enumeration value="Peru"/>
+						<xs:enumeration value="Philippines"/>
+						<xs:enumeration value="Pitcairn"/>
+						<xs:enumeration value="Poland"/>
+						<xs:enumeration value="Portugal"/>
+						<xs:enumeration value="Qatar"/>
+						<xs:enumeration value="Reunion"/>
+						<xs:enumeration value="Romania"/>
+						<xs:enumeration value="Russian Federation"/>
+						<xs:enumeration value="Rwanda"/>
+						<xs:enumeration value="Saint Barthélemy"/>
+						<xs:enumeration value="Saint Helena, Ascension and Tristan da Cunha"/>
+						<xs:enumeration value="Saint Kitts and Nevis"/>
+						<xs:enumeration value="Saint Lucia"/>
+						<xs:enumeration value="Saint Martin (French part)"/>
+						<xs:enumeration value="Saint Pierre and Miquelon"/>
+						<xs:enumeration value="Saint Vincent and the Grenadines"/>
+						<xs:enumeration value="Samoa"/>
+						<xs:enumeration value="San Marino"/>
+						<xs:enumeration value="Sao Tome and Principe"/>
+						<xs:enumeration value="Saudi Arabia"/>
+						<xs:enumeration value="Senegal"/>
+						<xs:enumeration value="Serbia"/>
+						<xs:enumeration value="Seychelles"/>
+						<xs:enumeration value="Sierra Leone"/>
+						<xs:enumeration value="Singapore"/>
+						<xs:enumeration value="Sint Maarten (Dutch part)"/>
+						<xs:enumeration value="Slovakia"/>
+						<xs:enumeration value="Slovenia"/>
+						<xs:enumeration value="Solomon Islands"/>
+						<xs:enumeration value="Somalia"/>
+						<xs:enumeration value="South Africa"/>
+						<xs:enumeration value="South Georgia and the South Sandwich Islands"/>
+						<xs:enumeration value="South Sudan"/>
+						<xs:enumeration value="Spain"/>
+						<xs:enumeration value="Sri Lanka"/>
+						<xs:enumeration value="Sudan"/>
+						<xs:enumeration value="Suriname"/>
+						<xs:enumeration value="Svalbard and Jan Mayen"/>
+						<xs:enumeration value="Sweden"/>
+						<xs:enumeration value="Switzerland"/>
+						<xs:enumeration value="Syrian Arab Republic"/>
+						<xs:enumeration value="Taiwan"/>
+						<xs:enumeration value="Tajikistan"/>
+						<xs:enumeration value="Tanzania, United Republic of"/>
+						<xs:enumeration value="Thailand"/>
+						<xs:enumeration value="Timor-Leste"/>
+						<xs:enumeration value="Togo"/>
+						<xs:enumeration value="Tokelau"/>
+						<xs:enumeration value="Tonga"/>
+						<xs:enumeration value="Trinidad and Tobago"/>
+						<xs:enumeration value="Tunisia"/>
+						<xs:enumeration value="Türkiye"/>
+						<xs:enumeration value="Turkmenistan"/>
+						<xs:enumeration value="Turks and Caicos Islands"/>
+						<xs:enumeration value="Tuvalu"/>
+						<xs:enumeration value="Uganda"/>
+						<xs:enumeration value="Ukraine"/>
+						<xs:enumeration value="United Arab Emirates"/>
+						<xs:enumeration value="United Kingdom"/>
+						<xs:enumeration value="Uruguay"/>
+						<xs:enumeration value="Uzbekistan"/>
+						<xs:enumeration value="Vanuatu"/>
+						<xs:enumeration value="Venezuela, Bolivarian Republic of"/>
+						<xs:enumeration value="Vietnam"/>
+						<xs:enumeration value="Virgin Islands, British"/>
+						<xs:enumeration value="Wallis and Futuna"/>
+						<xs:enumeration value="Western Sahara"/>
+						<xs:enumeration value="Yemen"/>
+						<xs:enumeration value="Zambia"/>
+						<xs:enumeration value="Zimbabwe"/>
+						<xs:enumeration value="Other"/>
+				</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+			<xs:element name="Other" type="String255Type" minOccurs="0"/>
+		</xs:sequence>
+	</xs:complexType>
+ 
+	<xs:complexType name="CountryList">
+		<xs:sequence>
+			<!-- <xs:element name="Code" minOccurs="0">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Country Name										Value
+							
+							AFGHANISTAN											AF
+							ALBANIA												AL
+							ALGERIA												AG
+							ANDORRA												AN
+							ANGOLA												AO
+							ANGUILLA											AV
+							ANTARCTICA											AY
+							ANTIGUA AND BARBUDA									AC
+							ARGENTINA											AR
+							ARMENIA												AM
+							ARUBA												AA
+							ASHMORE AND CARTIER ISLANDS							AT
+							AUSTRALIA											AS
+							AUSTRIA												AU
+							AZERBAIJAN											AJ
+							"BAHAMAS, THE"										BF
+							BAHRAIN												BA
+							BAKER ISLAND										FQ
+							BANGLADESH											BG
+							BARBADOS											BB
+							BASSAS DA INDIA										BS
+							BELARUS												BO
+							BELGIUM												BE
+							BELIZE												BH
+							BENIN												BN
+							BERMUDA												BD
+							BHUTAN												BT
+							BOLIVIA												BL
+							BOSNIA AND HERZEGOVINA								BK
+							BOTSWANA											BC
+							BOUVET ISLAND										BV
+							BRAZIL												BR
+							BRITISH INDIAN OCEAN TERRITORY						IO
+							BRITISH VIRGIN ISLANDS								VI
+							BRUNEI												BX
+							BULGARIA											BU
+							BURKINA												UV
+							BURMA												BM
+							BURUNDI												BY
+							CAMBODIA											CB
+							CAMEROON											CM
+							CANADA												CA
+							CAPE VERDE											CV
+							CAYMAN ISLANDS										CJ
+							CENTRAL AFRICAN REPUBLIC							CT
+							CHAD												CD
+							CHILE												CI
+							CHINA												CH
+							CHRISTMAS ISLAND									KT
+							CLIPPERTON ISLAND									IP
+							COCOS (KEELING ISLANDS)								CK
+							COLOMBIA											CO
+							COMOROS												CN
+							CONGO												CF
+							COOK ISLANDS										CW
+							CORAL SEA ISLANDS									CR
+							COSTA RICA											CS
+							COTE D'IVOIRE										IV
+							CROATIA												HR
+							CUBA												CU
+							CYPRUS												CY
+							CZECH REPUBLIC										EZ
+							DENMARK												DA
+							DJIBOUTI											DJ
+							DOMINICA											DO
+							DOMINICAN REPUBLIC									DR
+							ECUADOR												EC
+							EGYPT												EG
+							EL SALVADOR											ES
+							EQUATORIAL GUINEA									EK
+							ERITREA												ER
+							ESTONIA												EN
+							ETHIOPIA											ET
+							EUROPA ISLAND										EU
+							FALKLAND ISLANDS (ISLAS MALVINAS)					FK
+							FAROE ISLANDS										FO
+							FEDERATED STATES OF MICRONESIA						FM
+							FIJI												FJ
+							FINLAND												FI
+							FRANCE												FR
+							FRENCH GUIANA										FG
+							FRENCH POLYNESIA									FP
+							FRENCH SOUTHERN AND ANTARCTIC LANDS					FS
+							GABON												GB
+							"GAMBIA, THE"										GA
+							GAZA STRIP											GZ
+							GEORGIA												GG
+							GERMANY												GM
+							GHANA												GH
+							GIBRALTAR											GI
+							GLORIOSO ISLANDS									GO
+							GREECE												GR
+							GREENLAND											GL
+							GRENADA												GJ
+							GUADELOUPE											GP
+							GUAM												GQ
+							GUATEMALA											GT
+							GUERNSEY											GK
+							GUINEA												GV
+							GUINEA-BISSAU										PU
+							GUYANA												GY
+							HAITI												HA
+							HEARD ISLAND AND MCDONALD ISLANDS					HM
+							HONDURAS											HO
+							HONG KONG											HK
+							HOWLAND ISLAND										HQ
+							HUNGARY												HU
+							ICELAND												IC
+							INDIA												IN
+							INDONESIA											ID
+							IRAN												IR
+							IRAQ												IZ
+							IRELAND												EI
+							ISRAEL												IS
+							ITALY												IT
+							JAMAICA												JM
+							JAN MAYEN											JN
+							JAPAN												JA
+							JARVIS ISLAND										DQ
+							JERSEY												JE
+							JOHNSTON ATOLL										JQ
+							JORDAN												JO
+							JUAN DE NOVA ISLAND									JU
+							KAZAKHSTAN											KZ
+							KENYA												KE
+							KINGMAN REEF										KQ
+							KIRIBATI											KR
+							"KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF"			KN
+							"KOREA, REPUBLIC OF"								KS
+							KUWAIT												KU
+							KYRGYZSTAN											KG
+							LAOS												LA
+							LATVIA												LG
+							LEBANON												LE
+							LESOTHO												LT
+							LIBERIA												LI
+							LIBYA												LY
+							LIECHTENSTEIN										LS
+							LITHUANIA											LH
+							LUXEMBOURG											LU
+							MACAU												MC
+							MACEDONIA											MK
+							MADAGASCAR											MA
+							MALAWI												MI
+							MALAYSIA											MY
+							MALDIVES											MV
+							MALI												ML
+							MALTA												MT
+							"MAN, ISLE OF"										IM
+							MARSHALL ISLANDS									RM
+							MARTINIQUE											MB
+							MAURITANIA											MR
+							MAURITIUS											MP
+							MAYOTTE												MF
+							MEXICO												MX
+							MIDWAY ISLANDS										MQ
+							MOLDOVA												MD
+							MONACO												MN
+							MONGOLIA											MG
+							MONTENEGRO											MW
+							MONTSERRAT											MH
+							MOROCCO												MO
+							MOZAMBIQUE											MZ
+							NAMIBIA												WA
+							NAURU												NR
+							NAVASSA ISLAND										BQ
+							NEPAL												NP
+							NETHERLANDS											NL
+							NETHERLANDS ANTILLES								NT
+							NEW CALEDONIA										NC
+							NEW ZEALAND											NZ
+							NICARAGUA											NU
+							NIGER												NG
+							NIGERIA												NI
+							NIUE												NE
+							NORFOLK ISLAND										NF
+							NORTHERN MARIANA ISLANDS							CQ
+							NORWAY												NO
+							OMAN												MU
+							PAKISTAN											PK
+							PALMYRA ATOLL										LQ
+							PANAMA												PM
+							PAPUA NEW GUINEA									PP
+							PARACEL ISLANDS										PF
+							PARAGUAY											PA
+							PERU												PE
+							PHILIPPINES											RP
+							PITCAIRN ISLANDS									PC
+							POLAND												PL
+							PORTUGAL											PO
+							PUERTO RICO											RQ
+							QATAR												QA
+							REUNION												RE
+							ROMANIA												RO
+							RUSSIA												RS
+							RWANDA												RW
+							SAN MARINO											SM
+							SAO TOME AND PRINCIPE								TP
+							SAUDI ARABIA										SA
+							SENEGAL												SG
+							SERBIA												SR
+							SEYCHELLES											SE
+							SIERRA LEONE										SL
+							SINGAPORE											SN
+							SLOVAKIA											LO
+							SLOVENIA											SI
+							SOLOMON ISLANDS										BP
+							SOMALIA												SO
+							SOUTH AFRICA										SF
+							SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS		SX
+							SPAIN												SP
+							SPRATLY ISLANDS										PG
+							SRI LANKA											CE
+							ST. HELENA											SH
+							ST. KITTS AND NEVIS									SC
+							ST. LUCIA											ST
+							ST. PIERRE AND MIQUELON								SB
+							ST. VINCENT AND THE GRENADINES						VC
+							SUDAN												SU
+							SURINAME											NS
+							SVALBARD											SV
+							SWAZILAND											WZ
+							SWEDEN												SW
+							SWITZERLAND											SZ
+							SYRIA												SY
+							TAIWAN												TW
+							TAJIKISTAN											TI
+							TANZANIA											TZ
+							THAILAND											TH
+							TOGO												TO
+							TOKELAU												TL
+							TONGA												TN
+							TRINIDAD AND TOBAGO									TD
+							TROMELIN ISLAND										TE
+							TRUST TERRITORY OF THE PACIFIC ISLANDS (PALAU)		PS
+							TUNISIA												TS
+							TURKEY												TU
+							TURKMENISTAN										TX
+							TURKS AND CAICOS ISLANDS							TK
+							TUVALU												TV
+							UGANDA												UG
+							UKRAINE												UP
+							UNITED ARAB EMIRATES								TC
+							UNITED KINGDOM										UK
+							UNITED STATES										US
+							URUGUAY												UY
+							UZBEKISTAN											UZ
+							VANUATU												NH
+							VATICAN CITY										VT
+							VENEZUELA											VE
+							VIETNAM												VM
+							VIRGIN ISLANDS										VQ
+							WAKE ISLAND											WQ
+							WALLIS AND FUTUNA									WF
+							WEST BANK											WE
+							WESTERN SAHARA										WI
+							WESTERN SAMOA										WS
+							YEMEN												YM
+							ZAIRE												CG
+							ZAMBIA												ZA
+							ZIMBABWE											ZI
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="AF"/>
+						<xs:enumeration value="AL"/>
+						<xs:enumeration value="AG"/>
+						<xs:enumeration value="AN"/>
+						<xs:enumeration value="AO"/>
+						<xs:enumeration value="AV"/>
+						<xs:enumeration value="AY"/>
+						<xs:enumeration value="AC"/>
+						<xs:enumeration value="AR"/>
+						<xs:enumeration value="AM"/>
+						<xs:enumeration value="AA"/>
+						<xs:enumeration value="AT"/>
+						<xs:enumeration value="AS"/>
+						<xs:enumeration value="AU"/>
+						<xs:enumeration value="AJ"/>
+						<xs:enumeration value="BF"/>
+						<xs:enumeration value="BA"/>
+						<xs:enumeration value="FQ"/>
+						<xs:enumeration value="BG"/>
+						<xs:enumeration value="BB"/>
+						<xs:enumeration value="BS"/>
+						<xs:enumeration value="BO"/>
+						<xs:enumeration value="BE"/>
+						<xs:enumeration value="BH"/>
+						<xs:enumeration value="BN"/>
+						<xs:enumeration value="BD"/>
+						<xs:enumeration value="BT"/>
+						<xs:enumeration value="BL"/>
+						<xs:enumeration value="BK"/>
+						<xs:enumeration value="BC"/>
+						<xs:enumeration value="BV"/>
+						<xs:enumeration value="BR"/>
+						<xs:enumeration value="IO"/>
+						<xs:enumeration value="VI"/>
+						<xs:enumeration value="BX"/>
+						<xs:enumeration value="BU"/>
+						<xs:enumeration value="UV"/>
+						<xs:enumeration value="BM"/>
+						<xs:enumeration value="BY"/>
+						<xs:enumeration value="CB"/>
+						<xs:enumeration value="CM"/>
+						<xs:enumeration value="CA"/>
+						<xs:enumeration value="CV"/>
+						<xs:enumeration value="CJ"/>
+						<xs:enumeration value="CT"/>
+						<xs:enumeration value="CD"/>
+						<xs:enumeration value="CI"/>
+						<xs:enumeration value="CH"/>
+						<xs:enumeration value="KT"/>
+						<xs:enumeration value="IP"/>
+						<xs:enumeration value="CK"/>
+						<xs:enumeration value="CO"/>
+						<xs:enumeration value="CN"/>
+						<xs:enumeration value="CF"/>
+						<xs:enumeration value="CW"/>
+						<xs:enumeration value="CR"/>
+						<xs:enumeration value="CS"/>
+						<xs:enumeration value="IV"/>
+						<xs:enumeration value="HR"/>
+						<xs:enumeration value="CU"/>
+						<xs:enumeration value="CY"/>
+						<xs:enumeration value="EZ"/>
+						<xs:enumeration value="DA"/>
+						<xs:enumeration value="DJ"/>
+						<xs:enumeration value="DO"/>
+						<xs:enumeration value="DR"/>
+						<xs:enumeration value="EC"/>
+						<xs:enumeration value="EG"/>
+						<xs:enumeration value="ES"/>
+						<xs:enumeration value="EK"/>
+						<xs:enumeration value="ER"/>
+						<xs:enumeration value="EN"/>
+						<xs:enumeration value="ET"/>
+						<xs:enumeration value="EU"/>
+						<xs:enumeration value="FK"/>
+						<xs:enumeration value="FO"/>
+						<xs:enumeration value="FM"/>
+						<xs:enumeration value="FJ"/>
+						<xs:enumeration value="FI"/>
+						<xs:enumeration value="FR"/>
+						<xs:enumeration value="FG"/>
+						<xs:enumeration value="FP"/>
+						<xs:enumeration value="FS"/>
+						<xs:enumeration value="GB"/>
+						<xs:enumeration value="GA"/>
+						<xs:enumeration value="GZ"/>
+						<xs:enumeration value="GG"/>
+						<xs:enumeration value="GM"/>
+						<xs:enumeration value="GH"/>
+						<xs:enumeration value="GI"/>
+						<xs:enumeration value="GO"/>
+						<xs:enumeration value="GR"/>
+						<xs:enumeration value="GL"/>
+						<xs:enumeration value="GJ"/>
+						<xs:enumeration value="GP"/>
+						<xs:enumeration value="GQ"/>
+						<xs:enumeration value="GT"/>
+						<xs:enumeration value="GK"/>
+						<xs:enumeration value="GV"/>
+						<xs:enumeration value="PU"/>
+						<xs:enumeration value="GY"/>
+						<xs:enumeration value="HA"/>
+						<xs:enumeration value="HM"/>
+						<xs:enumeration value="HO"/>
+						<xs:enumeration value="HK"/>
+						<xs:enumeration value="HQ"/>
+						<xs:enumeration value="HU"/>
+						<xs:enumeration value="IC"/>
+						<xs:enumeration value="IN"/>
+						<xs:enumeration value="ID"/>
+						<xs:enumeration value="IR"/>
+						<xs:enumeration value="IZ"/>
+						<xs:enumeration value="EI"/>
+						<xs:enumeration value="IS"/>
+						<xs:enumeration value="IT"/>
+						<xs:enumeration value="JM"/>
+						<xs:enumeration value="JN"/>
+						<xs:enumeration value="JA"/>
+						<xs:enumeration value="DQ"/>
+						<xs:enumeration value="JE"/>
+						<xs:enumeration value="JQ"/>
+						<xs:enumeration value="JO"/>
+						<xs:enumeration value="JU"/>
+						<xs:enumeration value="KZ"/>
+						<xs:enumeration value="KE"/>
+						<xs:enumeration value="KQ"/>
+						<xs:enumeration value="KR"/>
+						<xs:enumeration value="KN"/>
+						<xs:enumeration value="KS"/>
+						<xs:enumeration value="KU"/>
+						<xs:enumeration value="KG"/>
+						<xs:enumeration value="LA"/>
+						<xs:enumeration value="LG"/>
+						<xs:enumeration value="LE"/>
+						<xs:enumeration value="LT"/>
+						<xs:enumeration value="LI"/>
+						<xs:enumeration value="LY"/>
+						<xs:enumeration value="LS"/>
+						<xs:enumeration value="LH"/>
+						<xs:enumeration value="LU"/>
+						<xs:enumeration value="MC"/>
+						<xs:enumeration value="MK"/>
+						<xs:enumeration value="MA"/>
+						<xs:enumeration value="MI"/>
+						<xs:enumeration value="MY"/>
+						<xs:enumeration value="MV"/>
+						<xs:enumeration value="ML"/>
+						<xs:enumeration value="MT"/>
+						<xs:enumeration value="IM"/>
+						<xs:enumeration value="RM"/>
+						<xs:enumeration value="MB"/>
+						<xs:enumeration value="MR"/>
+						<xs:enumeration value="MP"/>
+						<xs:enumeration value="MF"/>
+						<xs:enumeration value="MX"/>
+						<xs:enumeration value="MQ"/>
+						<xs:enumeration value="MD"/>
+						<xs:enumeration value="MN"/>
+						<xs:enumeration value="MG"/>
+						<xs:enumeration value="MW"/>
+						<xs:enumeration value="MH"/>
+						<xs:enumeration value="MO"/>
+						<xs:enumeration value="MZ"/>
+						<xs:enumeration value="WA"/>
+						<xs:enumeration value="NR"/>
+						<xs:enumeration value="BQ"/>
+						<xs:enumeration value="NP"/>
+						<xs:enumeration value="NL"/>
+						<xs:enumeration value="NT"/>
+						<xs:enumeration value="NC"/>
+						<xs:enumeration value="NZ"/>
+						<xs:enumeration value="NU"/>
+						<xs:enumeration value="NG"/>
+						<xs:enumeration value="NI"/>
+						<xs:enumeration value="NE"/>
+						<xs:enumeration value="NF"/>
+						<xs:enumeration value="CQ"/>
+						<xs:enumeration value="NO"/>
+						<xs:enumeration value="MU"/>
+						<xs:enumeration value="PK"/>
+						<xs:enumeration value="LQ"/>
+						<xs:enumeration value="PM"/>
+						<xs:enumeration value="PP"/>
+						<xs:enumeration value="PF"/>
+						<xs:enumeration value="PA"/>
+						<xs:enumeration value="PE"/>
+						<xs:enumeration value="RP"/>
+						<xs:enumeration value="PC"/>
+						<xs:enumeration value="PL"/>
+						<xs:enumeration value="PO"/>
+						<xs:enumeration value="RQ"/>
+						<xs:enumeration value="QA"/>
+						<xs:enumeration value="RE"/>
+						<xs:enumeration value="RO"/>
+						<xs:enumeration value="RS"/>
+						<xs:enumeration value="RW"/>
+						<xs:enumeration value="SM"/>
+						<xs:enumeration value="TP"/>
+						<xs:enumeration value="SA"/>
+						<xs:enumeration value="SG"/>
+						<xs:enumeration value="SR"/>
+						<xs:enumeration value="SE"/>
+						<xs:enumeration value="SL"/>
+						<xs:enumeration value="SN"/>
+						<xs:enumeration value="LO"/>
+						<xs:enumeration value="SI"/>
+						<xs:enumeration value="BP"/>
+						<xs:enumeration value="SO"/>
+						<xs:enumeration value="SF"/>
+						<xs:enumeration value="SX"/>
+						<xs:enumeration value="SP"/>
+						<xs:enumeration value="PG"/>
+						<xs:enumeration value="CE"/>
+						<xs:enumeration value="SH"/>
+						<xs:enumeration value="SC"/>
+						<xs:enumeration value="ST"/>
+						<xs:enumeration value="SB"/>
+						<xs:enumeration value="VC"/>
+						<xs:enumeration value="SU"/>
+						<xs:enumeration value="NS"/>
+						<xs:enumeration value="SV"/>
+						<xs:enumeration value="WZ"/>
+						<xs:enumeration value="SW"/>
+						<xs:enumeration value="SZ"/>
+						<xs:enumeration value="SY"/>
+						<xs:enumeration value="TW"/>
+						<xs:enumeration value="TI"/>
+						<xs:enumeration value="TZ"/>
+						<xs:enumeration value="TH"/>
+						<xs:enumeration value="TO"/>
+						<xs:enumeration value="TL"/>
+						<xs:enumeration value="TN"/>
+						<xs:enumeration value="TD"/>
+						<xs:enumeration value="TE"/>
+						<xs:enumeration value="PS"/>
+						<xs:enumeration value="TS"/>
+						<xs:enumeration value="TU"/>
+						<xs:enumeration value="TX"/>
+						<xs:enumeration value="TK"/>
+						<xs:enumeration value="TV"/>
+						<xs:enumeration value="UG"/>
+						<xs:enumeration value="UP"/>
+						<xs:enumeration value="TC"/>
+						<xs:enumeration value="UK"/>
+						<xs:enumeration value="US"/>
+						<xs:enumeration value="UY"/>
+						<xs:enumeration value="UZ"/>
+						<xs:enumeration value="NH"/>
+						<xs:enumeration value="VT"/>
+						<xs:enumeration value="VE"/>
+						<xs:enumeration value="VM"/>
+						<xs:enumeration value="VQ"/>
+						<xs:enumeration value="WQ"/>
+						<xs:enumeration value="WF"/>
+						<xs:enumeration value="WE"/>
+						<xs:enumeration value="WI"/>
+						<xs:enumeration value="WS"/>
+						<xs:enumeration value="YM"/>
+						<xs:enumeration value="CG"/>
+						<xs:enumeration value="ZA"/>
+						<xs:enumeration value="ZI"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element> -->
+			<xs:element name="Code" minOccurs="0">
+				<xs:simpleType>
+					<xs:annotation>
+						<xs:documentation>
+							Country Name										
+							--------------------------							
+							United States
+							Canada
+							Mexico
+							Afghanistan
+							Aland Islands
+							Albania
+							Algeria
+							Andorra
+							Angola
+							Anguilla
+							Antarctica
+							Antigua and Barbuda
+							Argentina
+							Armenia
+							Aruba
+							Australia
+							Austria
+							Azerbaijan
+							Bahamas
+							Bahrain
+							Bangladesh
+							Barbados
+							Belarus
+							Belgium
+							Belize
+							Benin
+							Bermuda
+							Bhutan
+							Bolivia, Plurinational State of
+							Bonaire, Sint Eustatius, and Saba
+							Bosnia and Herzegovina
+							Botswana
+							Bouvet Island
+							Brazil
+							British Indian Ocean Territory
+							Brunei Darussalam
+							Bulgaria
+							Burkina Faso
+							Burundi
+							Cambodia
+							Cameroon
+							Cape Verde
+							Cayman Islands
+							Central African Republic
+							Chad
+							Chile
+							China
+							Christmas Island
+							Cocos (Keeling) Islands
+							Colombia
+							Comoros
+							Congo
+							Congo, the Democratic Republic of the
+							Cook Islands
+							Costa Rica
+							Cote d’Ivoire
+							Croatia
+							Cuba
+							Curaçao
+							Cyprus
+							Czechia
+							Denmark
+							Djibouti
+							Dominica
+							Dominican Republic
+							Ecuador
+							Egypt
+							El Salvador
+							Equatorial Guinea
+							Eritrea
+							Estonia
+							Eswatini
+							Ethiopia
+							Falkland Islands (Malvinas)
+							Faroe Islands
+							Fiji
+							Finland
+							France
+							French Guiana
+							French Polynesia
+							French Southern Territories
+							Gabon
+							Gambia
+							Georgia
+							Germany
+							Ghana
+							Gibraltar
+							Greece
+							Greenland
+							Grenada
+							Guadeloupe
+							Guatemala
+							Guernsey
+							Guinea
+							Guinea-Bissau
+							Guyana
+							Haiti
+							Heard Island and McDonald Islands
+							Holy See (Vatican City State)
+							Honduras
+							Hungary
+							Iceland
+							India
+							Indonesia
+							Iran, Islamic Republic of
+							Iraq
+							Ireland
+							Isle of Man
+							Israel
+							Italy
+							Jamaica
+							Japan
+							Jersey
+							Jordan
+							Kazakhstan
+							Kenya
+							Kiribati
+							Korea, Democratic People’s Republic of
+							Korea, Republic of
+							Kosovo
+							Kuwait
+							Kyrgyzstan
+							Lao People’s Democratic Republic
+							Latvia
+							Lebanon
+							Lesotho
+							Liberia
+							Libya
+							Liechtenstein
+							Lithuania
+							Luxembourg
+							Macao
+							Madagascar
+							Malawi
+							Malaysia
+							Maldives
+							Mali
+							Malta
+							Martinique
+							Mauritania
+							Mauritius
+							Mayotte
+							Moldova, Republic of
+							Monaco
+							Mongolia
+							Montenegro
+							Montserrat
+							Morocco
+							Mozambique
+							Myanmar
+							Namibia
+							Nauru
+							Nepal
+							Netherlands
+							New Caledonia
+							New Zealand
+							Nicaragua
+							Niger
+							Nigeria
+							Niue
+							Norfolk Island
+							North Macedonia
+							Norway
+							Oman
+							Pakistan
+							Palestine
+							Panama
+							Papua New Guinea
+							Paraguay
+							Peru
+							Philippines
+							Pitcairn
+							Poland
+							Portugal
+							Qatar
+							Reunion
+							Romania
+							Russian Federation
+							Rwanda
+							Saint Barthélemy
+							Saint Helena, Ascension and Tristan da Cunha
+							Saint Kitts and Nevis
+							Saint Lucia
+							Saint Martin (French part)
+							Saint Pierre and Miquelon
+							Saint Vincent and the Grenadines
+							Samoa
+							San Marino
+							Sao Tome and Principe
+							Saudi Arabia
+							Senegal
+							Serbia
+							Seychelles
+							Sierra Leone
+							Singapore
+							Sint Maarten (Dutch part)
+							Slovakia
+							Slovenia
+							Solomon Islands
+							Somalia
+							South Africa
+							South Georgia and the South Sandwich Islands
+							South Sudan
+							Spain
+							Sri Lanka
+							Sudan
+							Suriname
+							Svalbard and Jan Mayen
+							Sweden
+							Switzerland
+							Syrian Arab Republic
+							Taiwan
+							Tajikistan
+							Tanzania, United Republic of
+							Thailand
+							Timor-Leste
+							Togo
+							Tokelau
+							Tonga
+							Trinidad and Tobago
+							Tunisia
+							Türkiye
+							Turkmenistan
+							Turks and Caicos Islands
+							Tuvalu
+							Uganda
+							Ukraine
+							United Arab Emirates
+							United Kingdom
+							Uruguay
+							Uzbekistan
+							Vanuatu
+							Venezuela, Bolivarian Republic of
+							Vietnam
+							Virgin Islands, British
+							Wallis and Futuna
+							Western Sahara
+							Yemen
+							Zambia
+							Zimbabwe										
+						</xs:documentation>
+					</xs:annotation>
+					<xs:restriction base="xs:string">
+						<xs:enumeration value="United States"/>
+						<xs:enumeration value="Canada"/>
+						<xs:enumeration value="Mexico"/>
+						<xs:enumeration value="Afghanistan"/>
+						<xs:enumeration value="Aland Islands"/>
+						<xs:enumeration value="Albania"/>
+						<xs:enumeration value="Algeria"/>
+						<xs:enumeration value="Andorra"/>
+						<xs:enumeration value="Angola"/>
+						<xs:enumeration value="Anguilla"/>
+						<xs:enumeration value="Antarctica"/>
+						<xs:enumeration value="Antigua and Barbuda"/>
+						<xs:enumeration value="Argentina"/>
+						<xs:enumeration value="Armenia"/>
+						<xs:enumeration value="Aruba"/>
+						<xs:enumeration value="Australia"/>
+						<xs:enumeration value="Austria"/>
+						<xs:enumeration value="Azerbaijan"/>
+						<xs:enumeration value="Bahamas"/>
+						<xs:enumeration value="Bahrain"/>
+						<xs:enumeration value="Bangladesh"/>
+						<xs:enumeration value="Barbados"/>
+						<xs:enumeration value="Belarus"/>
+						<xs:enumeration value="Belgium"/>
+						<xs:enumeration value="Belize"/>
+						<xs:enumeration value="Benin"/>
+						<xs:enumeration value="Bermuda"/>
+						<xs:enumeration value="Bhutan"/>
+						<xs:enumeration value="Bolivia, Plurinational State of"/>
+						<xs:enumeration value="Bonaire, Sint Eustatius, and Saba"/>
+						<xs:enumeration value="Bosnia and Herzegovina"/>
+						<xs:enumeration value="Botswana"/>
+						<xs:enumeration value="Bouvet Island"/>
+						<xs:enumeration value="Brazil"/>
+						<xs:enumeration value="British Indian Ocean Territory"/>
+						<xs:enumeration value="Brunei Darussalam"/>
+						<xs:enumeration value="Bulgaria"/>
+						<xs:enumeration value="Burkina Faso"/>
+						<xs:enumeration value="Burundi"/>
+						<xs:enumeration value="Cambodia"/>
+						<xs:enumeration value="Cameroon"/>
+						<xs:enumeration value="Cape Verde"/>
+						<xs:enumeration value="Cayman Islands"/>
+						<xs:enumeration value="Central African Republic"/>
+						<xs:enumeration value="Chad"/>
+						<xs:enumeration value="Chile"/>
+						<xs:enumeration value="China"/>
+						<xs:enumeration value="Christmas Island"/>
+						<xs:enumeration value="Cocos (Keeling) Islands"/>
+						<xs:enumeration value="Colombia"/>
+						<xs:enumeration value="Comoros"/>
+						<xs:enumeration value="Congo"/>
+						<xs:enumeration value="Congo, the Democratic Republic of the"/>
+						<xs:enumeration value="Cook Islands"/>
+						<xs:enumeration value="Costa Rica"/>
+						<xs:enumeration value="Cote d’Ivoire"/>
+						<xs:enumeration value="Croatia"/>
+						<xs:enumeration value="Cuba"/>
+						<xs:enumeration value="Curaçao"/>
+						<xs:enumeration value="Cyprus"/>
+						<xs:enumeration value="Czechia"/>
+						<xs:enumeration value="Denmark"/>
+						<xs:enumeration value="Djibouti"/>
+						<xs:enumeration value="Dominica"/>
+						<xs:enumeration value="Dominican Republic"/>
+						<xs:enumeration value="Ecuador"/>
+						<xs:enumeration value="Egypt"/>
+						<xs:enumeration value="El Salvador"/>
+						<xs:enumeration value="Equatorial Guinea"/>
+						<xs:enumeration value="Eritrea"/>
+						<xs:enumeration value="Estonia"/>
+						<xs:enumeration value="Eswatini"/>
+						<xs:enumeration value="Ethiopia"/>
+						<xs:enumeration value="Falkland Islands (Malvinas)"/>
+						<xs:enumeration value="Faroe Islands"/>
+						<xs:enumeration value="Fiji"/>
+						<xs:enumeration value="Finland"/>
+						<xs:enumeration value="France"/>
+						<xs:enumeration value="French Guiana"/>
+						<xs:enumeration value="French Polynesia"/>
+						<xs:enumeration value="French Southern Territories"/>
+						<xs:enumeration value="Gabon"/>
+						<xs:enumeration value="Gambia"/>
+						<xs:enumeration value="Georgia"/>
+						<xs:enumeration value="Germany"/>
+						<xs:enumeration value="Ghana"/>
+						<xs:enumeration value="Gibraltar"/>
+						<xs:enumeration value="Greece"/>
+						<xs:enumeration value="Greenland"/>
+						<xs:enumeration value="Grenada"/>
+						<xs:enumeration value="Guadeloupe"/>
+						<xs:enumeration value="Guatemala"/>
+						<xs:enumeration value="Guernsey"/>
+						<xs:enumeration value="Guinea"/>
+						<xs:enumeration value="Guinea-Bissau"/>
+						<xs:enumeration value="Guyana"/>
+						<xs:enumeration value="Haiti"/>
+						<xs:enumeration value="Heard Island and McDonald Islands"/>
+						<xs:enumeration value="Holy See (Vatican City State)"/>
+						<xs:enumeration value="Honduras"/>
+						<xs:enumeration value="Hungary"/>
+						<xs:enumeration value="Iceland"/>
+						<xs:enumeration value="India"/>
+						<xs:enumeration value="Indonesia"/>
+						<xs:enumeration value="Iran, Islamic Republic of"/>
+						<xs:enumeration value="Iraq"/>
+						<xs:enumeration value="Ireland"/>
+						<xs:enumeration value="Isle of Man"/>
+						<xs:enumeration value="Israel"/>
+						<xs:enumeration value="Italy"/>
+						<xs:enumeration value="Jamaica"/>
+						<xs:enumeration value="Japan"/>
+						<xs:enumeration value="Jersey"/>
+						<xs:enumeration value="Jordan"/>
+						<xs:enumeration value="Kazakhstan"/>
+						<xs:enumeration value="Kenya"/>
+						<xs:enumeration value="Kiribati"/>
+						<xs:enumeration value="Korea, Democratic People’s Republic of"/>
+						<xs:enumeration value="Korea, Republic of"/>
+						<xs:enumeration value="Kosovo"/>
+						<xs:enumeration value="Kuwait"/>
+						<xs:enumeration value="Kyrgyzstan"/>
+						<xs:enumeration value="Lao People’s Democratic Republic"/>
+						<xs:enumeration value="Latvia"/>
+						<xs:enumeration value="Lebanon"/>
+						<xs:enumeration value="Lesotho"/>
+						<xs:enumeration value="Liberia"/>
+						<xs:enumeration value="Libya"/>
+						<xs:enumeration value="Liechtenstein"/>
+						<xs:enumeration value="Lithuania"/>
+						<xs:enumeration value="Luxembourg"/>
+						<xs:enumeration value="Macao"/>
+						<xs:enumeration value="Madagascar"/>
+						<xs:enumeration value="Malawi"/>
+						<xs:enumeration value="Malaysia"/>
+						<xs:enumeration value="Maldives"/>
+						<xs:enumeration value="Mali"/>
+						<xs:enumeration value="Malta"/>
+						<xs:enumeration value="Martinique"/>
+						<xs:enumeration value="Mauritania"/>
+						<xs:enumeration value="Mauritius"/>
+						<xs:enumeration value="Mayotte"/>
+						<xs:enumeration value="Moldova, Republic of"/>
+						<xs:enumeration value="Monaco"/>
+						<xs:enumeration value="Mongolia"/>
+						<xs:enumeration value="Montenegro"/>
+						<xs:enumeration value="Montserrat"/>
+						<xs:enumeration value="Morocco"/>
+						<xs:enumeration value="Mozambique"/>
+						<xs:enumeration value="Myanmar"/>
+						<xs:enumeration value="Namibia"/>
+						<xs:enumeration value="Nauru"/>
+						<xs:enumeration value="Nepal"/>
+						<xs:enumeration value="Netherlands"/>
+						<xs:enumeration value="New Caledonia"/>
+						<xs:enumeration value="New Zealand"/>
+						<xs:enumeration value="Nicaragua"/>
+						<xs:enumeration value="Niger"/>
+						<xs:enumeration value="Nigeria"/>
+						<xs:enumeration value="Niue"/>
+						<xs:enumeration value="Norfolk Island"/>
+						<xs:enumeration value="North Macedonia"/>
+						<xs:enumeration value="Norway"/>
+						<xs:enumeration value="Oman"/>
+						<xs:enumeration value="Pakistan"/>
+						<xs:enumeration value="Palestine"/>
+						<xs:enumeration value="Panama"/>
+						<xs:enumeration value="Papua New Guinea"/>
+						<xs:enumeration value="Paraguay"/>
+						<xs:enumeration value="Peru"/>
+						<xs:enumeration value="Philippines"/>
+						<xs:enumeration value="Pitcairn"/>
+						<xs:enumeration value="Poland"/>
+						<xs:enumeration value="Portugal"/>
+						<xs:enumeration value="Qatar"/>
+						<xs:enumeration value="Reunion"/>
+						<xs:enumeration value="Romania"/>
+						<xs:enumeration value="Russian Federation"/>
+						<xs:enumeration value="Rwanda"/>
+						<xs:enumeration value="Saint Barthélemy"/>
+						<xs:enumeration value="Saint Helena, Ascension and Tristan da Cunha"/>
+						<xs:enumeration value="Saint Kitts and Nevis"/>
+						<xs:enumeration value="Saint Lucia"/>
+						<xs:enumeration value="Saint Martin (French part)"/>
+						<xs:enumeration value="Saint Pierre and Miquelon"/>
+						<xs:enumeration value="Saint Vincent and the Grenadines"/>
+						<xs:enumeration value="Samoa"/>
+						<xs:enumeration value="San Marino"/>
+						<xs:enumeration value="Sao Tome and Principe"/>
+						<xs:enumeration value="Saudi Arabia"/>
+						<xs:enumeration value="Senegal"/>
+						<xs:enumeration value="Serbia"/>
+						<xs:enumeration value="Seychelles"/>
+						<xs:enumeration value="Sierra Leone"/>
+						<xs:enumeration value="Singapore"/>
+						<xs:enumeration value="Sint Maarten (Dutch part)"/>
+						<xs:enumeration value="Slovakia"/>
+						<xs:enumeration value="Slovenia"/>
+						<xs:enumeration value="Solomon Islands"/>
+						<xs:enumeration value="Somalia"/>
+						<xs:enumeration value="South Africa"/>
+						<xs:enumeration value="South Georgia and the South Sandwich Islands"/>
+						<xs:enumeration value="South Sudan"/>
+						<xs:enumeration value="Spain"/>
+						<xs:enumeration value="Sri Lanka"/>
+						<xs:enumeration value="Sudan"/>
+						<xs:enumeration value="Suriname"/>
+						<xs:enumeration value="Svalbard and Jan Mayen"/>
+						<xs:enumeration value="Sweden"/>
+						<xs:enumeration value="Switzerland"/>
+						<xs:enumeration value="Syrian Arab Republic"/>
+						<xs:enumeration value="Taiwan"/>
+						<xs:enumeration value="Tajikistan"/>
+						<xs:enumeration value="Tanzania, United Republic of"/>
+						<xs:enumeration value="Thailand"/>
+						<xs:enumeration value="Timor-Leste"/>
+						<xs:enumeration value="Togo"/>
+						<xs:enumeration value="Tokelau"/>
+						<xs:enumeration value="Tonga"/>
+						<xs:enumeration value="Trinidad and Tobago"/>
+						<xs:enumeration value="Tunisia"/>
+						<xs:enumeration value="Türkiye"/>
+						<xs:enumeration value="Turkmenistan"/>
+						<xs:enumeration value="Turks and Caicos Islands"/>
+						<xs:enumeration value="Tuvalu"/>
+						<xs:enumeration value="Uganda"/>
+						<xs:enumeration value="Ukraine"/>
+						<xs:enumeration value="United Arab Emirates"/>
+						<xs:enumeration value="United Kingdom"/>
+						<xs:enumeration value="Uruguay"/>
+						<xs:enumeration value="Uzbekistan"/>
+						<xs:enumeration value="Vanuatu"/>
+						<xs:enumeration value="Venezuela, Bolivarian Republic of"/>
+						<xs:enumeration value="Vietnam"/>
+						<xs:enumeration value="Virgin Islands, British"/>
+						<xs:enumeration value="Wallis and Futuna"/>
+						<xs:enumeration value="Western Sahara"/>
+						<xs:enumeration value="Yemen"/>
+						<xs:enumeration value="Zambia"/>
+						<xs:enumeration value="Zimbabwe"/>
+					</xs:restriction>
+				</xs:simpleType>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>	
+</xs:schema>

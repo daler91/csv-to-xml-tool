@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CounselingInformation>
+	
+
+	<CounselingRecord>
+	<Operation></Operation>
+		<PartnerClientNumber>234347</PartnerClientNumber>
+		<Location>
+			<LocationCode>786</LocationCode>
+		</Location> 
+		<ClientRequest>
+			<ClientNamePart1>
+				<Last>Hanks</Last>
+				<First>Jerry</First>
+				<Middle></Middle>
+			</ClientNamePart1>
+			<Email>jomh@gmail.com</Email>
+			<PhonePart1><Primary>2365894123</Primary><Secondary></Secondary></PhonePart1>
+			<AddressPart1>
+				<Street1></Street1>
+				<Street2></Street2> 
+				<City>Austin</City> 
+				<State>Alabama</State>
+<ZipCode>33189</ZipCode>
+	<Zip4Code>2344</Zip4Code>
+				<Country><Code>United States</Code></Country>
+				<PostalCode></PostalCode>
+				<StateOrProvince></StateOrProvince>
+			</AddressPart1>
+			
+			<SurveyAgreement>Yes</SurveyAgreement>
+	
+			<ClientSignature>
+				<Date>1987-12-12</Date>
+				<OnFile>Yes</OnFile>
+			</ClientSignature>
+		</ClientRequest>
+		<ClientIntake>
+			<Race><Code>White</Code><Code>Asian</Code><SelfDescribedRace></SelfDescribedRace></Race>
+			<Ethnicity>Non Hispanic or Latino</Ethnicity>
+<Sex>Female</Sex>
+			<Disability>No</Disability>
+			<MilitaryStatus>Active Duty</MilitaryStatus>
+			<BranchOfService>Prefer not to say</BranchOfService>
+			<Media>
+				<Code>Magazine/Newspaper</Code>
+
+<Code>Other</Code>
+				<Other>testmedia</Other>
+			</Media>
+			<Internet></Internet>
+			<CurrentlyInBusiness>Yes</CurrentlyInBusiness>
+			<CurrentlyExporting>Yes</CurrentlyExporting>
+			<CompanyName>ABC company</CompanyName>
+			<BusinessType>Real Estate and Rental and Leasing</BusinessType>
+			<BusinessOwnership>
+				<Female>100</Female>
+			</BusinessOwnership>
+			<ConductingBusinessOnline>No</ConductingBusinessOnline>
+			
+			<ClientIntake_Certified8a>No</ClientIntake_Certified8a>
+			<Employee_Owned>Yes</Employee_Owned>
+			<TotalNumberOfEmployees>14</TotalNumberOfEmployees>
+			<NumberOfEmployeesInExportingBusiness>0</NumberOfEmployeesInExportingBusiness>
+			<ClientAnnualIncomePart2>
+				<GrossRevenues>0.00</GrossRevenues>
+				<ProfitLoss>0.00</ProfitLoss>
+				<ExportGrossRevenuesOrSales>5660.00</ExportGrossRevenuesOrSales>
+			</ClientAnnualIncomePart2>
+			<LegalEntity>
+				<Code>Other</Code>
+				<Other>Other Counseling</Other>
+			</LegalEntity>
+			<Rural_vs_Urban>Urban</Rural_vs_Urban>
+			<FIPS_Code>54346</FIPS_Code>
+	
+			<CounselingSeeking>
+				<Code>Business Plan</Code>
+				<Other></Other>
+			</CounselingSeeking>
+			<ExportCountries><Code>Belgium</Code><Other></Other></ExportCountries>
+			
+		</ClientIntake>
+		<CounselorRecord>
+			<PartnerSessionNumber>371786_T50267</PartnerSessionNumber>
+			
+			<FundingSource>Resiliency and Recovery Demonstration Grant – CARESRRD</FundingSource>
+
+			<ClientNamePart3>
+				<Last>hanks</Last>
+				<First>tom</First>
+				<Middle></Middle>
+			</ClientNamePart3>
+			<Email>tomh@gmail.com</Email>
+			<PhonePart3><Primary>2365894123</Primary><Secondary></Secondary></PhonePart3>
+			<AddressPart3>
+			<Street1></Street1>
+			<Street2></Street2>
+				<City>Alpharetta</City>
+				<State>Alabama</State>
+				<ZipCode>95928</ZipCode>
+				<Zip4Code>2344</Zip4Code>
+				<Country><Code>United States</Code></Country>
+				<PostalCode></PostalCode>
+				<StateOrProvince></StateOrProvince>
+			</AddressPart3>
+			<VerifiedToBeInBusiness>Yes</VerifiedToBeInBusiness>
+			<ReportableImpact>No</ReportableImpact>
+			<DateOfReportableImpact></DateOfReportableImpact>
+			<CurrentlyExporting>No</CurrentlyExporting>
+			<BusinessStartDatePart3>2021-12-31</BusinessStartDatePart3>
+			<TotalNumberOfEmployees>18</TotalNumberOfEmployees>
+			<NumberOfEmployeesInExportingBusiness></NumberOfEmployeesInExportingBusiness>
+			<ClientAnnualIncomePart3>
+				<GrossRevenues>0.00</GrossRevenues>
+				<ProfitLoss>0.00</ProfitLoss>
+				<ExportGrossRevenuesOrSales>788.00</ExportGrossRevenuesOrSales>
+				<GrowthIndicator>Yes</GrowthIndicator>
+			</ClientAnnualIncomePart3>
+			<ResourcePartnerServiceContributed>
+			<SBALoanAmount>10</SBALoanAmount>
+			<NonSBALoanAmount>10
+			</NonSBALoanAmount>
+			<EquityCapitalReceived>10
+			</EquityCapitalReceived>
+			<SBALoanAmountTxnNmb>80
+			</SBALoanAmountTxnNmb>
+			<NonSBALoanAmountTxnNmb>80
+			</NonSBALoanAmountTxnNmb>
+			<EquityCapitalReceivedTxnNmb>80
+			</EquityCapitalReceivedTxnNmb>
+			<NumberOfContractsReceived>80
+			</NumberOfContractsReceived>
+			
+			</ResourcePartnerServiceContributed>
+			<Certifications>
+				<Code>Service-Disabled Veteran-Owned Small Business</Code>
+				<Other></Other>
+			</Certifications>
+			<SBAFinancialAssistance>
+				<Code>Community Advantage</Code>
+				<Code>Other(SBIR, SBIC, 7(a) 504, etc)</Code>
+				<Other>Other SBA Disaster Loan for COVID-19</Other>
+			</SBAFinancialAssistance>
+			<CounselingProvided>
+				<Code>Tax Planning</Code>
+				<Other></Other>
+			</CounselingProvided>
+			<ReferredClient>
+				<Code>SBA Office of International Trade (OIT)</Code>
+				<Other></Other>
+			</ReferredClient>
+			<SessionType>Online</SessionType>
+			<Language>
+				<Code>English</Code>
+				<Other></Other>
+			</Language>
+			<DateCounseled>2024-01-01</DateCounseled>
+			<CounselorName>Paul Bozzo (FC)</CounselorName>
+			<CounselingHours>
+				<Contact>7</Contact>
+				<Prepare>6</Prepare>
+				<Travel>6</Travel>
+			</CounselingHours>
+			<CounselorNotes>Test</CounselorNotes>
+			<ExportCountries>
+			<Code>United States</Code>
+
+			<Other></Other>
+			</ExportCountries>
+			<TrainingSession>
+				<DateTrainingStarted>2024-09-22</DateTrainingStarted>
+				<PartnerTrainingNumber>PartnerTrainingNum</PartnerTrainingNumber>
+				<EmployeesTrained>2</EmployeesTrained>
+				<HoursTrained>3</HoursTrained>
+			</TrainingSession>
+		</CounselorRecord>
+	</CounselingRecord>
+
+</CounselingInformation>

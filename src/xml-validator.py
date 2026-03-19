@@ -28,11 +28,12 @@ def validate_against_xsd(xml_file, xsd_file):
     """
     try:
         # Parse the XSD schema
-        xmlschema_doc = etree.parse(xsd_file)
+        parser = etree.XMLParser(resolve_entities=False)
+        xmlschema_doc = etree.parse(xsd_file, parser=parser)
         xmlschema = etree.XMLSchema(xmlschema_doc)
         
         # Parse the XML file
-        xml_doc = etree.parse(xml_file)
+        xml_doc = etree.parse(xml_file, parser=parser)
         
         # Validate
         is_valid = xmlschema.validate(xml_doc)

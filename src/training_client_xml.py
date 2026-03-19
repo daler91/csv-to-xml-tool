@@ -13,7 +13,7 @@ import logging # Keep standard logging import for levels like logging.INFO
 
 # Import data cleaning functions from existing module
 from data_cleaning import (
-    clean_phone_number, format_date, clean_whitespace, 
+    clean_phone_number, format_date,
     map_gender_to_sex, split_multi_value, clean_numeric, clean_percentage,
     truncate_counselor_notes, standardize_country_code, standardize_state_name
 )

@@ -11,7 +11,7 @@ import re
 from .base_converter import BaseConverter
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
-from ..xml_utils import create_element, escape_xml
+from ..xml_utils import create_element
 
 class TrainingConverter(BaseConverter):
     """
@@ -84,7 +84,7 @@ class TrainingConverter(BaseConverter):
                 # FundingSource - optional element based on XSD, but placing it correctly.
                 funding_source = self._get_column_value(first_record, 'funding_source')
                 if funding_source:
-                    create_element(record, 'FundingSource', escape_xml(funding_source))
+                    create_element(record, 'FundingSource', funding_source)
 
                 location = create_element(record, 'Location')
                 create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
@@ -99,7 +99,7 @@ class TrainingConverter(BaseConverter):
                 title_val = self._get_column_value(first_record, "event_name")
                 if not title_val:
                     title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
-                create_element(record, 'TrainingTitle', escape_xml(title_val))
+                create_element(record, 'TrainingTitle', title_val)
 
                 self._build_location_section(record, first_record)
                 demographics = self._calculate_demographics(group_df)
@@ -123,7 +123,7 @@ class TrainingConverter(BaseConverter):
 
                 cosponsor_name = self._get_column_value(first_record, "cosponsor")
                 if cosponsor_name and cosponsor_name.lower() != 'n/a':
-                    create_element(record, 'CosponsorsName', escape_xml(cosponsor_name))
+                    create_element(record, 'CosponsorsName', cosponsor_name)
 
                 self.validator.record_processed(success=True)
 
@@ -156,9 +156,9 @@ class TrainingConverter(BaseConverter):
             state = self.config.DEFAULT_LOCATION['state']
             zip_code = self.config.DEFAULT_LOCATION['zip']
 
-        create_element(training_location, 'City', escape_xml(city))
+        create_element(training_location, 'City', city)
         create_element(training_location, 'State', data_cleaning.standardize_state_name(state))
-        create_element(training_location, 'ZipCode', escape_xml(zip_code))
+        create_element(training_location, 'ZipCode', zip_code)
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 

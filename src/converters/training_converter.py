@@ -10,6 +10,7 @@ import re
 from .base_converter import BaseConverter
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
+from .. import data_validation
 from ..xml_utils import create_element, escape_xml
 
 class TrainingConverter(BaseConverter):

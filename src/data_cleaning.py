@@ -250,26 +250,6 @@ def format_date(date_str, input_formats=None, default_return=""):
 
     return default_return
 
-def validate_counseling_date(date_str):
-    """
-    Validates that the counseling date is not before MIN_COUNSELING_DATE.
-    
-    Args:
-        date_str: A date string in YYYY-MM-DD format
-        
-    Returns:
-        Boolean indicating if the date is valid
-    """
-    if not date_str:
-        return True
-    
-    try:
-        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        min_date = datetime.strptime(CounselingConfig.MIN_COUNSELING_DATE, "%Y-%m-%d")
-        return date_obj >= min_date
-    except ValueError:
-        return False
-
 def clean_whitespace(text):
     """
     Cleans excess whitespace from text while preserving normal spacing between words and sentences.

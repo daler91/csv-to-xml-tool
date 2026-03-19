@@ -3,11 +3,34 @@ Data validation module for CSV to XML conversion.
 This module contains functions for validating data before XML conversion.
 """
 
+from datetime import datetime
+
 from .data_cleaning import (
-    clean_phone_number, format_date, validate_counseling_date,
+    clean_phone_number, format_date,
     standardize_country_code, standardize_state_name
 )
 from .config import ValidationCategory as VC, CounselingConfig, TrainingConfig
+
+
+def validate_counseling_date(date_str):
+    """
+    Validates that the counseling date is not before MIN_COUNSELING_DATE.
+
+    Args:
+        date_str: A date string in YYYY-MM-DD format
+
+    Returns:
+        Boolean indicating if the date is valid
+    """
+    if not date_str:
+        return True
+
+    try:
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        min_date = datetime.strptime(CounselingConfig.MIN_COUNSELING_DATE, "%Y-%m-%d")
+        return date_obj >= min_date
+    except ValueError:
+        return False
 
 # =============================================================================
 # COUNSELING-SPECIFIC VALIDATION

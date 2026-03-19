@@ -15,6 +15,10 @@ import re
 # but for standalone functions we provide a fallback
 logger = logging.getLogger(__name__)
 
+import sys
+import os
+# Ensure the script can be run from anywhere by adding its directory to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from logging_util import ConversionLogger # Import ConversionLogger
 
 def validate_against_xsd(xml_file, xsd_file):

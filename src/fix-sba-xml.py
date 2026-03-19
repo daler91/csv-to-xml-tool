@@ -13,21 +13,24 @@ import argparse
 import logging # Keep standard logging import for levels like logging.INFO
 from datetime import datetime
 
-# Local setup_logging will be removed.
-# from .logging_util import logger # Default instance not used here.
-from .logging_util import ConversionLogger # Import ConversionLogger
 
-# Import necessary functions from xml_validator
-# Note: If xml_validator.py is in the same directory or PYTHONPATH, this should work.
-# Otherwise, sys.path manipulations might be needed, or a proper package structure.
+import sys
+import os
+
+# Ensure the script can be run from anywhere by adding its directory to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from logging_util import ConversionLogger # Import ConversionLogger
+
+# Import necessary functions from xml-validator
+# Note: Since the file name is xml-validator.py (with a hyphen), we use importlib.
+import importlib
 try:
-    from .xml_validator import fix_client_intake_element_order as validator_fix_order
-    from .xml_validator import process_directory as validator_process_directory
+    xml_validator = importlib.import_module("xml-validator")
+    validator_fix_order = xml_validator.fix_client_intake_element_order
+    validator_process_directory = xml_validator.process_directory
 except ImportError:
-    # Fallback or error handling if xml_validator is not found directly
-    # This might happen if they are not in the same directory and PYTHONPATH isn't set up.
-    # For this tool's context, we assume they are accessible.
-    print("Error: Could not import from xml_validator. Ensure it's in the Python path.")
+    print("Error: Could not import from xml-validator. Ensure it's in the same directory.")
     sys.exit(1)
 
 

@@ -143,6 +143,12 @@ class CounselingConverter(BaseConverter):
         if internet_usage:
             create_element(client_intake, 'Internet', internet_usage)
 
+        # Validate: Internet field is mandatory when media code is 'Internet'
+        has_internet_media = any(c.strip().lower() == 'internet' for c in media_codes)
+        if has_internet_media and not internet_usage and not media_other:
+            self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
+                "Internet", "Internet field should be mandatory when the media code is 'Internet'.")
+
         in_business_raw = row.get('Currently In Business?', '').strip()
         in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
         create_element(client_intake, 'CurrentlyInBusiness', in_business_val)
@@ -210,6 +216,11 @@ class CounselingConverter(BaseConverter):
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "CounselingSeeking/Other", "CounselingSeeking is 'Other' but detail text is missing.")
             create_element(cs_element, 'Other', cs_other)
 
+        # Validate: CounselingSeeking is required under Part 2 if client is in business
+        if in_business_val == 'Yes' and not cs_codes:
+            self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
+                "CounselingSeeking", "Counseling Seeking is required under Part 2 if Client is in Business.")
+
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = create_element(parent, 'CounselorRecord')
         create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))
@@ -230,11 +241,20 @@ class CounselingConverter(BaseConverter):
 
         self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
-        create_element(counselor_record, 'VerifiedToBeInBusiness', 'Undetermined')
+        verified_in_business = row.get('Verified To Be In Business', 'Undetermined').strip()
+        if verified_in_business not in ('Yes', 'No', 'Undetermined'):
+            verified_in_business = 'Undetermined'
+        create_element(counselor_record, 'VerifiedToBeInBusiness', verified_in_business)
 
         # ReportableImpact must be Yes/No
         reportable_raw = row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS).strip()
         reportable_impact = reportable_raw if reportable_raw in ('Yes', 'No') else 'No'
+
+        # Validate: ReportableImpact cannot be Yes unless VerifiedToBeInBusiness is Yes
+        if reportable_impact == 'Yes' and verified_in_business != 'Yes':
+            self.validator.add_issue(record_id, "error", ValidationCategory.INVALID_VALUE,
+                "ReportableImpact", "Reportable Impact cannot be checked under Part 3 if Client Verified in Business is unchecked. Setting ReportableImpact to 'No'.")
+            reportable_impact = 'No'
         create_element(counselor_record, 'ReportableImpact', reportable_impact)
 
         impact_date = data_cleaning.format_date(row.get('Reportable Impact Date', ''))
@@ -297,8 +317,15 @@ class CounselingConverter(BaseConverter):
 
         cp_element = create_element(counselor_record, 'CounselingProvided')
         provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
+        cp_other = row.get('Other Counseling Provided', '').strip()
         for code in provided_codes:
             create_element(cp_element, 'Code', code)
+        is_cp_other_present = any(c.strip().lower() == 'other' for c in provided_codes)
+        if is_cp_other_present and not cp_other:
+            self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
+                "CounselingProvided/Other", "Other Counseling Provided is required when Counseling Provided Code is 'Other'.")
+        if cp_other:
+            create_element(cp_element, 'Other', cp_other)
 
         # ReferredClient - only emit if CSV has values
         referred_codes = data_cleaning.split_multi_value(row.get('Referred Client to', ''))

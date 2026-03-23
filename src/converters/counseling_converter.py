@@ -244,17 +244,18 @@ class CounselingConverter(BaseConverter):
         verified_in_business = row.get('Verified To Be In Business', 'Undetermined').strip()
         if verified_in_business not in ('Yes', 'No', 'Undetermined'):
             verified_in_business = 'Undetermined'
-        create_element(counselor_record, 'VerifiedToBeInBusiness', verified_in_business)
 
         # ReportableImpact must be Yes/No
         reportable_raw = row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS).strip()
         reportable_impact = reportable_raw if reportable_raw in ('Yes', 'No') else 'No'
 
-        # Validate: ReportableImpact cannot be Yes unless VerifiedToBeInBusiness is Yes
+        # Auto-correct: If ReportableImpact is Yes, VerifiedToBeInBusiness must also be Yes
         if reportable_impact == 'Yes' and verified_in_business != 'Yes':
-            self.validator.add_issue(record_id, "error", ValidationCategory.INVALID_VALUE,
-                "ReportableImpact", "Reportable Impact cannot be checked under Part 3 if Client Verified in Business is unchecked. Setting ReportableImpact to 'No'.")
-            reportable_impact = 'No'
+            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_VALUE,
+                "VerifiedToBeInBusiness", f"VerifiedToBeInBusiness was '{verified_in_business}' but ReportableImpact is 'Yes'. Auto-correcting VerifiedToBeInBusiness to 'Yes'.")
+            verified_in_business = 'Yes'
+
+        create_element(counselor_record, 'VerifiedToBeInBusiness', verified_in_business)
         create_element(counselor_record, 'ReportableImpact', reportable_impact)
 
         impact_date = data_cleaning.format_date(row.get('Reportable Impact Date', ''))

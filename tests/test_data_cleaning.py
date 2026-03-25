@@ -266,3 +266,32 @@ class TestCleanNumeric(unittest.TestCase):
         self.assertEqual(clean_numeric("invalid_string"), "")
         self.assertEqual(clean_numeric("1000a"), "")
         self.assertEqual(clean_numeric("abc"), "")
+
+class TestCleanPhoneNumber(unittest.TestCase):
+    def test_clean_phone_number_valid_formats(self):
+        from src.data_cleaning import clean_phone_number
+        self.assertEqual(clean_phone_number("(123) 456-7890"), "1234567890")
+        self.assertEqual(clean_phone_number("123.456.7890"), "1234567890")
+        self.assertEqual(clean_phone_number("+1 (123) 456-7890"), "11234567890")
+        self.assertEqual(clean_phone_number("123-456-7890"), "1234567890")
+        self.assertEqual(clean_phone_number("1234567890"), "1234567890")
+
+    def test_clean_phone_number_with_letters(self):
+        from src.data_cleaning import clean_phone_number
+        self.assertEqual(clean_phone_number("123-456-7890 ext 123"), "1234567890123")
+        self.assertEqual(clean_phone_number("1-800-FLOWERS"), "1800")
+        self.assertEqual(clean_phone_number("aBcDeFg"), "")
+
+    def test_clean_phone_number_empty_none_nan(self):
+        from src.data_cleaning import clean_phone_number
+        self.assertEqual(clean_phone_number(""), "")
+        self.assertEqual(clean_phone_number(None), "")
+        self.assertEqual(clean_phone_number("   "), "")
+        self.assertEqual(clean_phone_number("nan"), "")
+        self.assertEqual(clean_phone_number("NaN"), "")
+        self.assertEqual(clean_phone_number(" NAN "), "")
+
+    def test_clean_phone_number_numeric_input(self):
+        from src.data_cleaning import clean_phone_number
+        self.assertEqual(clean_phone_number(1234567890), "1234567890")
+        self.assertEqual(clean_phone_number(1.8001234567), "18001234567")

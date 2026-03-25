@@ -156,5 +156,60 @@ class TestProcessDirectory(unittest.TestCase):
         finally:
             shutil.rmtree(empty_dir)
 
+
+class TestFixClientIntakeElementOrder(unittest.TestCase):
+
+    @patch('xml_validator.ET.parse')
+    @patch('xml_validator.logger.error')
+    def test_fix_client_intake_element_order_exception(self, mock_logger, mock_parse):
+        """Test the exception path for fix_client_intake_element_order."""
+        mock_parse.side_effect = Exception("Test exception")
+
+        result = xml_validator.fix_client_intake_element_order("dummy.xml")
+
+        self.assertFalse(result)
+        mock_logger.assert_called_once_with("Error fixing XML file: Test exception")
+
+
+    def test_fix_client_intake_element_order_success(self):
+        """Test the success path for fix_client_intake_element_order."""
+        # Create a temporary dummy XML file to test order
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<Root>
+    <CounselingRecord>
+        <PartnerClientNumber>12345</PartnerClientNumber>
+        <ClientIntake>
+            <MilitaryStatus>Active</MilitaryStatus>
+            <Race>White</Race>
+            <Disability>No</Disability>
+            <Ethnicity>Non-Hispanic</Ethnicity>
+            <Sex>Male</Sex>
+        </ClientIntake>
+    </CounselingRecord>
+</Root>
+"""
+        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.xml') as f:
+            f.write(xml_content)
+            temp_file = f.name
+
+        try:
+            # We want to use the function to fix the order
+            result = xml_validator.fix_client_intake_element_order(temp_file)
+            self.assertTrue(result)
+
+            # Now parse it back to check order
+            tree = xml_validator.ET.parse(temp_file)
+            root = tree.getroot()
+            client_intake = root.find('.//ClientIntake')
+
+            # The expected order for these specific elements:
+            expected_order = ['Race', 'Ethnicity', 'Sex', 'Disability', 'MilitaryStatus']
+            actual_order = [child.tag for child in client_intake]
+
+            self.assertEqual(expected_order, actual_order)
+        finally:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
 if __name__ == '__main__':
     unittest.main()

@@ -6,7 +6,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data_cleaning import format_date, standardize_state_name, map_value, clean_percentage
+from src.data_cleaning import format_date, standardize_state_name, map_value, clean_percentage, truncate_counselor_notes
 
 class TestFormatDate(unittest.TestCase):
 
@@ -266,3 +266,59 @@ class TestCleanNumeric(unittest.TestCase):
         self.assertEqual(clean_numeric("invalid_string"), "")
         self.assertEqual(clean_numeric("1000a"), "")
         self.assertEqual(clean_numeric("abc"), "")
+
+class TestTruncateCounselorNotes(unittest.TestCase):
+    def test_truncate_happy_path(self):
+        # Shorter than max_length
+        self.assertEqual(truncate_counselor_notes("Short note.", max_length=20), "Short note.")
+
+    def test_truncate_exact_length(self):
+        # Exactly max_length
+        self.assertEqual(truncate_counselor_notes("Exactly twenty char.", max_length=20), "Exactly twenty char.")
+
+    def test_truncate_sentence_boundary(self):
+        # Truncates at the last sentence boundary '.', '!', '?', '\n' within the limit
+        # "Hello world. This is a longer test." max=20 -> "Hello world."
+        notes = "Hello world. This is a longer test."
+        self.assertEqual(truncate_counselor_notes(notes, max_length=20), "Hello world.")
+
+        # Test with '!'
+        notes_exclaim = "Wow! It is very hot outside today."
+        self.assertEqual(truncate_counselor_notes(notes_exclaim, max_length=20), "Wow!")
+
+        # Test with '?'
+        notes_question = "What time is it? I need to know."
+        self.assertEqual(truncate_counselor_notes(notes_question, max_length=20), "What time is it?")
+
+        # Test with '\n'
+        notes_newline = "First line.\nSecond line is longer."
+        self.assertEqual(truncate_counselor_notes(notes_newline, max_length=15), "First line.\n")
+
+    def test_truncate_word_boundary(self):
+        # No sentence boundary within max_length, fallback to word boundary
+        # "This is a very long string without punctuation" max=14
+        notes = "This is a very long string without punctuation"
+        self.assertEqual(truncate_counselor_notes(notes, max_length=14), "This is a")
+
+    def test_truncate_strict(self):
+        # No word or sentence boundary within max_length, fallback to strict max_length
+        # "Supercalifragilisticexpialidocious" max=10
+        notes = "Supercalifragilisticexpialidocious"
+        self.assertEqual(truncate_counselor_notes(notes, max_length=10), "Supercalif")
+
+    def test_clean_whitespace_applied(self):
+        # Ensure whitespace is cleaned before max_length logic is evaluated
+        notes = "   This   has   extra   spaces.   "
+        # "This has extra spaces." -> length 22
+        self.assertEqual(truncate_counselor_notes(notes, max_length=50), "This has extra spaces.")
+
+    def test_edge_cases(self):
+        # Empty string
+        self.assertEqual(truncate_counselor_notes("", max_length=20), "")
+        # None
+        self.assertEqual(truncate_counselor_notes(None, max_length=20), "")
+        # Only whitespace
+        self.assertEqual(truncate_counselor_notes("   \n  \t  ", max_length=20), "")
+
+if __name__ == '__main__':
+    unittest.main()

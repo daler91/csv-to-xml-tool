@@ -266,3 +266,40 @@ class TestCleanNumeric(unittest.TestCase):
         self.assertEqual(clean_numeric("invalid_string"), "")
         self.assertEqual(clean_numeric("1000a"), "")
         self.assertEqual(clean_numeric("abc"), "")
+
+class TestSplitMultiValue(unittest.TestCase):
+    def test_split_multi_value_default_delimiter(self):
+        from src.data_cleaning import split_multi_value
+        self.assertEqual(split_multi_value("apple;banana;orange"), ["apple", "banana", "orange"])
+        self.assertEqual(split_multi_value("single_item"), ["single_item"])
+
+    def test_split_multi_value_custom_delimiter(self):
+        from src.data_cleaning import split_multi_value
+        self.assertEqual(split_multi_value("apple,banana,orange", delimiter=","), ["apple", "banana", "orange"])
+        self.assertEqual(split_multi_value("apple|banana|orange", delimiter="|"), ["apple", "banana", "orange"])
+
+    def test_split_multi_value_whitespace_handling(self):
+        from src.data_cleaning import split_multi_value
+        # Whitespace around items should be stripped
+        self.assertEqual(split_multi_value(" apple ; banana ; orange "), ["apple", "banana", "orange"])
+        # Empty items between delimiters should be removed
+        self.assertEqual(split_multi_value("apple;;banana; ;orange;"), ["apple", "banana", "orange"])
+
+    def test_split_multi_value_empty_and_none(self):
+        from src.data_cleaning import split_multi_value
+        self.assertEqual(split_multi_value(""), [])
+        self.assertEqual(split_multi_value("   "), [])
+        self.assertEqual(split_multi_value(None), [])
+        self.assertEqual(split_multi_value("nan"), [])
+        self.assertEqual(split_multi_value("NaN"), [])
+
+    def test_split_multi_value_non_string_inputs(self):
+        from src.data_cleaning import split_multi_value
+        self.assertEqual(split_multi_value(123), ["123"])
+        self.assertEqual(split_multi_value(45.67), ["45.67"])
+
+    def test_split_multi_value_math_nan(self):
+        from src.data_cleaning import split_multi_value
+        import math
+        self.assertEqual(split_multi_value(math.nan), [])
+        self.assertEqual(split_multi_value(float('nan')), [])

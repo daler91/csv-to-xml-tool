@@ -6,7 +6,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data_cleaning import format_date, standardize_state_name, map_value, clean_percentage
+from src.data_cleaning import format_date, standardize_state_name, map_value, clean_percentage, truncate_counselor_notes
 
 class TestFormatDate(unittest.TestCase):
 
@@ -266,3 +266,53 @@ class TestCleanNumeric(unittest.TestCase):
         self.assertEqual(clean_numeric("invalid_string"), "")
         self.assertEqual(clean_numeric("1000a"), "")
         self.assertEqual(clean_numeric("abc"), "")
+
+class TestTruncateCounselorNotes(unittest.TestCase):
+    def test_truncate_counselor_notes_under_limit(self):
+        notes = "These are short notes."
+        self.assertEqual(truncate_counselor_notes(notes, max_length=50), "These are short notes.")
+
+    def test_truncate_counselor_notes_whitespace_cleaning(self):
+        notes = "These   are   notes\n\nwith extra  spaces."
+        expected = "These are notes\nwith extra spaces."
+        self.assertEqual(truncate_counselor_notes(notes, max_length=100), expected)
+
+    def test_truncate_counselor_notes_sentence_boundary(self):
+        # Max length 35 cuts off before the second sentence finishes.
+        # Nearest boundary is the end of the first sentence (pos 22)
+        notes = "This is the first sentence. This is the second sentence."
+        self.assertEqual(truncate_counselor_notes(notes, max_length=35), "This is the first sentence.")
+
+        notes_exclaim = "First sentence! Second sentence."
+        self.assertEqual(truncate_counselor_notes(notes_exclaim, max_length=20), "First sentence!")
+
+        notes_question = "First sentence? Second sentence."
+        self.assertEqual(truncate_counselor_notes(notes_question, max_length=20), "First sentence?")
+
+        notes_newline = "First sentence\nSecond sentence."
+        self.assertEqual(truncate_counselor_notes(notes_newline, max_length=20), "First sentence\n")
+
+
+    def test_truncate_counselor_notes_word_boundary(self):
+        # No sentence boundary within limit. Truncates at nearest space.
+        notes = "This is a long string without any sentence boundaries within the limit"
+        # max_length=15. "This is a long " (15). Nearest space is at pos 14.
+        # So it should truncate to "This is a long"
+        self.assertEqual(truncate_counselor_notes(notes, max_length=15), "This is a long")
+
+    def test_truncate_counselor_notes_hard_truncation(self):
+        # No sentence or word boundaries within limit.
+        notes = "Supercalifragilisticexpialidocious"
+        self.assertEqual(truncate_counselor_notes(notes, max_length=10), "Supercalif")
+
+    def test_truncate_counselor_notes_edge_cases(self):
+        self.assertEqual(truncate_counselor_notes("", max_length=10), "")
+        self.assertEqual(truncate_counselor_notes(None, max_length=10), "")
+        self.assertEqual(truncate_counselor_notes("   ", max_length=10), "")
+        self.assertEqual(truncate_counselor_notes("NaN", max_length=10), "")
+
+    def test_truncate_counselor_notes_custom_max_length(self):
+        notes = "This is a sentence. And another."
+        # The default max length is from CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"]
+        # We ensure passing a custom one overrides it.
+        self.assertEqual(truncate_counselor_notes(notes, max_length=19), "This is a sentence.")

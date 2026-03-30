@@ -20,11 +20,11 @@ class TestValidateAgainstXsd(unittest.TestCase):
             mock_parse.side_effect = Exception("Test exception")
 
             # Call the function
-            is_valid, errors = xml_validator.validate_against_xsd("dummy.xml", "dummy.xsd")
+            result = xml_validator.validate_against_xsd("dummy.xml", "dummy.xsd")
 
             # Verify the exception was caught and returned correctly
-            self.assertFalse(is_valid)
-            self.assertEqual(errors, ["Validation error: Test exception"])
+            self.assertFalse(result["is_valid"])
+            self.assertEqual(result["errors"], ["Internal validation error"])
 
 
 class TestProcessDirectory(unittest.TestCase):
@@ -104,7 +104,7 @@ class TestProcessDirectory(unittest.TestCase):
     @patch('xml_validator.validate_against_xsd')
     def test_process_directory_with_xsd_validation(self, mock_validate):
         """Test processing with XSD validation enabled."""
-        mock_validate.return_value = (True, [])
+        mock_validate.return_value = {"is_valid": True, "errors": []}
         xsd_file = os.path.join(self.test_dir, "dummy.xsd")
         with open(xsd_file, "w") as f:
             f.write("<schema></schema>")
@@ -135,7 +135,7 @@ class TestProcessDirectory(unittest.TestCase):
     @patch('xml_validator.validate_against_xsd')
     def test_process_directory_fix_and_validate(self, mock_validate, mock_fix):
         """Test processing with fix and XSD validation."""
-        mock_validate.side_effect = [(False, ["error"]), (True, []), (False, ["error"]), (True, [])] # Original then fixed for both files
+        mock_validate.side_effect = [{"is_valid": False, "errors": ["error"]}, {"is_valid": True, "errors": []}, {"is_valid": False, "errors": ["error"]}, {"is_valid": True, "errors": []}] # Original then fixed for both files
         mock_fix.return_value = True
 
         xsd_file = os.path.join(self.test_dir, "dummy.xsd")

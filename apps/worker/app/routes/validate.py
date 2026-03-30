@@ -38,8 +38,8 @@ async def validate_xsd(job_id: str, schema_type: str):
         xml_path = get_output_path(job_id)
 
         result = validate_against_xsd(xml_path, xsd_file)
-        is_valid = result.get("is_valid", False) if isinstance(result, dict) else bool(result)
-        errors = result.get("errors", []) if isinstance(result, dict) else []
+        is_valid = result.get("is_valid", False)
+        errors = result.get("errors", [])
         return {
             "is_valid": is_valid,
             "errors": errors,

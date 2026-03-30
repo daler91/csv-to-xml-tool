@@ -76,9 +76,8 @@ def run_conversion(
         xsd_errors: list[str] = []
         if os.path.exists(xml_path) and os.path.exists(xsd_file):
             result = validate_against_xsd(xml_path, xsd_file)
-            xsd_valid = result.get("is_valid", False) if isinstance(result, dict) else bool(result)
-            if isinstance(result, dict):
-                xsd_errors = result.get("errors", [])
+            xsd_valid = result.get("is_valid", False)
+            xsd_errors = result.get("errors", [])
 
         tracker_data = tracker.to_dict()
         summary = tracker_data["summary"]

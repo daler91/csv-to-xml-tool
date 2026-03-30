@@ -40,5 +40,9 @@ def get_output_path(job_id: str) -> str:
     """Construct the output XML path for a job."""
     safe_id = _sanitize_id(job_id)
     output_dir = os.path.join(DATA_DIR, "output", safe_id)
-    os.makedirs(output_dir, exist_ok=True)
-    return os.path.join(output_dir, f"{safe_id}.xml")
+    # Normalize and enforce path stays within DATA_DIR
+    normalized_output_dir = os.path.realpath(output_dir)
+    if not (normalized_output_dir == DATA_DIR or normalized_output_dir.startswith(DATA_DIR + os.sep)):
+        raise ValueError("Resolved output directory is outside of DATA_DIR")
+    os.makedirs(normalized_output_dir, exist_ok=True)
+    return os.path.join(normalized_output_dir, f"{safe_id}.xml")

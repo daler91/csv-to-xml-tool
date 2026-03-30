@@ -17,6 +17,8 @@ from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
 
+from ..core.security import validate_path
+
 
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
 
@@ -45,6 +47,10 @@ def run_conversion(
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")
+
+    # Validate paths stay within DATA_DIR
+    csv_path = validate_path(csv_path)
+    xml_path = validate_path(xml_path)
 
     # Apply column mapping if provided (rename CSV columns before conversion)
     actual_csv_path = csv_path

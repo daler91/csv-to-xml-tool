@@ -11,6 +11,8 @@ if _SRC_DIR not in sys.path:
 
 from src.config import CounselingConfig, TrainingConfig
 
+from ..core.security import validate_path
+
 
 # Expected columns extracted from converter source code
 COUNSELING_EXPECTED = [
@@ -69,6 +71,9 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
     rows = []
     headers = []
     total_rows = 0
+
+    # Validate path stays within DATA_DIR
+    csv_path = validate_path(csv_path)
 
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)

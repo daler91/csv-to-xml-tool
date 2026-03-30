@@ -1,8 +1,10 @@
+import logging
 import os
 import sys
 
 from fastapi import APIRouter, HTTPException
 
+from ..core.security import validate_path
 from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
 
 # Ensure src is importable
@@ -11,6 +13,8 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.xml_validator import validate_against_xsd
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,7 +33,8 @@ async def validate_xsd(req: ValidateXsdRequest):
         raise HTTPException(status_code=400, detail=f"Unknown schema type: {req.schema_type}")
 
     try:
-        result = validate_against_xsd(req.xml_file_path, xsd_file)
+        xml_path = validate_path(req.xml_file_path)
+        result = validate_against_xsd(xml_path, xsd_file)
         is_valid = result.get("is_valid", False) if isinstance(result, dict) else bool(result)
         errors = result.get("errors", []) if isinstance(result, dict) else []
         return ValidateXsdResponse(
@@ -37,5 +42,8 @@ async def validate_xsd(req: ValidateXsdRequest):
             errors=errors,
             error_count=len(errors),
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("XSD validation failed")
+        raise HTTPException(status_code=500, detail="Internal validation error")

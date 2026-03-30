@@ -1,0 +1,41 @@
+services:
+  web:
+    build: ./apps/web
+    ports: ["3000:3000"]
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/csvtoxml
+      - REDIS_URL=redis://redis:6379
+      - WORKER_URL=http://worker:8000
+      - NEXTAUTH_SECRET=dev-secret-change-me
+      - NEXTAUTH_URL=http://localhost:3000
+    volumes:
+      - shared-data:/data
+    depends_on: [db, redis, worker]
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATA_DIR=/data
+      - SCHEMAS_DIR=/app/schemas
+    volumes:
+      - shared-data:/data
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: csvtoxml
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  shared-data:
+  pgdata:

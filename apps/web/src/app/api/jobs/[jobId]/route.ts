@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getRequiredUser } from "@/lib/session";
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  try {
+    const user = await getRequiredUser();
+    const { jobId } = await params;
+
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId: user.id },
+    });
+
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(job);
+  } catch {
+    return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  try {
+    const user = await getRequiredUser();
+    const { jobId } = await params;
+    const data = await req.json();
+
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId: user.id },
+    });
+
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.job.update({
+      where: { id: jobId },
+      data,
+    });
+
+    return NextResponse.json(updated);
+  } catch {
+    return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
+  }
+}

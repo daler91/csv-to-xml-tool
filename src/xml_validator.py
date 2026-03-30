@@ -15,11 +15,12 @@ import re
 # but for standalone functions we provide a fallback
 logger = logging.getLogger(__name__)
 
-import sys
-import os
-# Ensure the script can be run from anywhere by adding its directory to sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from logging_util import ConversionLogger # Import ConversionLogger
+def _setup_sys_path():
+    """Ensure the script can be run standalone by adding its directory to sys.path."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ConversionLogger is imported lazily in main() to avoid breaking package imports
 
 def validate_against_xsd(xml_file, xsd_file):
     """
@@ -412,6 +413,9 @@ def process_single_file(args, logger):
 
 def main():
     """Main entry point for the script."""
+    _setup_sys_path()
+    from logging_util import ConversionLogger
+
     args = parse_arguments()
 
     # Setup logger using ConversionLogger

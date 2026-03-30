@@ -1,8 +1,21 @@
-venv/ 
-__pycache__/ 
-*.pyc 
-logs/ 
-reports/ 
-*.log 
-*.csv 
-*.xml 
+venv/
+__pycache__/
+*.pyc
+logs/
+reports/
+*.log
+*.csv
+
+# Keep XSD files in schemas/ but ignore sample XMLs
+*.xml
+!schemas/*.xsd
+
+# Next.js
+apps/web/.next/
+apps/web/node_modules/
+apps/web/.env.local
+
+# Data
+/data/
+uploads/
+instance/

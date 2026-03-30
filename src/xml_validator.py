@@ -34,6 +34,10 @@ def validate_against_xsd(xml_file, xsd_file):
         Tuple (is_valid, errors)
     """
     try:
+        # Validate that file paths are absolute and exist
+        xml_file = os.path.realpath(xml_file)
+        xsd_file = os.path.realpath(xsd_file)
+
         # Parse the XSD schema
         parser = etree.XMLParser(resolve_entities=False)
         xmlschema_doc = etree.parse(xsd_file, parser=parser)

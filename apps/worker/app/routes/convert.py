@@ -3,7 +3,7 @@ import os
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import validate_path
+from ..core.security import validate_path, safe_output_path
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.conversion_service import run_conversion
 
@@ -18,10 +18,8 @@ async def convert(req: ConvertRequest):
         # Validate input path stays within DATA_DIR
         csv_path = validate_path(req.csv_path)
 
-        # Build output path within DATA_DIR
-        output_dir = os.path.dirname(csv_path).replace("uploads", "output")
-        os.makedirs(output_dir, exist_ok=True)
-        xml_path = validate_path(os.path.join(output_dir, f"{req.job_id}.xml"))
+        # Build validated output path within DATA_DIR
+        xml_path = safe_output_path(req.job_id)
 
         result = run_conversion(
             csv_path=csv_path,
@@ -32,8 +30,8 @@ async def convert(req: ConvertRequest):
         return result
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid request parameters")
     except Exception:
         logger.exception("Conversion failed")
         raise HTTPException(status_code=500, detail="Internal conversion error")

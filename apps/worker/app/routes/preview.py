@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from ..core.security import get_upload_path
 from ..models.schemas import PreviewRequest, PreviewResponse
 from ..services.preview_service import read_csv_preview
 
@@ -13,7 +14,8 @@ router = APIRouter()
 @router.post("/preview", response_model=PreviewResponse)
 async def preview(req: PreviewRequest):
     try:
-        result = read_csv_preview(req.csv_path, req.converter_type)
+        csv_path = get_upload_path(req.job_id, req.file_name)
+        result = read_csv_preview(csv_path, req.converter_type)
         return result
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found")

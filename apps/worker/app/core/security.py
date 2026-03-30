@@ -1,42 +1,44 @@
-"""Path validation to prevent path traversal attacks."""
+"""Path construction and validation for the worker service.
+
+All file paths are constructed server-side from trusted DATA_DIR + sanitized
+identifiers. No user-provided file paths are accepted by any endpoint.
+"""
 
 import os
 import re
 
-DATA_DIR = os.environ.get("DATA_DIR", "/data")
+DATA_DIR = os.path.realpath(os.environ.get("DATA_DIR", "/data"))
 
 
-def validate_path(path: str) -> str:
-    """
-    Validate that a file path resolves within the allowed DATA_DIR.
-    Returns the resolved absolute path, or raises ValueError.
-    """
-    resolved = os.path.realpath(path)
-    allowed = os.path.realpath(DATA_DIR)
-
-    if not resolved.startswith(allowed + os.sep) and resolved != allowed:
-        raise ValueError("Path is outside the allowed data directory")
-
-    return resolved
+def _sanitize_id(value: str) -> str:
+    """Sanitize an identifier to only allow safe characters."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", value)
+    if not sanitized:
+        raise ValueError("Invalid identifier")
+    return sanitized
 
 
-def safe_output_path(job_id: str) -> str:
-    """
-    Construct a safe output XML path for a given job ID.
-    The job_id is sanitized to prevent path traversal.
-    """
-    # Only allow alphanumeric, hyphens, and underscores in job_id
-    sanitized_id = re.sub(r"[^a-zA-Z0-9_-]", "", job_id)
-    if not sanitized_id:
-        raise ValueError("Invalid job ID")
+def _sanitize_filename(value: str) -> str:
+    """Sanitize a filename to prevent path traversal."""
+    # Strip any directory components
+    basename = os.path.basename(value)
+    # Remove anything that isn't alphanumeric, dash, underscore, dot
+    sanitized = re.sub(r"[^a-zA-Z0-9_.\-]", "_", basename)
+    if not sanitized or sanitized.startswith("."):
+        raise ValueError("Invalid filename")
+    return sanitized
 
-    base_dir = os.path.realpath(DATA_DIR)
-    output_dir = os.path.join(base_dir, "output", sanitized_id)
-    resolved_output_dir = os.path.realpath(output_dir)
 
-    # Ensure the resolved path stays within the allowed DATA_DIR
-    if not resolved_output_dir.startswith(base_dir + os.sep) and resolved_output_dir != base_dir:
-        raise ValueError("Output path is outside the allowed data directory")
+def get_upload_path(job_id: str, file_name: str) -> str:
+    """Construct the path where an uploaded CSV is stored."""
+    safe_id = _sanitize_id(job_id)
+    safe_name = _sanitize_filename(file_name)
+    return os.path.join(DATA_DIR, "uploads", safe_id, safe_name)
 
-    os.makedirs(resolved_output_dir, exist_ok=True)
-    return os.path.join(resolved_output_dir, f"{sanitized_id}.xml")
+
+def get_output_path(job_id: str) -> str:
+    """Construct the output XML path for a job."""
+    safe_id = _sanitize_id(job_id)
+    output_dir = os.path.join(DATA_DIR, "output", safe_id)
+    os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, f"{safe_id}.xml")

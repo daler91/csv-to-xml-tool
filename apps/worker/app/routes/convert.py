@@ -1,9 +1,8 @@
 import logging
-import os
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import validate_path, safe_output_path
+from ..core.security import get_upload_path, get_output_path
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.conversion_service import run_conversion
 
@@ -15,11 +14,8 @@ router = APIRouter()
 @router.post("/convert", response_model=ConvertResponse)
 async def convert(req: ConvertRequest):
     try:
-        # Validate input path stays within DATA_DIR
-        csv_path = validate_path(req.csv_path)
-
-        # Build validated output path within DATA_DIR
-        xml_path = safe_output_path(req.job_id)
+        csv_path = get_upload_path(req.job_id, req.file_name)
+        xml_path = get_output_path(req.job_id)
 
         result = run_conversion(
             csv_path=csv_path,

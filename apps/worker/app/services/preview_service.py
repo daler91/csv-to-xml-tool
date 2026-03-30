@@ -11,8 +11,6 @@ if _SRC_DIR not in sys.path:
 
 from src.config import CounselingConfig, TrainingConfig
 
-from ..core.security import validate_path
-
 
 # Expected columns extracted from converter source code
 COUNSELING_EXPECTED = [
@@ -67,13 +65,13 @@ def get_expected_columns(converter_type: str) -> list[str]:
 
 
 def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> dict:
-    """Read first N rows of a CSV and detect column matching status."""
+    """Read first N rows of a CSV and detect column matching status.
+
+    csv_path must be constructed server-side via core.security.get_upload_path().
+    """
     rows = []
     headers = []
     total_rows = 0
-
-    # Validate path stays within DATA_DIR
-    csv_path = validate_path(csv_path)
 
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)

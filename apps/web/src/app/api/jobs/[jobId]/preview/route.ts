@@ -23,7 +23,8 @@ export async function GET(
     const preview = await workerFetch<PreviewResponse>("/preview", {
       method: "POST",
       body: JSON.stringify({
-        csv_path: job.inputFilePath,
+        job_id: jobId,
+        file_name: job.inputFileName,
         converter_type: job.converterType,
       }),
     });

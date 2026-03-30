@@ -40,7 +40,7 @@ export async function POST(
         method: "POST",
         body: JSON.stringify({
           job_id: jobId,
-          csv_path: job.inputFilePath,
+          file_name: job.inputFileName,
           converter_type: job.converterType,
           column_mapping: job.columnMapping,
         }),

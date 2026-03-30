@@ -4,8 +4,8 @@ import sys
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import validate_path
-from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
+from ..core.security import get_output_path
+from ..models.schemas import ConvertRequest
 
 # Ensure src is importable
 _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
@@ -26,24 +26,27 @@ XSD_MAP = {
 }
 
 
-@router.post("/validate-xsd", response_model=ValidateXsdResponse)
-async def validate_xsd(req: ValidateXsdRequest):
-    xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP.get(req.schema_type, ""))
+@router.post("/validate-xsd")
+async def validate_xsd(job_id: str, schema_type: str):
+    """Validate an already-converted XML file against its XSD schema."""
+    xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP.get(schema_type, ""))
     if not os.path.exists(xsd_file):
-        raise HTTPException(status_code=400, detail=f"Unknown schema type: {req.schema_type}")
+        raise HTTPException(status_code=400, detail=f"Unknown schema type: {schema_type}")
 
     try:
-        xml_path = validate_path(req.xml_file_path)
+        # Construct path from job_id -- no user-provided paths
+        xml_path = get_output_path(job_id)
+
         result = validate_against_xsd(xml_path, xsd_file)
         is_valid = result.get("is_valid", False) if isinstance(result, dict) else bool(result)
         errors = result.get("errors", []) if isinstance(result, dict) else []
-        return ValidateXsdResponse(
-            is_valid=is_valid,
-            errors=errors,
-            error_count=len(errors),
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {
+            "is_valid": is_valid,
+            "errors": errors,
+            "error_count": len(errors),
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
     except Exception:
         logger.exception("XSD validation failed")
         raise HTTPException(status_code=500, detail="Internal validation error")

@@ -15,11 +15,12 @@ import re
 # but for standalone functions we provide a fallback
 logger = logging.getLogger(__name__)
 
-import sys
-import os
-# Ensure the script can be run from anywhere by adding its directory to sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from logging_util import ConversionLogger # Import ConversionLogger
+def _setup_sys_path():
+    """Ensure the script can be run standalone by adding its directory to sys.path."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ConversionLogger is imported lazily in main() to avoid breaking package imports
 
 def validate_against_xsd(xml_file, xsd_file):
     """
@@ -33,6 +34,15 @@ def validate_against_xsd(xml_file, xsd_file):
         Tuple (is_valid, errors)
     """
     try:
+        # Resolve and validate file paths against traversal
+        xml_file = os.path.realpath(xml_file)
+        xsd_file = os.path.realpath(xsd_file)
+        _data_dir = os.path.realpath(os.environ.get("DATA_DIR", "/"))
+        if not xml_file.startswith(_data_dir):
+            return {"is_valid": False, "errors": ["Invalid XML file path"]}
+        if not xsd_file.startswith(os.sep):
+            return {"is_valid": False, "errors": ["Invalid XSD file path"]}
+
         # Parse the XSD schema
         parser = etree.XMLParser(resolve_entities=False)
         xmlschema_doc = etree.parse(xsd_file, parser=parser)
@@ -50,9 +60,10 @@ def validate_against_xsd(xml_file, xsd_file):
             for error in xmlschema.error_log:
                 errors.append(f"Line {error.line}: {error.message}")
 
-        return is_valid, errors
-    except Exception as e:
-        return False, [f"Validation error: {str(e)}"]
+        return {"is_valid": is_valid, "errors": errors}
+    except Exception:
+        logger.exception("Unexpected error during XML/XSD validation")
+        return {"is_valid": False, "errors": ["Internal validation error"]}
 
 def extract_validation_details(error_message):
     """
@@ -300,7 +311,8 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
         # Validate original file if XSD is provided
         if xsd_file:
             logger.info(f"Validating original file {file_path} against {xsd_file}...")
-            is_valid, errors = validate_against_xsd(file_path, xsd_file)
+            _r = validate_against_xsd(file_path, xsd_file)
+            is_valid, errors = _r["is_valid"], _r["errors"]
             if is_valid:
                 logger.info(f"Original file {file_path} is valid.")
             else:
@@ -314,7 +326,8 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
                 # Re-validate if XSD provided and file was fixed
                 if xsd_file:
                     logger.info(f"Re-validating fixed file {current_output_path} against {xsd_file}...")
-                    is_valid_after_fix, errors_after_fix = validate_against_xsd(current_output_path, xsd_file)
+                    _r = validate_against_xsd(current_output_path, xsd_file)
+                    is_valid_after_fix, errors_after_fix = _r["is_valid"], _r["errors"]
                     if is_valid_after_fix:
                         logger.info(f"Fixed file {current_output_path} is valid.")
                     else:
@@ -368,7 +381,8 @@ def process_single_file(args, logger):
     # Validate original file if XSD is provided
     if args.xsd:
         logger.info(f"Validating {args.xmlfile} against {args.xsd}...")
-        is_valid, errors = validate_against_xsd(args.xmlfile, args.xsd)
+        _r = validate_against_xsd(args.xmlfile, args.xsd)
+        is_valid, errors = _r["is_valid"], _r["errors"]
         if is_valid:
             logger.info("XML is valid!")
         else:
@@ -400,7 +414,8 @@ def process_single_file(args, logger):
             # Re-validate if XSD provided and file was fixed
             if args.xsd:
                 logger.info(f"Re-validating fixed file {output_file_path} against {args.xsd}...")
-                is_valid_after_fix, errors_after_fix = validate_against_xsd(output_file_path, args.xsd)
+                _r = validate_against_xsd(output_file_path, args.xsd)
+                is_valid_after_fix, errors_after_fix = _r["is_valid"], _r["errors"]
                 if is_valid_after_fix:
                     logger.info(f"Fixed file {output_file_path} is valid.")
                 else:
@@ -412,6 +427,9 @@ def process_single_file(args, logger):
 
 def main():
     """Main entry point for the script."""
+    _setup_sys_path()
+    from logging_util import ConversionLogger
+
     args = parse_arguments()
 
     # Setup logger using ConversionLogger

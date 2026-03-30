@@ -76,6 +76,13 @@ class ValidationTracker:
             'warnings_by_category': dict(self.issue_counts['warning'])
         }
     
+    def to_dict(self):
+        """Return all tracker state as a JSON-serializable dict."""
+        return {
+            "summary": self.get_summary(),
+            "issues": self.issues,
+        }
+
     def print_summary(self):
         """Print a summary of validation issues to the console."""
         summary = self.get_summary()

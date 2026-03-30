@@ -1,0 +1,61 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  jobs         Job[]
+  auditEntries AuditEntry[]
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  converterType  String
+  status         String    @default("uploaded")
+  inputFileName  String
+  inputFilePath  String
+  outputFilePath String?
+  totalRows      Int?
+  processedRows  Int       @default(0)
+  columnMapping  Json?
+  summary        Json?
+  issues         Json?
+  cleaningDiffs  Json?
+  xsdValid       Boolean?
+  xsdErrors      Json?
+  previousJobId  String?
+  previousJob    Job?      @relation("JobComparison", fields: [previousJobId], references: [id])
+  nextJobs       Job[]     @relation("JobComparison")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+  auditEntries   AuditEntry[]
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model AuditEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  jobId     String?
+  job       Job?     @relation(fields: [jobId], references: [id])
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+}

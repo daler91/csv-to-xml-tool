@@ -204,7 +204,8 @@ def main():
         print()
 
         from src.xml_validator import validate_against_xsd
-        is_valid, errors = validate_against_xsd(output_path, xsd_path)
+        _r = validate_against_xsd(output_path, xsd_path)
+        is_valid, errors = _r["is_valid"], _r["errors"]
 
         if is_valid:
             print("  RESULT: XML is VALID!")

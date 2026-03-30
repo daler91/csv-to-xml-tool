@@ -11,6 +11,7 @@ if _SRC_DIR not in sys.path:
 
 from src.config import CounselingConfig, TrainingConfig
 
+from ..core.security import DATA_DIR
 
 # Expected columns extracted from converter source code
 COUNSELING_EXPECTED = [
@@ -67,8 +68,13 @@ def get_expected_columns(converter_type: str) -> list[str]:
 def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> dict:
     """Read first N rows of a CSV and detect column matching status.
 
-    csv_path must be constructed server-side via core.security.get_upload_path().
+    csv_path must be constructed and validated by the calling route.
     """
+    # Re-validate path (CodeQL-recognized sanitizer: realpath + startswith guard)
+    csv_path = os.path.realpath(csv_path)
+    if not csv_path.startswith(DATA_DIR + os.sep):
+        raise ValueError("csv_path is outside DATA_DIR")
+
     rows = []
     headers = []
     total_rows = 0

@@ -4,8 +4,7 @@ import sys
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import get_output_path
-from ..models.schemas import ConvertRequest
+from ..core.security import DATA_DIR, sanitize_id
 
 # Ensure src is importable
 _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
@@ -34,8 +33,12 @@ async def validate_xsd(job_id: str, schema_type: str):
         raise HTTPException(status_code=400, detail=f"Unknown schema type: {schema_type}")
 
     try:
-        # Construct path from job_id -- no user-provided paths
-        xml_path = get_output_path(job_id)
+        safe_id = sanitize_id(job_id)
+
+        # Construct and validate path inline
+        xml_path = os.path.realpath(os.path.join(DATA_DIR, "output", safe_id, f"{safe_id}.xml"))
+        if not xml_path.startswith(DATA_DIR + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid path")
 
         result = validate_against_xsd(xml_path, xsd_file)
         is_valid = result.get("is_valid", False)
@@ -47,6 +50,8 @@ async def validate_xsd(job_id: str, schema_type: str):
         }
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid job ID")
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("XSD validation failed")
         raise HTTPException(status_code=500, detail="Internal validation error")

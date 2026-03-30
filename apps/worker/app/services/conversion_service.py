@@ -16,6 +16,7 @@ from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
 
+from ..core.security import DATA_DIR
 
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
 
@@ -39,11 +40,19 @@ def run_conversion(
     """
     Run a CSV-to-XML conversion using the existing converter logic.
 
-    All paths must be constructed server-side via core.security helpers.
+    All paths must be constructed and validated by the calling route.
     Returns a dict with stats, issues, xsd_valid, xsd_errors.
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")
+
+    # Re-validate paths (CodeQL-recognized sanitizer: realpath + startswith guard)
+    csv_path = os.path.realpath(csv_path)
+    if not csv_path.startswith(DATA_DIR + os.sep):
+        raise ValueError("csv_path is outside DATA_DIR")
+    xml_path = os.path.realpath(xml_path)
+    if not xml_path.startswith(DATA_DIR + os.sep):
+        raise ValueError("xml_path is outside DATA_DIR")
 
     # Apply column mapping if provided (rename CSV columns before conversion)
     actual_csv_path = csv_path

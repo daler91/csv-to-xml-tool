@@ -1,7 +1,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY apps/web/package*.json ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 FROM node:20-alpine AS builder
 WORKDIR /app

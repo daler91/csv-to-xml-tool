@@ -1,9 +1,9 @@
 import logging
 import os
+import tempfile
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import DATA_DIR, sanitize_id, sanitize_filename
 from ..models.schemas import PreviewRequest, PreviewResponse
 from ..services.preview_service import read_csv_preview
 
@@ -14,19 +14,17 @@ router = APIRouter()
 
 @router.post("/preview", response_model=PreviewResponse)
 async def preview(req: PreviewRequest):
+    tmp = None
     try:
-        safe_id = sanitize_id(req.job_id)
-        safe_name = sanitize_filename(req.file_name)
+        # Write streamed CSV content to a temp file
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".csv", delete=False, mode="w", encoding="utf-8"
+        )
+        tmp.write(req.file_content)
+        tmp.close()
 
-        # Construct and validate path inline (CodeQL-recognized sanitizer pattern)
-        csv_path = os.path.realpath(os.path.join(DATA_DIR, "uploads", safe_id, safe_name))
-        if not csv_path.startswith(DATA_DIR + os.sep):
-            raise HTTPException(status_code=400, detail="Invalid path")
-
-        result = read_csv_preview(csv_path, req.converter_type)
+        result = read_csv_preview(tmp.name, req.converter_type)
         return result
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="CSV file not found")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -34,3 +32,6 @@ async def preview(req: PreviewRequest):
     except Exception:
         logger.exception("Preview failed")
         raise HTTPException(status_code=500, detail="Internal preview error")
+    finally:
+        if tmp and os.path.exists(tmp.name):
+            os.unlink(tmp.name)

@@ -25,7 +25,13 @@ XSD_MAP = {
 }
 
 
-@router.post("/validate-xsd")
+@router.post(
+    "/validate-xsd",
+    responses={
+        400: {"description": "Invalid schema type, path, or job ID"},
+        500: {"description": "Internal validation error"},
+    },
+)
 async def validate_xsd(job_id: str, schema_type: str):
     """Validate an already-converted XML file against its XSD schema."""
     xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP.get(schema_type, ""))

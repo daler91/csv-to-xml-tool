@@ -60,6 +60,39 @@ for col in _state_columns:
     TRAINING_CLEANING_MAP.append((col, data_cleaning.standardize_state_name, "standardize_state"))
 
 
+def _is_empty_value(value: str) -> bool:
+    """Check if a cell value is effectively empty."""
+    stripped = str(value).strip()
+    return not value or stripped == "" or stripped.lower() == "nan"
+
+
+def _process_row(row: dict, row_index: int, cleaning_map: list, diffs: list[dict]) -> None:
+    """Apply cleaning functions to a single row and collect diffs."""
+    record_id = (
+        row.get("Contact ID", "") or
+        row.get("Class/Event ID", "") or
+        f"Row_{row_index}"
+    )
+
+    for csv_col, func, cleaning_type in cleaning_map:
+        original = row.get(csv_col, "")
+        if _is_empty_value(original):
+            continue
+
+        original_str = str(original).strip()
+        cleaned = str(func(original_str))
+
+        if cleaned != original_str and cleaned != "":
+            diffs.append({
+                "row": row_index,
+                "record_id": str(record_id),
+                "field": csv_col,
+                "original": original_str,
+                "cleaned": cleaned,
+                "cleaning_type": cleaning_type,
+            })
+
+
 def generate_cleaning_diff(
     csv_path: str,
     converter_type: str,
@@ -88,28 +121,6 @@ def generate_cleaning_diff(
             if rename:
                 row = {rename.get(k, k): v for k, v in row.items()}
 
-            record_id = (
-                row.get("Contact ID", "") or
-                row.get("Class/Event ID", "") or
-                f"Row_{row_index}"
-            )
-
-            for csv_col, func, cleaning_type in cleaning_map:
-                original = row.get(csv_col, "")
-                if not original or str(original).strip() == "" or str(original).lower() == "nan":
-                    continue
-
-                original_str = str(original).strip()
-                cleaned = str(func(original_str))
-
-                if cleaned != original_str and cleaned != "":
-                    diffs.append({
-                        "row": row_index,
-                        "record_id": str(record_id),
-                        "field": csv_col,
-                        "original": original_str,
-                        "cleaned": cleaned,
-                        "cleaning_type": cleaning_type,
-                    })
+            _process_row(row, row_index, cleaning_map, diffs)
 
     return diffs

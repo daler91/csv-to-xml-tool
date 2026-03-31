@@ -71,9 +71,9 @@ function ConvertForm() {
         )}
 
         <div>
-          <label className="block text-sm font-medium mb-2">
+          <span className="block text-sm font-medium mb-2">
             Converter Type
-          </label>
+          </span>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -99,8 +99,10 @@ function ConvertForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">CSV File</label>
+          <label htmlFor="file-input" className="block text-sm font-medium mb-2">CSV File</label>
           <div
+            role="button"
+            tabIndex={0}
             className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
@@ -109,6 +111,12 @@ function ConvertForm() {
               if (dropped?.name.endsWith(".csv")) setFile(dropped);
             }}
             onClick={() => document.getElementById("file-input")?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                document.getElementById("file-input")?.click();
+              }
+            }}
           >
             <input
               id="file-input"

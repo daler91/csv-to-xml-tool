@@ -75,9 +75,9 @@ export default function ReuploadPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">
+          <span className="block text-sm font-medium mb-1">
             Converter Type
-          </label>
+          </span>
           <p className="text-sm text-gray-600 bg-gray-50 border rounded px-3 py-2">
             {converterType === "counseling"
               ? "Counseling (Form 641)"
@@ -86,10 +86,11 @@ export default function ReuploadPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">
+          <label htmlFor="reupload-file" className="block text-sm font-medium mb-1">
             Updated CSV File
           </label>
           <input
+            id="reupload-file"
             type="file"
             accept=".csv"
             onChange={(e) => setFile(e.target.files?.[0] || null)}

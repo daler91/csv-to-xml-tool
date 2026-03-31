@@ -158,7 +158,6 @@ Change#		Date		Author			Modification
 	<xs:element name="CounselingInformation">
 		<xs:complexType>
 			<xs:sequence>
-				<!--  <xs:element name="Version"/> -->
 				<xs:element name="CounselingRecord" type="CounselingInformationType" maxOccurs="unbounded"/>
 			</xs:sequence>
 			
@@ -193,64 +192,6 @@ Change#		Date		Author			Modification
 					</xs:choice>
 				</xs:complexType>
 			</xs:element>
-			<!-- <xs:element name="ResourcePartnerType">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							Type of Resource Partner		
-									
-							SBDC		
-							WBC				
-							SCORE			
-                       	</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:string">
-						<xs:enumeration value="SBDC"/>
-						<xs:enumeration value="WBC"/>
-						<xs:enumeration value="SCORE"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element>
-			 <xs:element name="ClientType">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							Type of client		value
-							
-							Face-to-Face		1
-							Online				2
-							Telephone			3
-                           	Training         	4
-						</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:integer">
-						<xs:enumeration value="1"/>
-						<xs:enumeration value="2"/>
-						<xs:enumeration value="3"/>
-            			<xs:enumeration value="4"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element> -->
-			<!-- <xs:element name="ClientType">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							Type of client		
-									
-							Face-to-Face		
-							Online				
-							Telephone			
-                           	Training         	
-						</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:string">
-						<xs:enumeration value="Face-to-Face"/>
-						<xs:enumeration value="Online"/>
-						<xs:enumeration value="Telephone"/>
-            			<xs:enumeration value="Training"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element> -->
 			<!-- Part 1: Client Request for Counseling -->
 			<xs:element name="ClientRequest" minOccurs="0">
 				<xs:complexType>
@@ -265,221 +206,9 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="Fax" type="PhoneType" minOccurs="0"/> -->
 						<xs:element name="AddressPart1" type="AddressType"/>
 						<xs:element name="SurveyAgreement" type="YesNoType"/>
-		<!-- 	 <xs:element name="PreferredAppointment" minOccurs="0">
-							<xs:complexType>
-								<xs:sequence>
-									
-									<xs:element name="Date" type="xs:date"/>
-									<xs:element name="Time">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Time slots										
-																				
-													5:00 AM
-													5:15 AM
-													5:30 AM
-													5:45 AM
-													6:00 AM
-													6:15 AM
-													6:30 AM
-													6:45 AM
-													7:00 AM
-													7:15 AM
-													7:30 AM
-													7:45 AM
-													8:00 AM
-													8:15 AM
-													8:30 AM
-													8:45 AM
-													9:00 AM
-													9:15 AM
-													9:30 AM
-													9:45 AM
-													10:00 AM
-													10:15 AM
-													10:30 AM
-													10:45 AM
-													11:00 AM
-													11:15 AM
-													11:30 AM
-													11:45 AM
-													12:00 PM
-													12:15 PM
-													12:30 PM
-													12:45 PM
-													1:00 PM
-													1:15 PM
-													1:30 PM
-													1:45 PM
-													2:00 PM
-													2:15 PM
-													2:30 PM
-													2:45 PM
-													3:00 PM
-													3:15 PM
-													3:30 PM
-													3:45 PM
-													4:00 PM
-													4:15 PM
-													4:30 PM
-													4:45 PM
-													5:00 PM
-													5:15 PM
-													5:30 PM
-													5:45 PM
-													6:00 PM
-													6:15 PM
-													6:30 PM
-													6:45 PM
-													7:00 PM
-													7:15 PM
-													7:30 PM
-													7:45 PM
-													8:00 PM
-													8:15 PM
-													8:30 PM
-													8:45 PM
-													9:00 PM
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:string">
-												<xs:enumeration value="5:00 AM"/>
-												<xs:enumeration value="5:15 AM"/>
-												<xs:enumeration value="5:30 AM"/>
-												<xs:enumeration value="5:45 AM"/>
-												<xs:enumeration value="6:00 AM"/>
-												<xs:enumeration value="6:15 AM"/>
-												<xs:enumeration value="6:30 AM"/>
-												<xs:enumeration value="6:45 AM"/>
-												<xs:enumeration value="7:00 AM"/>
-												<xs:enumeration value="7:15 AM"/>
-												<xs:enumeration value="7:30 AM"/>
-												<xs:enumeration value="7:45 AM"/>
-												<xs:enumeration value="8:00 AM"/>
-												<xs:enumeration value="8:15 AM"/>
-												<xs:enumeration value="8:30 AM"/>
-												<xs:enumeration value="8:45 AM"/>
-												<xs:enumeration value="9:00 AM"/>
-												<xs:enumeration value="9:15 AM"/>
-												<xs:enumeration value="9:30 AM"/>
-												<xs:enumeration value="9:45 AM"/>
-												<xs:enumeration value="10:00 AM"/>
-												<xs:enumeration value="10:15 AM"/>
-												<xs:enumeration value="10:30 AM"/>
-												<xs:enumeration value="10:45 AM"/>
-												<xs:enumeration value="11:00 AM"/>
-												<xs:enumeration value="11:15 AM"/>
-												<xs:enumeration value="11:30 AM"/>
-												<xs:enumeration value="11:45 AM"/>
-												<xs:enumeration value="12:00 PM"/>
-												<xs:enumeration value="12:15 PM"/>
-												<xs:enumeration value="12:30 PM"/>
-												<xs:enumeration value="12:45 PM"/>
-												<xs:enumeration value="1:00 PM"/>
-												<xs:enumeration value="1:15 PM"/>
-												<xs:enumeration value="1:30 PM"/>
-												<xs:enumeration value="1:45 PM"/>
-												<xs:enumeration value="2:00 PM"/>
-												<xs:enumeration value="2:15 PM"/>
-												<xs:enumeration value="2:30 PM"/>
-												<xs:enumeration value="2:45 PM"/>
-												<xs:enumeration value="3:00 PM"/>
-												<xs:enumeration value="3:15 PM"/>
-												<xs:enumeration value="3:30 PM"/>
-												<xs:enumeration value="3:45 PM"/>
-												<xs:enumeration value="4:00 PM"/>
-												<xs:enumeration value="4:15 PM"/>
-												<xs:enumeration value="4:30 PM"/>
-												<xs:enumeration value="4:45 PM"/>
-												<xs:enumeration value="5:00 PM"/>
-												<xs:enumeration value="5:15 PM"/>
-												<xs:enumeration value="5:30 PM"/>
-												<xs:enumeration value="5:45 PM"/>
-												<xs:enumeration value="6:00 PM"/>
-												<xs:enumeration value="6:15 PM"/>
-												<xs:enumeration value="6:30 PM"/>
-												<xs:enumeration value="6:45 PM"/>
-												<xs:enumeration value="7:00 PM"/>
-												<xs:enumeration value="7:15 PM"/>
-												<xs:enumeration value="7:30 PM"/>
-												<xs:enumeration value="7:45 PM"/>
-												<xs:enumeration value="8:00 PM"/>
-												<xs:enumeration value="8:15 PM"/>
-												<xs:enumeration value="8:30 PM"/>
-												<xs:enumeration value="8:45 PM"/>
-												<xs:enumeration value="9:00 PM"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element>
-									<xs:element name="TimeZone" minOccurs="0">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													TimeZones										
-																					
-													(Arabic) Egypt Standard Time (ART)
-													Alaska Standard Time (AST)
-													Australia Central Time (ACT)
-													Australia Eastern Time (AET)
-													Bangladesh Standard Time (BST)
-													China Taiwan Time (CTT)
-													Eastern African Time (EAT)
-													Eastern European Time (EET)
-													European Central Time (ECT)
-													Greenwich Mean Time (GMT)
-													Hawaii Standard Time (HST)
-													India Standard Time (IST)
-													Japan Standard Time (JST)
-													Middle East Time (MET)
-													Midway Islands Time (MIT)
-													Mountain Standard Time (MST)
-													Near East Time (NET)
-													New Zealand Standard Time (NST)
-													Pacific Standard Time (PST)
-													Pakistan Lahore Time (PLT)
-													Phoenix Standard Time (PNT)
-													Solomon Standard Time (SST)
-													Universal Coordinated Time (UTC)
-													Vietnam Standard Time (VST)
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:string">
-												<xs:enumeration value="(Arabic) Egypt Standard Time (ART)"/>
-												<xs:enumeration value="Alaska Standard Time (AST)"/>
-												<xs:enumeration value="Australia Central Time (ACT)"/>
-												<xs:enumeration value="Australia Eastern Time (AET)"/>
-												<xs:enumeration value="Bangladesh Standard Time (BST)"/>
-												<xs:enumeration value="China Taiwan Time (CTT)"/>
-												<xs:enumeration value="Eastern African Time (EAT)"/>
-												<xs:enumeration value="Eastern European Time (EET)"/>
-												<xs:enumeration value="European Central Time (ECT)"/>
-												<xs:enumeration value="Greenwich Mean Time (GMT)"/>
-												<xs:enumeration value="Hawaii Standard Time (HST)"/>
-												<xs:enumeration value="India Standard Time (IST)"/>
-												<xs:enumeration value="Japan Standard Time (JST)"/>
-												<xs:enumeration value="Middle East Time (MET)"/>
-												<xs:enumeration value="Midway Islands Time (MIT)"/>
-												<xs:enumeration value="Mountain Standard Time (MST)"/>
-												<xs:enumeration value="Near East Time (NET)"/>
-												<xs:enumeration value="New Zealand Standard Time (NST)"/>
-												<xs:enumeration value="Pacific Standard Time (PST)"/>
-												<xs:enumeration value="Pakistan Lahore Time (PLT)"/>
-												<xs:enumeration value="Phoenix Standard Time (PNT)"/>
-												<xs:enumeration value="Solomon Standard Time (SST)"/>
-												<xs:enumeration value="Universal Coordinated Time (UTC)"/>
-												<xs:enumeration value="Vietnam Standard Time (VST)"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element>
-									</xs:sequence>
-							</xs:complexType>
-						</xs:element>   -->
-				
-						<xs:element name="ClientSignature">
+<xs:element name="ClientSignature">
 							<xs:complexType>
 								<xs:sequence>
 									<xs:element name="Date" type="xs:date" minOccurs="0"/>
@@ -494,30 +223,6 @@ Change#		Date		Author			Modification
 			<xs:element name="ClientIntake" minOccurs="0">
 				<xs:complexType>
 					<xs:sequence>
-						<!-- <xs:element name="Race" maxOccurs="5">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-										Race										Value
-										
-										Black or African American					0
-										American Indian or Alaska Native			2
-										Asian										4
-										Unknown/Not Stated							6
-										White										7
-										Native Hawaiian or Other Pacific Islander	9
-									</xs:documentation>
-								</xs:annotation>
-								<xs:restriction base="xs:integer">
-									<xs:enumeration value="0"/>
-									<xs:enumeration value="2"/>
-									<xs:enumeration value="4"/>
-									<xs:enumeration value="6"/>
-									<xs:enumeration value="7"/>
-									<xs:enumeration value="9"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
 						<xs:element name="Race">
 							<xs:complexType>
 								<xs:sequence>
@@ -556,24 +261,6 @@ Change#		Date		Author			Modification
 							</xs:complexType>
 							</xs:element>
 						
-						<!-- <xs:element name="Ethnicity">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-										Ethnicity					Value
-										
-										Not Hispanic or Latino			HN
-										Hispanic or Latino				HY
-										Unknown/Not Stated				UN
-									</xs:documentation>
-								</xs:annotation>
-								<xs:restriction base="xs:string">
-									<xs:enumeration value="HN"/>
-									<xs:enumeration value="HY"/>
-									<xs:enumeration value="UN"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
 						<xs:element name="Ethnicity" minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
@@ -593,7 +280,6 @@ Change#		Date		Author			Modification
 							</xs:simpleType>
 						</xs:element>
 		
-				
 						<xs:element name="Sex" minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
@@ -629,36 +315,6 @@ Change#		Date		Author			Modification
 								</xs:restriction>
 							</xs:simpleType>
 						</xs:element>
-						<!-- <xs:element name="MilitaryStatus">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-										Military										Value
-										
-										Member of Reserve or National Guard				1
-										On Active Duty									2
-										Unknown/Not Stated								3
-										Veteran											4
-										Service Disabled Veteran						5
-										Member of National Guard						6
-										Spouse of Military Member						7
-										No military, Reserve,or National Guard service  8
-										Member of the Reserve							9
-									</xs:documentation>
-								</xs:annotation>
-								<xs:restriction base="xs:positiveInteger">
-									<xs:enumeration value="1"/>
-									<xs:enumeration value="2"/>
-									<xs:enumeration value="3"/>
-									<xs:enumeration value="4"/>
-									<xs:enumeration value="5"/>
-									<xs:enumeration value="6"/>
-									<xs:enumeration value="7"/>
-									<xs:enumeration value="8"/>
-									<xs:enumeration value="9"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
 						<xs:element name="MilitaryStatus" minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
@@ -717,65 +373,7 @@ Change#		Date		Author			Modification
 						<xs:element name="Media" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code" maxOccurs="13">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Media									Value
-													
-													SBA										1
-													Bank									2
-													Business Owner							3
-													Television/Radio						4
-													Other Client							5
-													Magazine								6
-													Internet								7
-													Newspaper								8	
-													Chamber of Commerce						9
-													Educational Institution					10
-													Local Economic Development Official		11
-													Word of Mouth							12
-													SBA Website								13
-													Small Business Development Center		14
-													US Export Assistance Center				15
-													SCORE Chapter							16
-													Women's Business Center					17
-													Magazines or Newspapers					18
-													VBOC									19
-													Boots to Business						20
-													Unknown/Not Stated						98
-													Other									99
-																										
-													Note: If media is "Other" (99), please specify it.
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:positiveInteger">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="5"/>
-												<xs:enumeration value="6"/>
-												<xs:enumeration value="7"/>
-												<xs:enumeration value="8"/>
-												<xs:enumeration value="9"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="11"/>
-												<xs:enumeration value="12"/>
-												<xs:enumeration value="13"/>
-												<xs:enumeration value="14"/>
-												<xs:enumeration value="15"/>
-												<xs:enumeration value="16"/>
-												<xs:enumeration value="17"/>
-												<xs:enumeration value="18"/>
-												<xs:enumeration value="19"/>
-												<xs:enumeration value="20"/>
-												<xs:enumeration value="98"/>
-												<xs:enumeration value="99"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code" maxOccurs="13">
+<xs:element name="Code" maxOccurs="13">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -802,7 +400,6 @@ Change#		Date		Author			Modification
 													Other Client
 													Other
 													
-																										
 													Note: If media is "Other", please specify it.
 												</xs:documentation>
 											</xs:annotation>
@@ -827,8 +424,7 @@ Change#		Date		Author			Modification
 												<xs:enumeration value="Word of Mouth"/>
 												<xs:enumeration value="Other Client"/>
 												<xs:enumeration value="Other"/>
-												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
-											</xs:restriction>
+</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
 									<xs:element name="Other" type="String80Type" minOccurs="0"/>
@@ -839,59 +435,7 @@ Change#		Date		Author			Modification
 						<xs:element name="CurrentlyInBusiness" type="YesNoUndeterminedType"/>
 						<xs:element name="CurrentlyExporting" type="YesNoType" minOccurs="0"/>
 						<xs:element name="CompanyName" type="String80Type" minOccurs="0"/>
-						<!-- <xs:element name="BusinessType" minOccurs="0">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-										Type of business																	Value
-										
-										Agriculture, Forestry, Fishing and Hunting											11
-										Mining																				21
-										Utilities																			22
-										Construction																		23
-										Manufacturing																		31
-										Wholesale Trade																		42
-										Retail Trade																		44
-										Transportation and Warehousing														48
-										Information																			51
-										Finance and Insurance																52
-										Real Estate and Rental and Leasing													53
-										Professional, Scientific, and Technical Services									54
-										Management of Companies and Enterprises												55
-										Waste Management and Remediation/Administrative and Support							56
-										Educational Services																61
-										Health Care and Social Assistance													62
-										Arts, Entertainment, and Recreation													71
-										Accommodation and Food Services														72
-										Other Services (except Public Administration)										81
-										Public Administration																92
-									</xs:documentation>
-								</xs:annotation>
-								<xs:restriction base="xs:integer">
-									<xs:enumeration value="11"/>
-									<xs:enumeration value="21"/>
-									<xs:enumeration value="22"/>
-									<xs:enumeration value="23"/>
-									<xs:enumeration value="31"/>
-									<xs:enumeration value="42"/>
-									<xs:enumeration value="44"/>
-									<xs:enumeration value="48"/>
-									<xs:enumeration value="51"/>
-									<xs:enumeration value="52"/>
-									<xs:enumeration value="53"/>
-									<xs:enumeration value="54"/>
-									<xs:enumeration value="55"/>
-									<xs:enumeration value="56"/>
-									<xs:enumeration value="61"/>
-									<xs:enumeration value="62"/>
-									<xs:enumeration value="71"/>
-									<xs:enumeration value="72"/>
-									<xs:enumeration value="81"/>
-									<xs:enumeration value="92"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
-						<xs:element name="BusinessType" minOccurs="0">
+<xs:element name="BusinessType" minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
 									<xs:documentation>
@@ -948,15 +492,7 @@ Change#		Date		Author			Modification
 						<xs:element name="BusinessOwnership" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Male" minOccurs="0">
-										<xs:simpleType>
-											<xs:restriction base="xs:decimal">
-												<xs:minInclusive value="0.0"/>
-												<xs:maxInclusive value="100.00"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Female" minOccurs="0">
+<xs:element name="Female" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:decimal">
 												<xs:minInclusive value="0.0"/>
@@ -967,48 +503,8 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="BusinessStartDatePart2" minOccurs="0">
-							<xs:complexType>
-								<xs:sequence>
-									<xs:element name="Month" type="xs:gMonth"/>
-									<xs:element name="Month">
-										<xs:simpleType>
-                        					<xs:restriction base="xs:string">
-                            					<xs:pattern value="^(0?[1-9]|1[012])$"/>
-                        					</xs:restriction>
-                        					<xs:restriction base="xs:string">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="5"/>
-												<xs:enumeration value="6"/>
-												<xs:enumeration value="7"/>
-												<xs:enumeration value="8"/>
-												<xs:enumeration value="9"/>
-												<xs:enumeration value="01"/>
-												<xs:enumeration value="02"/>
-												<xs:enumeration value="03"/>
-												<xs:enumeration value="04"/>
-												<xs:enumeration value="05"/>
-												<xs:enumeration value="06"/>
-												<xs:enumeration value="07"/>
-												<xs:enumeration value="08"/>
-												<xs:enumeration value="09"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="11"/>
-												<xs:enumeration value="12"/>
-											</xs:restriction>
-                   						 </xs:simpleType>
-									</xs:element>
-									<xs:element name="Year" type="xs:gYear"/>
-								</xs:sequence>
-							</xs:complexType>
-						</xs:element> -->
-						<!-- <xs:element name="BusinessStartDatePart2" type="xs:date" minOccurs="0"/> -->
-						<xs:element name="ConductingBusinessOnline" type="YesNoType" minOccurs="0"/>
-						<!-- <xs:element name="HomeBasedBusiness" type="YesNoType" minOccurs="0"/> -->
-						<xs:element name="ClientIntake_Certified8a" type="YesNoType" minOccurs="0"/>
+<xs:element name="ConductingBusinessOnline" type="YesNoType" minOccurs="0"/>
+<xs:element name="ClientIntake_Certified8a" type="YesNoType" minOccurs="0"/>
 						<xs:element name="Employee_Owned" type="YesNoType" minOccurs="0"/>
 						<xs:element name="TotalNumberOfEmployees" type="PositiveDecimalType" minOccurs="0"/>
 						<xs:element name="NumberOfEmployeesInExportingBusiness" type="PositiveDecimalType" minOccurs="0"/>
@@ -1046,31 +542,7 @@ Change#		Date		Author			Modification
 						<xs:element name="LegalEntity" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code" maxOccurs="6">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Legal	Entity						Value
-													
-													Sole Proprietorship					1
-													Partnership							2
-													Corporation							3
-													Limited Liability Company(LLC)		4
-													S Corporation						10
-													Other Legal entity					99
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:positiveInteger">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="99"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code" maxOccurs="6">
+<xs:element name="Code" maxOccurs="6">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -1116,70 +588,11 @@ Change#		Date		Author			Modification
    							</xs:restriction>
    						</xs:simpleType>
 					</xs:element>
-<!-- 					<xs:element name="County" type="String255Type" minOccurs="0"/>
- -->						<!-- CounselingSeeking is also known as Nature of Counseling Sought -->
+<!-- CounselingSeeking is also known as Nature of Counseling Sought -->
 						<xs:element name="CounselingSeeking" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Nature of counseling Seeking			Value
-													
-													Start-up Assistance						1
-													Business Plan							2
-													Financing/Capital						3
-													Managing Business						4
-													Human Resources/Managing Employees		5
-													Customer Relations						6
-													Business Accounting/Budget				7
-													Cash Flow Management					8
-													Tax Planning							9
-													Marketing/Sales							10
-													Government Contracting					11
-													Franchising								12
-													Buy/Sell a Business						13
-													Technology/Computers					14
-													eCommerce								15
-													Legal Issues							16
-													International Trade						17
-													COVID-19 Financing/Capital				18
-													COVID-19 General Support				19	
-													Intellectual Property Training          20
-													Unknown/Not Stated						98
-													Other									99
-													
-													Note: if other, please specify it.
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:positiveInteger">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="5"/>
-												<xs:enumeration value="6"/>
-												<xs:enumeration value="7"/>
-												<xs:enumeration value="8"/>
-												<xs:enumeration value="9"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="11"/>
-												<xs:enumeration value="12"/>
-												<xs:enumeration value="13"/>
-												<xs:enumeration value="14"/>
-												<xs:enumeration value="15"/>
-												<xs:enumeration value="16"/>
-												<xs:enumeration value="17"/>
-												<xs:enumeration value="18"/>
-												<xs:enumeration value="19"/>
-												<xs:enumeration value="20"/>
-												<xs:enumeration value="98"/>
-												<xs:enumeration value="99"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code">
+<xs:element name="Code">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -1235,8 +648,7 @@ Change#		Date		Author			Modification
 												<xs:enumeration value="Tax Planning"/>
 												<xs:enumeration value="Technology"/> 
 												<xs:enumeration value="Other"/>
-												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
-											</xs:restriction>
+</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
 									<xs:element name="Other" type="String255Type" minOccurs="0"/>
@@ -1244,9 +656,7 @@ Change#		Date		Author			Modification
 							</xs:complexType>
 						</xs:element>
 						<xs:element name="ExportCountries" type="ExportCountryList"  minOccurs="0"/>
-					<!--  	<xs:element name="ClientActiveInactive" type="ActiveIndicatorType"/> -->
-
-					</xs:sequence>
+</xs:sequence>
 				</xs:complexType>
 			</xs:element>
 			<!-- Part 3: Counselor Record -->
@@ -1255,115 +665,7 @@ Change#		Date		Author			Modification
 					<xs:sequence>
 					<!-- Session Key -->
 						<xs:element name="PartnerSessionNumber" type="String20Type"/>
-						<!-- <xs:element name="FundingSource" minOccurs="0">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-									Type of Funding Source										          value
-									
-									Severe Winter Storm and Flooding (NV)                         		  1738
-                            	    Severe Winter Storm and Flooding (IN)                                 1740  
- 									Severe Storms, Tornadoes, and Flooding (AR)                           1744  
- 									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (TN)      1745  
- 									Severe Storms, Tornadoes, Straight Line Winds, and Flooding (KY)      1746  
- 									Severe Storms, and Flooding (IL)                                      1747  
- 									Severe Storms, and Flooding (MO)                                      1749  
- 									Severe Storms, and Tornadoes (GA)                                     1750  
-									Severe Storms, Tornadoes, and Flooding (AR)                           1751  
- 									Severe Storms, and Flooding (MS)                                      1753  
- 									Severe Storms, Tornadoes, and Flooding (AR)                           1758  
-									Severe Storms, and Tornadoes (MO)                                     1760  
-  							  	    Severe Storms, and Flooding (GA)                                      1761  
-									Severe Storms, and Tornadoes (CO)                                     1762  
- 									Severe Storms, Tornadoes, and Flooding (IA)                           1763  
-									Severe Storms, and Tornadoes (MS)                                     1764  
- 									Severe Storms, and Flooding (IN))                                     1766  
- 									Severe Storms, Tornadoes, and Flooding (WI)                           1768  
-									Severe Storms, Tornadoes, Flooding, Mudslides, and Landslides (WV)    1769  
- 									Severe Storms, Tornadoes, and Flooding (NE)                           1770  
- 									Severe Storms, and Flooding (IL)                                      1771  
-									Severe Storms, and Flooding (MO)                                      1773  
- 									Hurricane Dolly (TX)                                                  1780  
- 									Tropical Storm Fay (FL)                                               1785  
-									Hurricane Gustav (LA)                                                 1786  
-									Hurricane Ike (TX)                                                    1791  
- 									Hurricane Ike (LA)                                                    1792  
- 									Hurricane Gustav (MS)                                                 1794  
-									Severe Storms, and Flooding (IN)                                      1795  
- 									Severe Storms, and Flooding (PR)                                      1798  
- 									Severe Storms, and Flooding (IL)                                      1800  
-									Severe Storms, and Flooding, Tornadoes (MO)                           1809  
- 									Wildfires (CA)                                                        1810  
- 									Energy Efficiency                                                     EN09  
-									Portable Assistance                                                   PA09  
- 									Veterans Assistance                                                   VA09 
-									Hurricane Sandy - Phase 1	                                        SANDY1
-									Hurricane Sandy - Phase 2	                                        SANDY2
-									Portability Assistance 2015	                                        PA1503
-									2016 Portable Assistance											PA1605
-									Small Business Jobs Act 2010										SBJA10
-									2018 Portable Assistance grants										PA1801
-									2017 SCORE USDA Project	17											SUSDA
-									2017 SBDC Portable Assistance Project								PA1703
-									2019 SBDC Portable Assistance										PA1903
- 									CARES Act Funding (COVID19)											CARES
-									2020 SBDC Portable Assistance										PA2003
-									Resiliency and Recovery Demonstration Grant                         CARESRRD
-									</xs:documentation>
-								</xs:annotation>
-							<xs:restriction base="String20Type">
-								<xs:enumeration value="1738"/>
-								<xs:enumeration value="1740"/>
-								<xs:enumeration value="1744"/>
-								<xs:enumeration value="1745"/>
-								<xs:enumeration value="1746"/>
-								<xs:enumeration value="1747"/>
-								<xs:enumeration value="1749"/>
-								<xs:enumeration value="1750"/>
-								<xs:enumeration value="1751"/>
-								<xs:enumeration value="1753"/>
-								<xs:enumeration value="1758"/>
-								<xs:enumeration value="1760"/>
-								<xs:enumeration value="1761"/>
-								<xs:enumeration value="1762"/>
-								<xs:enumeration value="1763"/>
-								<xs:enumeration value="1764"/>
-								<xs:enumeration value="1766"/>
-								<xs:enumeration value="1768"/>
-								<xs:enumeration value="1769"/>
-								<xs:enumeration value="1770"/>
-								<xs:enumeration value="1771"/>
-								<xs:enumeration value="1773"/>
-								<xs:enumeration value="1780"/>
-								<xs:enumeration value="1785"/>
-								<xs:enumeration value="1786"/>
-								<xs:enumeration value="1791"/>
-								<xs:enumeration value="1792"/>
-								<xs:enumeration value="1794"/>
-								<xs:enumeration value="1795"/>
-								<xs:enumeration value="1798"/>
-								<xs:enumeration value="1800"/>
-								<xs:enumeration value="1809"/>
-								<xs:enumeration value="1810"/>
-								<xs:enumeration value="EN09"/>
-								<xs:enumeration value="PA09"/>
-								<xs:enumeration value="VA09"/>
-								<xs:enumeration value="SANDY1"/>
-								<xs:enumeration value="SANDY2"/>
-								<xs:enumeration value="PA1503"/>
-								<xs:enumeration value="PA1605"/>
-								<xs:enumeration value="SBJA10"/>
-								<xs:enumeration value="PA1801"/>
-								<xs:enumeration value="SUSDA"/>
-								<xs:enumeration value="PA1703"/>
-								<xs:enumeration value="PA1903"/>
-								<xs:enumeration value="CARES"/>
-								<xs:enumeration value="PA2003"/>
-								<xs:enumeration value="CARESRRD"/>
-              </xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
-						<xs:element name="FundingSource" minOccurs="0">
+<xs:element name="FundingSource" minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
 									<xs:documentation>
@@ -1464,51 +766,12 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="Fax" type="PhoneType" minOccurs="0"/> -->
-						<xs:element name="AddressPart3" type="AddressType" minOccurs="0"/>
+<xs:element name="AddressPart3" type="AddressType" minOccurs="0"/>
 						<xs:element name="VerifiedToBeInBusiness" type="YesNoUndeterminedType" minOccurs="0"/>
 						<xs:element name="ReportableImpact" type="YesNoType" minOccurs="0"/>
 						<xs:element name="DateOfReportableImpact" type="xs:date" minOccurs="0"/>
 						<xs:element name="CurrentlyExporting" type="YesNoType" minOccurs="0"/>
-						<!-- <xs:element name="BusinessStartDatePart3" minOccurs="0">
-							<xs:complexType>
-								<xs:sequence>
-									<xs:element name="Month" type="xs:gMonth"/>
-									<xs:element name="Month">
-										<xs:simpleType>
-                        					<xs:restriction base="xs:string">
-                            					<xs:pattern value="^(0?[1-9]|1[012])$"/>
-                        					</xs:restriction>
-                        					<xs:restriction base="xs:string">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="5"/>
-												<xs:enumeration value="6"/>
-												<xs:enumeration value="7"/>
-												<xs:enumeration value="8"/>
-												<xs:enumeration value="9"/>
-												<xs:enumeration value="01"/>
-												<xs:enumeration value="02"/>
-												<xs:enumeration value="03"/>
-												<xs:enumeration value="04"/>
-												<xs:enumeration value="05"/>
-												<xs:enumeration value="06"/>
-												<xs:enumeration value="07"/>
-												<xs:enumeration value="08"/>
-												<xs:enumeration value="09"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="11"/>
-												<xs:enumeration value="12"/>
-											</xs:restriction>
-                   						 </xs:simpleType>
-									</xs:element>
-									<xs:element name="Year" type="xs:gYear"/>
-								</xs:sequence>
-							</xs:complexType>
-						</xs:element> -->
-						<xs:element name="BusinessStartDatePart3" type="xs:date" minOccurs="0"/>
+<xs:element name="BusinessStartDatePart3" type="xs:date" minOccurs="0"/>
 						<xs:element name="TotalNumberOfEmployees" type="PositiveSmallIntegerType" minOccurs="0"/> 
 						<xs:element name="NumberOfEmployeesInExportingBusiness" type="PositiveSmallIntegerType" minOccurs="0"/>
 						<xs:element name="ClientAnnualIncomePart3" minOccurs="0">
@@ -1525,8 +788,7 @@ Change#		Date		Author			Modification
 						<xs:element name="ResourcePartnerServiceContributed" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="SBALoanAmount" type="PositiveMoneyType" minOccurs="0"/> -->
-									<xs:element name="SBALoanAmount" minOccurs="0">
+<xs:element name="SBALoanAmount" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:decimal">
 												<xs:minInclusive value="0"/>
@@ -1534,8 +796,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
-									<!-- <xs:element name="NonSBALoanAmount" type="PositiveMoneyType" minOccurs="0"/> -->
-									<xs:element name="NonSBALoanAmount" minOccurs="0">
+<xs:element name="NonSBALoanAmount" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:decimal">
 												<xs:minInclusive value="0"/>
@@ -1543,8 +804,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
-									<!-- <xs:element name="EquityCapitalReceived" type="PositiveMoneyType" minOccurs="0"/> -->
-									<xs:element name="EquityCapitalReceived" minOccurs="0">
+<xs:element name="EquityCapitalReceived" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:decimal">
 												<xs:minInclusive value="0"/>
@@ -1552,8 +812,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
-									<!-- <xs:element name="SBALoanAmountTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
-									<xs:element name="SBALoanAmountTxnNmb" minOccurs="0">
+<xs:element name="SBALoanAmountTxnNmb" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:integer">
 												<xs:minInclusive value="0"/>
@@ -1561,8 +820,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 									</xs:element> 
-									<!-- <xs:element name="NonSBALoanAmountTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
-									<xs:element name="NonSBALoanAmountTxnNmb" minOccurs="0">
+<xs:element name="NonSBALoanAmountTxnNmb" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:integer">
 												<xs:minInclusive value="0"/>
@@ -1570,8 +828,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 									</xs:element> 
-									<!-- <xs:element name="EquityCapitalReceivedTxnNmb" type="PositiveSmallIntegerType" minOccurs="0"/> -->
-									<xs:element name="EquityCapitalReceivedTxnNmb" minOccurs="0">
+<xs:element name="EquityCapitalReceivedTxnNmb" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:integer">
 												<xs:minInclusive value="0"/>
@@ -1587,8 +844,7 @@ Change#		Date		Author			Modification
 											</xs:restriction>
 										</xs:simpleType>
 										</xs:element>
-									<!-- <xs:element name="GovernmentContractValue" type="PositiveMoneyType" minOccurs="0"/> -->
-									<xs:element name="GovernmentContractValue" minOccurs="0">
+<xs:element name="GovernmentContractValue" minOccurs="0">
 										<xs:simpleType>
 											<xs:restriction base="xs:decimal">
 												<xs:minInclusive value="0"/>
@@ -1602,29 +858,7 @@ Change#		Date		Author			Modification
 						<xs:element name="Certifications" minOccurs="0">
 										<xs:complexType>
 											<xs:sequence>
-												<!-- <xs:element name="Code" maxOccurs="unbounded">
-													<xs:simpleType>
-														<xs:annotation>
-															<xs:documentation>
-																Name of Certification		Value
-																
-																8(a)						1
-																Hubzones					2
-																SDB							3
-																Other						99
-																
-																Note: if other, please specify it.
-															</xs:documentation>
-														</xs:annotation>
-														<xs:restriction base="xs:positiveInteger">
-															<xs:enumeration value="1"/>
-															<xs:enumeration value="2"/>
-															<xs:enumeration value="3"/>
-															<xs:enumeration value="99"/>
-														</xs:restriction>
-													</xs:simpleType>
-												</xs:element> -->
-												<xs:element name="Code" maxOccurs="unbounded">
+<xs:element name="Code" maxOccurs="unbounded">
 													<xs:simpleType>
 														<xs:annotation>
 															<xs:documentation>
@@ -1660,41 +894,7 @@ Change#		Date		Author			Modification
 						<xs:element name="SBAFinancialAssistance" minOccurs="0">
 										<xs:complexType>
 											<xs:sequence>
-												<!-- <xs:element name="Code" maxOccurs="unbounded">
-													<xs:simpleType>
-														<xs:annotation>
-															<xs:documentation>
-																Name of Certification						Value
-																
-																Micro Loan									2
-																Export Express								3					
-																Export Working Capital						4
-																Community Advantage							5
-																SBIR										6
-																Other(SBIR, SBIC, 7(a) 504, etc)			99
-																State/Local COVID-19 Loans or Grants		10
-																Payroll Protection Program (PPP)			7
-																Economic Impact Disaster Loan (EIDL)		8
-																Other SBA Disaster Loan for COVID-19		9
-																
-																Note: if other, please specify it.
-															</xs:documentation>
-														</xs:annotation>
-														<xs:restriction base="xs:positiveInteger">															
-															<xs:enumeration value="2"/>
-															<xs:enumeration value="3"/>
-															<xs:enumeration value="4"/>
-															<xs:enumeration value="5"/>
-															<xs:enumeration value="6"/>
-															<xs:enumeration value="99"/>
-															<xs:enumeration value="10"/>
-															<xs:enumeration value="7"/>
-															<xs:enumeration value="8"/>
-															<xs:enumeration value="9"/>
-														</xs:restriction>
-													</xs:simpleType>
-												</xs:element> -->
-												<xs:element name="Code" maxOccurs="unbounded">
+<xs:element name="Code" maxOccurs="unbounded">
 													<xs:simpleType>
 														<xs:annotation>
 															<xs:documentation>
@@ -1710,7 +910,6 @@ Change#		Date		Author			Modification
 																State/Local COVID-19 Loans or Grants
 																Other(SBIR, SBIC, 7(a) 504, etc)
 		
-																																
 																Note: if other, please specify it.
 															</xs:documentation>
 														</xs:annotation>
@@ -1720,8 +919,7 @@ Change#		Date		Author			Modification
 															<xs:enumeration value="Export Express"/>
 															<xs:enumeration value="Export Working Capital"/>												
 															<xs:enumeration value="Micro Loan"/>
-													<!-- 		<xs:enumeration value="Payroll Protection Program (PPP)"/> -->
-															<xs:enumeration value="SBIR"/>
+<xs:enumeration value="SBIR"/>
 															<xs:enumeration value="State/Local COVID-19 Loans or Grants"/>
 															<xs:enumeration value="Other(SBIR, SBIC, 7(a) 504, etc)"/>
 														</xs:restriction>
@@ -1734,65 +932,7 @@ Change#		Date		Author			Modification
 						<xs:element name="CounselingProvided"  minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Nature of your counseling provided		Value
-													
-													Start-up Assistance						1
-													Business Plan							2
-													Financing/Capital						3
-													Managing Business						4
-													Human Resources/Managing Employees		5
-													Customer Relations						6
-													Business Accounting/Budget				7
-													Cash Flow Management					8
-													Tax Planning							9
-													Marketing/Sales							10
-													Government Contracting					11
-													Franchising								12
-													Buy/Sell a Business						13
-													Technology/Computers					14
-													eCommerce								15
-													Legal Issues							16
-													International Trade						17
-													COVID-19 Financing/Capital				18
-													COVID-19 General Support				19
-													Intellectual Property Training          20
-													Unknown/Not Stated						98
-													Other									99
-																									
-													Note: if other, please specify it.
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:positiveInteger">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-												<xs:enumeration value="4"/>
-												<xs:enumeration value="5"/>
-												<xs:enumeration value="6"/>
-												<xs:enumeration value="7"/>
-												<xs:enumeration value="8"/>
-												<xs:enumeration value="9"/>
-												<xs:enumeration value="10"/>
-												<xs:enumeration value="11"/>
-												<xs:enumeration value="12"/>
-												<xs:enumeration value="13"/>
-												<xs:enumeration value="14"/>
-												<xs:enumeration value="15"/>
-												<xs:enumeration value="16"/>
-												<xs:enumeration value="17"/>
-												<xs:enumeration value="18"/>
-												<xs:enumeration value="19"/>
-												<xs:enumeration value="20"/>
-												<xs:enumeration value="98"/>
-												<xs:enumeration value="99"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code">
+<xs:element name="Code">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -1848,8 +988,7 @@ Change#		Date		Author			Modification
 												<xs:enumeration value="Tax Planning"/>
 												<xs:enumeration value="Technology"/>
 												<xs:enumeration value="Other"/>
-												<!-- <xs:enumeration value="Unknown/Not Stated"/> -->
-											</xs:restriction>
+</xs:restriction>
 										</xs:simpleType>
 									</xs:element>
 									<xs:element name="Other" type="String255Type" minOccurs="0"/>
@@ -1859,57 +998,7 @@ Change#		Date		Author			Modification
 						<xs:element name="ReferredClient" minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code" maxOccurs="unbounded">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Referred Client Type	                    Value
-													
-													U.S. Trade And Development Agency	   		USTDA
-													Women's Business Center			    		WBC
-													SCORE Chapter				    			SCORE
-													Small Business Development Center	   		SBDC			
-													SBA District Office 			   			SBADO
-													US Export Assistance Center		    		USEAC
-													State Trade Agency       	            	STA
-													Export/Import Bank	         	    		EIB
-													Overseas Private Investment Corporation     OPIC
-													Department of Agriculture		    		DOA
-													Department of Commerce			    		DOC
-													Department of State			    			DOS
-													Other					    				Other
-													Veterans Business Outreach Center	    	VBOC
-													Procurement Technical Assistance Center	    PTAC
-													SBA Disaster Assistance						SBADA
-													State/Local COVID-19 Assistance				LOCAL
-													SBA Capital Access (PPP)					SBACA
-													
-
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:string">
-												<xs:enumeration value="USTDA"/>
-												<xs:enumeration value="WBC"/>
-												<xs:enumeration value="SCORE"/>
-												<xs:enumeration value="SBDC"/>
-												<xs:enumeration value="SBADO"/>
-												<xs:enumeration value="USEAC"/>
-												<xs:enumeration value="STA"/>
-												<xs:enumeration value="EIB"/>
-												<xs:enumeration value="OPIC"/>
-												<xs:enumeration value="DOA"/>
-												<xs:enumeration value="DOC"/>
-												<xs:enumeration value="DOS"/>
-												<xs:enumeration value="OTH"/>
-												<xs:enumeration value="VBOC"/>
-												<xs:enumeration value="PTAC"/>
-												<xs:enumeration value="SBADA"/>
-												<xs:enumeration value="LOCAL"/>
-												<xs:enumeration value="SBACA"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code" maxOccurs="unbounded">
+<xs:element name="Code" maxOccurs="unbounded">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -1934,7 +1023,6 @@ Change#		Date		Author			Modification
 													Women's Business Center
 													Other					
 													
-
 												</xs:documentation>
 											</xs:annotation>
 											<xs:restriction base="xs:string">
@@ -1963,31 +1051,7 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="SessionType">
-							<xs:simpleType>
-								<xs:annotation>
-									<xs:documentation>
-										Type of session		Value
-										
-										Face-to-face		1
-										Online				2
-										Telephone			3
-										Prepare Only		4
-										Update Only			5
-										Training            6
-									</xs:documentation>
-								</xs:annotation>
-								<xs:restriction base="xs:integer">
-									<xs:enumeration value="1"/>
-									<xs:enumeration value="2"/>
-									<xs:enumeration value="3"/>
-									<xs:enumeration value="4"/>
-									<xs:enumeration value="5"/>
-									<xs:enumeration value="6"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> -->
-						<xs:element name="SessionType"  minOccurs="0">
+<xs:element name="SessionType"  minOccurs="0">
 							<xs:simpleType>
 								<xs:annotation>
 									<xs:documentation>
@@ -2015,25 +1079,7 @@ Change#		Date		Author			Modification
 						<xs:element name="Language"  minOccurs="0">
 							<xs:complexType>
 								<xs:sequence>
-									<!-- <xs:element name="Code" maxOccurs="unbounded">
-										<xs:simpleType>
-											<xs:annotation>
-												<xs:documentation>
-													Language				Value
-													
-													English					1
-													Spanish					2
-													Other 					3
-												</xs:documentation>
-											</xs:annotation>
-											<xs:restriction base="xs:integer">
-												<xs:enumeration value="1"/>
-												<xs:enumeration value="2"/>
-												<xs:enumeration value="3"/>
-											</xs:restriction>
-										</xs:simpleType>
-									</xs:element> -->
-									<xs:element name="Code" maxOccurs="unbounded">
+<xs:element name="Code" maxOccurs="unbounded">
 										<xs:simpleType>
 											<xs:annotation>
 												<xs:documentation>
@@ -2108,8 +1154,7 @@ Change#		Date		Author			Modification
 												<xs:enumeration value="Croatian"/>
 												<xs:enumeration value="Czech"/>
 												<xs:enumeration value="Farsi"/>
-												<!-- <xs:enumeration value="Filipino"/> -->
-												<xs:enumeration value="Finnish"/>
+<xs:enumeration value="Finnish"/>
 												<xs:enumeration value="French"/>
 												<xs:enumeration value="Fukien"/>
 												<xs:enumeration value="Galician"/>
@@ -2150,28 +1195,7 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="History">
-							<xs:simpleType>
-								<xs:restriction base="xs:integer">
-									<xs:annotation>
-										<xs:documentation>
-											History					Value
-											
-											New Case				1
-											Follow-up				2
-											Case Close Out			3
-											One Time				4
-										</xs:documentation>
-									</xs:annotation>
-									<xs:enumeration value="1"/>
-									<xs:enumeration value="2"/>
-									<xs:enumeration value="3"/>
-									<xs:enumeration value="4"/>
-								</xs:restriction>
-							</xs:simpleType>
-						</xs:element> 
-						-->
-						<xs:element name="DateCounseled" type="xs:date" minOccurs="0"/>
+<xs:element name="DateCounseled" type="xs:date" minOccurs="0"/>
 						<xs:element name="CounselorName" type="String80Type"  minOccurs="0"/>
 						<xs:element name="CounselingHours" minOccurs="0">
 							<xs:complexType>
@@ -2182,16 +1206,7 @@ Change#		Date		Author			Modification
 								</xs:sequence>
 							</xs:complexType>
 						</xs:element>
-						<!-- <xs:element name="MoreThanOneCounselorAttend" minOccurs="0">
-							<xs:complexType>
-								<xs:sequence>
-									<xs:element name="Answer" type="YesNoType" minOccurs="0"/>
-									<xs:element name="NumberOfCounselors" type="String80Type" minOccurs="0"/>
-								</xs:sequence>
-							</xs:complexType>
-						</xs:element> -->
-						<!-- <xs:element name="NumberOfCounselors" type="String80Type" minOccurs="0" default="1"/> -->
-						<xs:element name="CounselorNotes" minOccurs="0">
+<xs:element name="CounselorNotes" minOccurs="0">
 							<xs:simpleType>
 								<xs:restriction base="xs:string">
 									<xs:maxLength value="1000"/>
@@ -2199,9 +1214,7 @@ Change#		Date		Author			Modification
 							</xs:simpleType>
 						</xs:element>
 						<xs:element name="ExportCountries" type="ExportCountryList" minOccurs="0"/>
-					<!-- 	<xs:element name="ClientActiveInactive" type="ActiveIndicatorType"/> -->
-					
-			            <xs:element name="TrainingSession" minOccurs="0">
+<xs:element name="TrainingSession" minOccurs="0">
                             <xs:complexType>
                                 <xs:sequence>
                                 	<xs:element name="DateTrainingStarted" type="xs:date" minOccurs="0"/>
@@ -2275,137 +1288,7 @@ Change#		Date		Author			Modification
 					</xs:restriction>
 				</xs:simpleType>
 			</xs:element>
-			<!-- <xs:element name="State" minOccurs="0">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							State Name				State Code
-							
-							Alaska					AK
-							Alabama					AL
-							Arkansas				AR
-							American Samoa			AS
-							Arizona					AZ
-							California				CA
-							Colorado				CO
-							Connecticut				CT
-							Dist. of Columbia		DC
-							Delaware				DE
-							Florida					FL
-							Micronesia				FM
-							Georgia					GA
-							Guam					GU
-							Hawaii					HI
-							Iowa					IA
-							Idaho					ID
-							Illinois				IL
-							Indiana					IN
-							Kansas					KS
-							Kentucky				KY
-							Louisiana				LA
-							Massachusetts			MA
-							Maryland				MD
-							Maine					ME
-							Marshall Islands		MH
-							Michigan				MI
-							Minnesota				MN
-							Missouri				MO
-							N Mariana Islands		MP
-							Mississippi				MS
-							Montana					MT
-							North Carolina			NC
-							North Dakota			ND
-							Nebraska				NE
-							New Hampshire			NH
-							New Jersey				NJ
-							New Mexico				NM
-							Nevada					NV
-							New York				NY
-							Ohio					OH
-							Oklahoma				OK
-							Oregon					OR
-							Pennsylvania			PA
-							Puerto Rico				PR
-							Palau					PW
-							Rhode Island			RI
-							South Carolina			SC
-							South Dakota			SD
-							Tennessee				TN
-							Texas					TX
-							Utah					UT
-							Virginia				VA
-							Virgin Island			VI
-							Vermont					VT
-							Washington				WA
-							Wisconsin				WI
-							West Virginia			WV
-							Wyoming					WY
-						</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:string">
-						<xs:enumeration value="AK"/>
-						<xs:enumeration value="AL"/>
-						<xs:enumeration value="AR"/>
-						<xs:enumeration value="AS"/>
-						<xs:enumeration value="AZ"/>
-						<xs:enumeration value="CA"/>
-						<xs:enumeration value="CO"/>
-						<xs:enumeration value="CT"/>
-						<xs:enumeration value="DC"/>
-						<xs:enumeration value="DE"/>
-						<xs:enumeration value="FL"/>
-						<xs:enumeration value="FM"/>
-						<xs:enumeration value="GA"/>
-						<xs:enumeration value="GU"/>
-						<xs:enumeration value="HI"/>
-						<xs:enumeration value="IA"/>
-						<xs:enumeration value="ID"/>
-						<xs:enumeration value="IL"/>
-						<xs:enumeration value="IN"/>
-						<xs:enumeration value="KS"/>
-						<xs:enumeration value="KY"/>
-						<xs:enumeration value="LA"/>
-						<xs:enumeration value="MA"/>
-						<xs:enumeration value="MD"/>
-						<xs:enumeration value="ME"/>
-						<xs:enumeration value="MH"/>
-						<xs:enumeration value="MI"/>
-						<xs:enumeration value="MN"/>
-						<xs:enumeration value="MO"/>
-						<xs:enumeration value="MP"/>
-						<xs:enumeration value="MS"/>
-						<xs:enumeration value="MT"/>
-						<xs:enumeration value="NC"/>
-						<xs:enumeration value="ND"/>
-						<xs:enumeration value="NE"/>
-						<xs:enumeration value="NH"/>
-						<xs:enumeration value="NJ"/>
-						<xs:enumeration value="NM"/>
-						<xs:enumeration value="NV"/>
-						<xs:enumeration value="NY"/>
-						<xs:enumeration value="OH"/>
-						<xs:enumeration value="OK"/>
-						<xs:enumeration value="OR"/>
-						<xs:enumeration value="PA"/>
-						<xs:enumeration value="PR"/>
-						<xs:enumeration value="PW"/>
-						<xs:enumeration value="RI"/>
-						<xs:enumeration value="SC"/>
-						<xs:enumeration value="SD"/>
-						<xs:enumeration value="TN"/>
-						<xs:enumeration value="TX"/>
-						<xs:enumeration value="UT"/>
-						<xs:enumeration value="VA"/>
-						<xs:enumeration value="VI"/>
-						<xs:enumeration value="VT"/>
-						<xs:enumeration value="WA"/>
-						<xs:enumeration value="WI"/>
-						<xs:enumeration value="WV"/>
-						<xs:enumeration value="WY"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element> -->
-			<xs:element name="State" minOccurs="0">
+<xs:element name="State" minOccurs="0">
 				<xs:simpleType>
 					<xs:annotation>
 						<xs:documentation>
@@ -2574,21 +1457,7 @@ Change#		Date		Author			Modification
 			</xs:element>
 		</xs:sequence>
 	</xs:complexType>
-	<!-- <xs:simpleType name="YesNoType">
-		<xs:annotation>
-			<xs:documentation>
-				Value					Meaning
-				
-				Y						Yes
-				N						No
-			</xs:documentation>
-		</xs:annotation>
-		<xs:restriction base="xs:string">
-			<xs:enumeration value="Y"/>
-			<xs:enumeration value="N"/>
-		</xs:restriction>
-	</xs:simpleType> -->
-	<xs:simpleType name="YesNoType">
+<xs:simpleType name="YesNoType">
 		<xs:annotation>
 			<xs:documentation>
 				Value					
@@ -2618,34 +1487,7 @@ Change#		Date		Author			Modification
 			<xs:enumeration value="Undetermined"/>
 		</xs:restriction>
 	</xs:simpleType>
-	<!-- <xs:simpleType name="ActiveIndicatorType">
-		<xs:annotation>
-			<xs:documentation>
-				Value					Meaning
-				
-				A						Activate
-				I						Inactivate
-			</xs:documentation>
-		</xs:annotation>
-		<xs:restriction base="xs:string">
-			<xs:enumeration value="A"/>
-			<xs:enumeration value="I"/>
-		</xs:restriction>
-	</xs:simpleType> 
-	<xs:simpleType name="ActiveIndicatorType">
-		<xs:annotation>
-			<xs:documentation>
-				Value							
-				Activate						
-				Inactivate						
-			</xs:documentation>
-		</xs:annotation>
-		<xs:restriction base="xs:string">
-			<xs:enumeration value="Activate"/>
-			<xs:enumeration value="Inactivate"/>
-		</xs:restriction>
-	</xs:simpleType> -->
-	<xs:simpleType name="String20Type">
+<xs:simpleType name="String20Type">
 		<xs:restriction base="xs:string">
 			<xs:maxLength value="20"/>
 		</xs:restriction>
@@ -2702,513 +1544,7 @@ Change#		Date		Author			Modification
 	</xs:simpleType>
 	<xs:complexType name="ExportCountryList">
 		<xs:sequence>
-			<!-- <xs:element name="Code" minOccurs="0" maxOccurs="unbounded">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							Country Name				Value
-							
-							AFGHNISTAN											AF
-							ALBANIA												AL
-							ALGERIA												DZ          
-							ANGOLA												AO         
-							ANGUILLA											AI           
-							ANTIGUA AND BARBUDA									AG         
-							COOK ISLANDS										CK          
-							COSTA RICA											CR          
-							COTE D'IVOIRE										CI           
-							CROATIA												HR         
-							AZERBAIJAN											AZ          
-							BANGLADESH											BD         
-							BARBADOS											BB          
-							BELARUS												BY    
-							BHUTAN												BT          
-							CAYMAN ISLANDS										KY          
-							CZECH REPUBLIC										CZ          
-							DJIBOUTI											DJ          
-							DOMINICAN REPUBLIC									DO         
-							TIMOR-LESTE											TL           
-							GREECE												GR         
-							HONG KONG											HK         
-							HUNGARY												HU         
-							ICELAND												IS           
-							INDIA												IN          
-							INDONESIA											ID           
-							IRAN, ISLAMIC REPUBLIC OF							IR           
-							IRAQ												IQ          
-							IRELAND												IE           
-							ISRAEL												IL            
-							JAMAICA												JM         
-							JAPAN												JP           
-							JORDAN												JO          
-							KAZAKHSTAN											KZ          
-							KENYA												KE          
-							KIRIBATI											KI           
-							KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF				KP          
-							KOREA, REPUBLIC OF									KR          
-							KUWAIT												KW        
-							KYRGYZSTAN											KG         
-							LAO PEOPLE'S DEMOCRATIC REPUBLIC					LA          
-							LATVIA												LV          
-							LEBANON												LB          
-							LESOTHO												LS           
-							LIBERIA												LR       
-							LIBYAN ARAB JAMAHIRIYA								LY           
-							LIECHTENSTEIN										LI            
-							LITHUANIA											LT           
-							LUXEMBOURG											LU          
-							MACAO												MO       
-							MACEDONIA, THE FORMER YUGOSLAV REPUBLIC OF			MK        
-							MADAGASCAR											MG       
-							MALAWI												MW      
-							MALAYSIA											MY        
-							MALDIVES											MV        
-							MALI												ML         
-							MALTA												MT        
-							MARSHALL ISLANDS									MH        
-							MAURITANIA											MR        
-							MAURITIUS											MU 
-							MEXICO												MX   
-							MICRONESIA, FEDERATED STATES OF						FM        
-							MOLDOVA, REPUBLIC OF								MD  
-							MONACO												MC  
-							MONGOLIA											MN  
-							MONTENEGRO											ME        
-							MONTSERRAT											MS  
-							MOROCCO												MA     
-							MOZAMBIQUE											MZ     
-							NAMIBIA												NA
-							NAURU												NR         
-							NEPAL												NP
-							NETHERLANDS											NL
-							NEW ZEALAND											NZ 
-							NICARAGUA											NI         
-							NIGER												NE         
-							NIGERIA												NG        
-							NORWAY												NO        
-							OMAN												OM       
-							PAKISTAN											PK 
-							PALAU												PW         
-							PANAMA												PA         
-							PAPUA NEW GUINEA									PG          
-							PARAGUAY											PY           
-							PERU												PE           
-							PHILIPPINES											PH         
-							POLAND												PL           
-							PORTUGAL											PT           
-							QATAR												QA          
-							ROMANIA												RO          
-							RUSSIAN FEDERATION									RU          
-							RWANDA												RW         
-							SAMOA												WS        
-							SAO TOME AND PRINCIPE								ST           
-							SAUDI ARABIA										SA           
-							SELL TO FILL-FREIGHT								S1           
-							SENEGAL												SN          
-							SERBIA												RS           
-							SEYCHELLES											SC           
-							SIERRA LEONE										SL            
-							SINGAPORE											SG          
-							SLOVAKIA											SK           
-							SLOVENIA											SI            
-							SOLOMAN ISLANDS										SB           
-							SOMALIA												SO          
-							SOUTHA AFRICA										ZA           
-							SPAIN												ES           
-							SRI LANKA											LK          
-							SAINT KITTS AND NEVIS								KN          
-							SAINT VINCENT AND THE GRENADINES					VC          
-							SUB CONTRACTOR FOR EXPORT							S2           
-							SUDAN												SD           
-							SURINAME											SR           
-							SWAZILAND											SZ           
-							SWEDEN												SE           
-							SWITZERLAND											CH          
-							SYRIAN ARAB REPUBLIC								SY           
-							TAIWAN, PROVINCE OF CHINA							TW         
-							TAJIKISTAN											TJ            
-							TANZANIA, UNITED REPUBLIC OF						TZ           
-							THAILAND											TH           
-							TOGO												TG          
-							TONGA												TO         
-							TRINIDAD AND TOBAGO									TT           
-							TUNISIA												TN          
-							TURKEY												TR           
-							TURKMENISTAN										TM         
-							TUVALU												TV           
-							UGANDA												UG         
-							UKRAINE												UA          
-							UNITED ARAB EMIRATES								AE           
-							UNITED KINGDOM										GB          
-							URUGUAY												UY          
-							UZBEKISTAN											UZ          
-							VANUATU												VU          
-							VATICAN CITY STATE OR HOLY SEE						VA          
-							VENEZUELA, BOLIVARIAN REPUBLIC OF					VE           
-							VIETNAM												VN          
-							VIRGIN ISLANDS, BRITISH								VG          
-							YEMEN												YE           
-							ZAMBIA												ZM         
-							ZIMBABWE											ZW         
-							ALAND ISLANDS										AX          
-							ANDORRA												AD          
-							ANTARCTICA											AQ          
-							BONAIRE, SAINT EUSTATIUS AND SABA					BQ          
-							BOUVET ISLAND										BV          
-							BRITISH INDIAN OCEAN TERRITORY						IO           
-							ARGENTINA											AR          
-							ARMENIA												AM         
-							ARUBA												AW         
-							AUSTRALIA											AU          
-							AUSTRIA												AT           
-							BAHAMAS												BS           
-							BAHRAIN												BH          
-							BELGIUM												BE           
-							BELIZE 												BZ           
-							BENIN												BJ            
-							BERMUDA												BM         
-							BOLIVIA, PLURINATIONAL STATE OF						BO          
-							BOSNIA AND HERZEGOVINA								BA          
-							BOTSWANA											BW         
-							BRAZIL												BR           
-							BRUNEI DARUSSALAM									BN          
-							BULGARIA											BG          
-							BURKINA FASO										BF           
-							MYANMAR OR BURMA									MM       
-							BURUNDI												BI            
-							CAMBODIA											KH          
-							CAMEROON											CM         
-							COMOROS												KM         
-							CONGO												CG          
-							DOMINICA											DM         
-							ERITREA												ER           
-							FIJI												FJ            
-							GABON												GA          
-							GAMBIA												GM        
-							GEORGIA												GE          
-							GERMANY												DE           
-							GHANA												GH          
-							GUATEMALA											GT          
-							GUINEA												GN         
-							CHRISTMAS ISLAND									CX           
-							COCOS(KEELING) ISLAND								CC           
-							CURACAO												CW         
-							FALKLAND ISLANDS(MALVINAS)							FK           
-							FAROE ISLANDS										FO          
-							FRENCH GUIANA										GF          
-							FRENCH POLYNESIA									PF           
-							FRENCH SOUTHERN TERRITORIES							TF           
-							GIBRALTAR											GI           
-							GUADELOUPE											GP          
-							GUERNSEY											GG         
-							HEARD ISLAND AND MCDONALD ISLANDS					HM         
-							ISLE OF MAN											IM          
-							JERSEY												JE            
-							MARTINIQUE											MQ        
-							MAYOTTE												YT           
-							NEW CALEDONIA										NC          
-							NIUE												NU         
-							NORFOLK ISLAND										NF          
-							PALESTINIAN TERRITORY, OCCUPIED						PS           
-							PITCAIRN											PN          
-							REUNION												RE           
-							SAINT BARTHELEMY									BL           
-							SAINT HELENA, ASCENSION AND TRISTAN DA CUNHA	    SH       
-							SAINT LUCIA											LC           
-							SAINT MARTIN(FRENCH PART)							MF         
-							SAINT PIERRE AND MIQUELON							PM         
-							SAN MARINO											SM         
-							SINT MAARTEN(DUTCH PART)							SX           
-							SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS		GS          
-							SVALBARD AND JAN MAYEN								SJ            
-							TOKELAU												TK           
-							TURKS AND CAICOS ISLANDS							TC           
-							WALLIS AND FUTUNA									WF         
-							WESTERN SAHARA										EH           
-							CANADA												CA          
-							CAPE VERDE											CV          
-							CUBA												CU          
-							CYPRUS												CY           
-							CONGO, THE DEMOCRATIC REPUBLIC OF THE				CD          
-							DENMARK												DK          
-							FINLAND												FI            
-							FRANCE												FR           
-							GUINEA-BISSAU										GW        
-							GUYANA												GY          
-							HAITI												HT           
-							HONDURAS											HN          
-							CENTRAL AFRICAN REPUBLIC							CF           
-							CHAD												TD           
-							CHILE												CL           
-							CHINA												CN          
-							COLOMBIA											CO          
-							ECUADOR												EC           
-							EGYPT												EG          
-							EL SALVADOR											SV          
-							EQUATORIAL GUINEA									GQ         
-							ESTONIA												EE           
-							ETHIOPIA											ET           
-							GREENLAND											GL           
-							GRENADA												GD          
-							ITALY												IT            
-							SOUTH SUDAN											SS           
-							OTHER												XX           
-							Sell to fill-freight      						    203 
-							Sub contractor for Exporter   						202 
-						</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:string">
-						<xs:enumeration value="AF"/>
-						<xs:enumeration value="AL"/>
-						<xs:enumeration value="DZ"/>
-						<xs:enumeration value="AO"/>
-						<xs:enumeration value="AI"/>
-						<xs:enumeration value="AG"/>
-						<xs:enumeration value="CK"/>
-						<xs:enumeration value="CR"/>
-						<xs:enumeration value="CI"/>
-						<xs:enumeration value="HR"/>
-						<xs:enumeration value="AZ"/>
-						<xs:enumeration value="BD"/>
-						<xs:enumeration value="BB"/>
-						<xs:enumeration value="BY"/>
-						<xs:enumeration value="BT"/>
-						<xs:enumeration value="KY"/>
-						<xs:enumeration value="CZ"/>
-						<xs:enumeration value="DJ"/>
-						<xs:enumeration value="DO"/>
-						<xs:enumeration value="TL"/>
-						<xs:enumeration value="GR"/>
-						<xs:enumeration value="HK"/>
-						<xs:enumeration value="HU"/>
-						<xs:enumeration value="IS"/>
-						<xs:enumeration value="IN"/>
-						<xs:enumeration value="ID"/>
-						<xs:enumeration value="IR"/>
-						<xs:enumeration value="IQ"/>
-						<xs:enumeration value="IE"/>
-						<xs:enumeration value="IL"/>
-						<xs:enumeration value="JM"/>
-						<xs:enumeration value="JP"/>
-						<xs:enumeration value="JO"/>
-						<xs:enumeration value="KZ"/>
-						<xs:enumeration value="KE"/>
-						<xs:enumeration value="KI"/>
-						<xs:enumeration value="KP"/>
-						<xs:enumeration value="KR"/>
-						<xs:enumeration value="KW"/>
-						<xs:enumeration value="KG"/>
-						<xs:enumeration value="LA"/>
-						<xs:enumeration value="LV"/>
-						<xs:enumeration value="LB"/>
-						<xs:enumeration value="LS"/>
-						<xs:enumeration value="LR"/>
-						<xs:enumeration value="LY"/>
-						<xs:enumeration value="LI"/>
-						<xs:enumeration value="LT"/>
-						<xs:enumeration value="LU"/>
-						<xs:enumeration value="MO"/>
-						<xs:enumeration value="MK"/>
-						<xs:enumeration value="MG"/>
-						<xs:enumeration value="MW"/>
-						<xs:enumeration value="MY"/>
-						<xs:enumeration value="MV"/>
-						<xs:enumeration value="ML"/>
-						<xs:enumeration value="MT"/>
-						<xs:enumeration value="MH"/>
-						<xs:enumeration value="MR"/>
-						<xs:enumeration value="MU"/>
-						<xs:enumeration value="MX"/>
-						<xs:enumeration value="FM"/>
-						<xs:enumeration value="MD"/>
-						<xs:enumeration value="MC"/>
-						<xs:enumeration value="MN"/>
-						<xs:enumeration value="ME"/>
-						<xs:enumeration value="MS"/>
-						<xs:enumeration value="MA"/>
-						<xs:enumeration value="MZ"/>
-						<xs:enumeration value="NA"/>
-						<xs:enumeration value="NR"/>
-						<xs:enumeration value="NP"/>
-						<xs:enumeration value="NL"/>
-						<xs:enumeration value="NZ"/>
-						<xs:enumeration value="NI"/>
-						<xs:enumeration value="NE"/>
-						<xs:enumeration value="NG"/>
-						<xs:enumeration value="NO"/>
-						<xs:enumeration value="OM"/>
-						<xs:enumeration value="PK"/>
-						<xs:enumeration value="PW"/>
-						<xs:enumeration value="PA"/>
-						<xs:enumeration value="PG"/>
-						<xs:enumeration value="PY"/>
-						<xs:enumeration value="PE"/>
-						<xs:enumeration value="PH"/>
-						<xs:enumeration value="PL"/>
-						<xs:enumeration value="PT"/>
-						<xs:enumeration value="QA"/>
-						<xs:enumeration value="RO"/>
-						<xs:enumeration value="RU"/>
-						<xs:enumeration value="RW"/>
-						<xs:enumeration value="WS"/>
-						<xs:enumeration value="ST"/>
-						<xs:enumeration value="SA"/>
-						<xs:enumeration value="S1"/>
-						<xs:enumeration value="SN"/>
-						<xs:enumeration value="RS"/>
-						<xs:enumeration value="SC"/>
-						<xs:enumeration value="SL"/>
-						<xs:enumeration value="SG"/>
-						<xs:enumeration value="SK"/>
-						<xs:enumeration value="SI"/>
-						<xs:enumeration value="SB"/>
-						<xs:enumeration value="SO"/>
-						<xs:enumeration value="ZA"/>
-						<xs:enumeration value="ES"/>
-						<xs:enumeration value="LK"/>
-						<xs:enumeration value="KN"/>
-						<xs:enumeration value="VC"/>
-						<xs:enumeration value="S2"/>
-						<xs:enumeration value="SD"/>
-						<xs:enumeration value="SR"/>
-						<xs:enumeration value="SZ"/>
-						<xs:enumeration value="SE"/>
-						<xs:enumeration value="CH"/>
-						<xs:enumeration value="SY"/>
-						<xs:enumeration value="TW"/>
-						<xs:enumeration value="TJ"/>
-						<xs:enumeration value="TZ"/>
-						<xs:enumeration value="TH"/>
-						<xs:enumeration value="TG"/>
-						<xs:enumeration value="TO"/>
-						<xs:enumeration value="TT"/>
-						<xs:enumeration value="TN"/>
-						<xs:enumeration value="TR"/>
-						<xs:enumeration value="TM"/>
-						<xs:enumeration value="TV"/>
-						<xs:enumeration value="UG"/>
-						<xs:enumeration value="UA"/>
-						<xs:enumeration value="AE"/>
-						<xs:enumeration value="GB"/>
-						<xs:enumeration value="UY"/>
-						<xs:enumeration value="UZ"/>
-						<xs:enumeration value="VU"/>
-						<xs:enumeration value="VA"/>
-						<xs:enumeration value="VE"/>
-						<xs:enumeration value="VN"/>
-						<xs:enumeration value="VG"/>
-						<xs:enumeration value="YE"/>
-						<xs:enumeration value="ZM"/>
-						<xs:enumeration value="ZW"/>
-						<xs:enumeration value="AX"/>
-						<xs:enumeration value="AD"/>
-						<xs:enumeration value="AQ"/>
-						<xs:enumeration value="BQ"/>
-						<xs:enumeration value="BV"/>
-						<xs:enumeration value="IO"/>
-						<xs:enumeration value="AR"/>
-						<xs:enumeration value="AM"/>
-						<xs:enumeration value="AW"/>
-						<xs:enumeration value="AU"/>
-						<xs:enumeration value="AT"/>
-						<xs:enumeration value="BS"/>
-						<xs:enumeration value="BH"/>
-						<xs:enumeration value="BE"/>
-						<xs:enumeration value="BZ"/>
-						<xs:enumeration value="BJ"/>
-						<xs:enumeration value="BM"/>
-						<xs:enumeration value="BO"/>
-						<xs:enumeration value="BA"/>
-						<xs:enumeration value="BW"/>
-						<xs:enumeration value="BR"/>
-						<xs:enumeration value="BN"/>
-						<xs:enumeration value="BG"/>
-						<xs:enumeration value="BF"/>
-						<xs:enumeration value="MM"/>
-						<xs:enumeration value="BI"/>
-						<xs:enumeration value="KH"/>
-						<xs:enumeration value="CM"/>
-						<xs:enumeration value="KM"/>
-						<xs:enumeration value="CG"/>
-						<xs:enumeration value="DM"/>
-						<xs:enumeration value="ER"/>
-						<xs:enumeration value="FJ"/>
-						<xs:enumeration value="GA"/>
-						<xs:enumeration value="GM"/>
-						<xs:enumeration value="GE"/>
-						<xs:enumeration value="DE"/>
-						<xs:enumeration value="GH"/>
-						<xs:enumeration value="GT"/>
-						<xs:enumeration value="GN"/>
-						<xs:enumeration value="CX"/>
-						<xs:enumeration value="CC"/>
-						<xs:enumeration value="CW"/>
-						<xs:enumeration value="FK"/>
-						<xs:enumeration value="FO"/>
-						<xs:enumeration value="GF"/>
-						<xs:enumeration value="PF"/>
-						<xs:enumeration value="TF"/>
-						<xs:enumeration value="GI"/>
-						<xs:enumeration value="GP"/>
-						<xs:enumeration value="GG"/>
-						<xs:enumeration value="HM"/>
-						<xs:enumeration value="IM"/>
-						<xs:enumeration value="JE"/>
-						<xs:enumeration value="MQ"/>
-						<xs:enumeration value="YT"/>
-						<xs:enumeration value="NC"/>
-						<xs:enumeration value="NU"/>
-						<xs:enumeration value="NF"/>
-						<xs:enumeration value="PS"/>
-						<xs:enumeration value="PN"/>
-						<xs:enumeration value="RE"/>
-						<xs:enumeration value="BL"/>
-						<xs:enumeration value="SH"/>
-						<xs:enumeration value="LC"/>
-						<xs:enumeration value="MF"/>
-						<xs:enumeration value="PM"/>
-						<xs:enumeration value="SM"/>
-						<xs:enumeration value="SX"/>
-						<xs:enumeration value="GS"/>
-						<xs:enumeration value="SJ"/>
-						<xs:enumeration value="TK"/>
-						<xs:enumeration value="TC"/>
-						<xs:enumeration value="WF"/>
-						<xs:enumeration value="EH"/>
-						<xs:enumeration value="CA"/>
-						<xs:enumeration value="CV"/>
-						<xs:enumeration value="CU"/>
-						<xs:enumeration value="CY"/>
-						<xs:enumeration value="CD"/>
-						<xs:enumeration value="DK"/>
-						<xs:enumeration value="FI"/>
-						<xs:enumeration value="FR"/>
-						<xs:enumeration value="GW"/>
-						<xs:enumeration value="GY"/>
-						<xs:enumeration value="HT"/>
-						<xs:enumeration value="HN"/>
-						<xs:enumeration value="CF"/>
-						<xs:enumeration value="TD"/>
-						<xs:enumeration value="CL"/>
-						<xs:enumeration value="CN"/>
-						<xs:enumeration value="CO"/>
-						<xs:enumeration value="EC"/>
-						<xs:enumeration value="EG"/>
-						<xs:enumeration value="SV"/>
-						<xs:enumeration value="GQ"/>
-						<xs:enumeration value="EE"/>
-						<xs:enumeration value="ET"/>
-						<xs:enumeration value="GL"/>
-						<xs:enumeration value="GD"/>
-						<xs:enumeration value="IT"/>
-						<xs:enumeration value="SS"/>
-						<xs:enumeration value="XX"/>
-						<xs:enumeration value="203"/>
-						<xs:enumeration value="202"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element> -->
-			<xs:element name="Code" minOccurs="0" maxOccurs="100">
+<xs:element name="Code" minOccurs="0" maxOccurs="100">
 				<xs:simpleType>
 					<xs:annotation>
 						<xs:documentation>
@@ -3708,541 +2044,7 @@ Change#		Date		Author			Modification
  
 	<xs:complexType name="CountryList">
 		<xs:sequence>
-			<!-- <xs:element name="Code" minOccurs="0">
-				<xs:simpleType>
-					<xs:annotation>
-						<xs:documentation>
-							Country Name										Value
-							
-							AFGHANISTAN											AF
-							ALBANIA												AL
-							ALGERIA												AG
-							ANDORRA												AN
-							ANGOLA												AO
-							ANGUILLA											AV
-							ANTARCTICA											AY
-							ANTIGUA AND BARBUDA									AC
-							ARGENTINA											AR
-							ARMENIA												AM
-							ARUBA												AA
-							ASHMORE AND CARTIER ISLANDS							AT
-							AUSTRALIA											AS
-							AUSTRIA												AU
-							AZERBAIJAN											AJ
-							"BAHAMAS, THE"										BF
-							BAHRAIN												BA
-							BAKER ISLAND										FQ
-							BANGLADESH											BG
-							BARBADOS											BB
-							BASSAS DA INDIA										BS
-							BELARUS												BO
-							BELGIUM												BE
-							BELIZE												BH
-							BENIN												BN
-							BERMUDA												BD
-							BHUTAN												BT
-							BOLIVIA												BL
-							BOSNIA AND HERZEGOVINA								BK
-							BOTSWANA											BC
-							BOUVET ISLAND										BV
-							BRAZIL												BR
-							BRITISH INDIAN OCEAN TERRITORY						IO
-							BRITISH VIRGIN ISLANDS								VI
-							BRUNEI												BX
-							BULGARIA											BU
-							BURKINA												UV
-							BURMA												BM
-							BURUNDI												BY
-							CAMBODIA											CB
-							CAMEROON											CM
-							CANADA												CA
-							CAPE VERDE											CV
-							CAYMAN ISLANDS										CJ
-							CENTRAL AFRICAN REPUBLIC							CT
-							CHAD												CD
-							CHILE												CI
-							CHINA												CH
-							CHRISTMAS ISLAND									KT
-							CLIPPERTON ISLAND									IP
-							COCOS (KEELING ISLANDS)								CK
-							COLOMBIA											CO
-							COMOROS												CN
-							CONGO												CF
-							COOK ISLANDS										CW
-							CORAL SEA ISLANDS									CR
-							COSTA RICA											CS
-							COTE D'IVOIRE										IV
-							CROATIA												HR
-							CUBA												CU
-							CYPRUS												CY
-							CZECH REPUBLIC										EZ
-							DENMARK												DA
-							DJIBOUTI											DJ
-							DOMINICA											DO
-							DOMINICAN REPUBLIC									DR
-							ECUADOR												EC
-							EGYPT												EG
-							EL SALVADOR											ES
-							EQUATORIAL GUINEA									EK
-							ERITREA												ER
-							ESTONIA												EN
-							ETHIOPIA											ET
-							EUROPA ISLAND										EU
-							FALKLAND ISLANDS (ISLAS MALVINAS)					FK
-							FAROE ISLANDS										FO
-							FEDERATED STATES OF MICRONESIA						FM
-							FIJI												FJ
-							FINLAND												FI
-							FRANCE												FR
-							FRENCH GUIANA										FG
-							FRENCH POLYNESIA									FP
-							FRENCH SOUTHERN AND ANTARCTIC LANDS					FS
-							GABON												GB
-							"GAMBIA, THE"										GA
-							GAZA STRIP											GZ
-							GEORGIA												GG
-							GERMANY												GM
-							GHANA												GH
-							GIBRALTAR											GI
-							GLORIOSO ISLANDS									GO
-							GREECE												GR
-							GREENLAND											GL
-							GRENADA												GJ
-							GUADELOUPE											GP
-							GUAM												GQ
-							GUATEMALA											GT
-							GUERNSEY											GK
-							GUINEA												GV
-							GUINEA-BISSAU										PU
-							GUYANA												GY
-							HAITI												HA
-							HEARD ISLAND AND MCDONALD ISLANDS					HM
-							HONDURAS											HO
-							HONG KONG											HK
-							HOWLAND ISLAND										HQ
-							HUNGARY												HU
-							ICELAND												IC
-							INDIA												IN
-							INDONESIA											ID
-							IRAN												IR
-							IRAQ												IZ
-							IRELAND												EI
-							ISRAEL												IS
-							ITALY												IT
-							JAMAICA												JM
-							JAN MAYEN											JN
-							JAPAN												JA
-							JARVIS ISLAND										DQ
-							JERSEY												JE
-							JOHNSTON ATOLL										JQ
-							JORDAN												JO
-							JUAN DE NOVA ISLAND									JU
-							KAZAKHSTAN											KZ
-							KENYA												KE
-							KINGMAN REEF										KQ
-							KIRIBATI											KR
-							"KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF"			KN
-							"KOREA, REPUBLIC OF"								KS
-							KUWAIT												KU
-							KYRGYZSTAN											KG
-							LAOS												LA
-							LATVIA												LG
-							LEBANON												LE
-							LESOTHO												LT
-							LIBERIA												LI
-							LIBYA												LY
-							LIECHTENSTEIN										LS
-							LITHUANIA											LH
-							LUXEMBOURG											LU
-							MACAU												MC
-							MACEDONIA											MK
-							MADAGASCAR											MA
-							MALAWI												MI
-							MALAYSIA											MY
-							MALDIVES											MV
-							MALI												ML
-							MALTA												MT
-							"MAN, ISLE OF"										IM
-							MARSHALL ISLANDS									RM
-							MARTINIQUE											MB
-							MAURITANIA											MR
-							MAURITIUS											MP
-							MAYOTTE												MF
-							MEXICO												MX
-							MIDWAY ISLANDS										MQ
-							MOLDOVA												MD
-							MONACO												MN
-							MONGOLIA											MG
-							MONTENEGRO											MW
-							MONTSERRAT											MH
-							MOROCCO												MO
-							MOZAMBIQUE											MZ
-							NAMIBIA												WA
-							NAURU												NR
-							NAVASSA ISLAND										BQ
-							NEPAL												NP
-							NETHERLANDS											NL
-							NETHERLANDS ANTILLES								NT
-							NEW CALEDONIA										NC
-							NEW ZEALAND											NZ
-							NICARAGUA											NU
-							NIGER												NG
-							NIGERIA												NI
-							NIUE												NE
-							NORFOLK ISLAND										NF
-							NORTHERN MARIANA ISLANDS							CQ
-							NORWAY												NO
-							OMAN												MU
-							PAKISTAN											PK
-							PALMYRA ATOLL										LQ
-							PANAMA												PM
-							PAPUA NEW GUINEA									PP
-							PARACEL ISLANDS										PF
-							PARAGUAY											PA
-							PERU												PE
-							PHILIPPINES											RP
-							PITCAIRN ISLANDS									PC
-							POLAND												PL
-							PORTUGAL											PO
-							PUERTO RICO											RQ
-							QATAR												QA
-							REUNION												RE
-							ROMANIA												RO
-							RUSSIA												RS
-							RWANDA												RW
-							SAN MARINO											SM
-							SAO TOME AND PRINCIPE								TP
-							SAUDI ARABIA										SA
-							SENEGAL												SG
-							SERBIA												SR
-							SEYCHELLES											SE
-							SIERRA LEONE										SL
-							SINGAPORE											SN
-							SLOVAKIA											LO
-							SLOVENIA											SI
-							SOLOMON ISLANDS										BP
-							SOMALIA												SO
-							SOUTH AFRICA										SF
-							SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS		SX
-							SPAIN												SP
-							SPRATLY ISLANDS										PG
-							SRI LANKA											CE
-							ST. HELENA											SH
-							ST. KITTS AND NEVIS									SC
-							ST. LUCIA											ST
-							ST. PIERRE AND MIQUELON								SB
-							ST. VINCENT AND THE GRENADINES						VC
-							SUDAN												SU
-							SURINAME											NS
-							SVALBARD											SV
-							SWAZILAND											WZ
-							SWEDEN												SW
-							SWITZERLAND											SZ
-							SYRIA												SY
-							TAIWAN												TW
-							TAJIKISTAN											TI
-							TANZANIA											TZ
-							THAILAND											TH
-							TOGO												TO
-							TOKELAU												TL
-							TONGA												TN
-							TRINIDAD AND TOBAGO									TD
-							TROMELIN ISLAND										TE
-							TRUST TERRITORY OF THE PACIFIC ISLANDS (PALAU)		PS
-							TUNISIA												TS
-							TURKEY												TU
-							TURKMENISTAN										TX
-							TURKS AND CAICOS ISLANDS							TK
-							TUVALU												TV
-							UGANDA												UG
-							UKRAINE												UP
-							UNITED ARAB EMIRATES								TC
-							UNITED KINGDOM										UK
-							UNITED STATES										US
-							URUGUAY												UY
-							UZBEKISTAN											UZ
-							VANUATU												NH
-							VATICAN CITY										VT
-							VENEZUELA											VE
-							VIETNAM												VM
-							VIRGIN ISLANDS										VQ
-							WAKE ISLAND											WQ
-							WALLIS AND FUTUNA									WF
-							WEST BANK											WE
-							WESTERN SAHARA										WI
-							WESTERN SAMOA										WS
-							YEMEN												YM
-							ZAIRE												CG
-							ZAMBIA												ZA
-							ZIMBABWE											ZI
-						</xs:documentation>
-					</xs:annotation>
-					<xs:restriction base="xs:string">
-						<xs:enumeration value="AF"/>
-						<xs:enumeration value="AL"/>
-						<xs:enumeration value="AG"/>
-						<xs:enumeration value="AN"/>
-						<xs:enumeration value="AO"/>
-						<xs:enumeration value="AV"/>
-						<xs:enumeration value="AY"/>
-						<xs:enumeration value="AC"/>
-						<xs:enumeration value="AR"/>
-						<xs:enumeration value="AM"/>
-						<xs:enumeration value="AA"/>
-						<xs:enumeration value="AT"/>
-						<xs:enumeration value="AS"/>
-						<xs:enumeration value="AU"/>
-						<xs:enumeration value="AJ"/>
-						<xs:enumeration value="BF"/>
-						<xs:enumeration value="BA"/>
-						<xs:enumeration value="FQ"/>
-						<xs:enumeration value="BG"/>
-						<xs:enumeration value="BB"/>
-						<xs:enumeration value="BS"/>
-						<xs:enumeration value="BO"/>
-						<xs:enumeration value="BE"/>
-						<xs:enumeration value="BH"/>
-						<xs:enumeration value="BN"/>
-						<xs:enumeration value="BD"/>
-						<xs:enumeration value="BT"/>
-						<xs:enumeration value="BL"/>
-						<xs:enumeration value="BK"/>
-						<xs:enumeration value="BC"/>
-						<xs:enumeration value="BV"/>
-						<xs:enumeration value="BR"/>
-						<xs:enumeration value="IO"/>
-						<xs:enumeration value="VI"/>
-						<xs:enumeration value="BX"/>
-						<xs:enumeration value="BU"/>
-						<xs:enumeration value="UV"/>
-						<xs:enumeration value="BM"/>
-						<xs:enumeration value="BY"/>
-						<xs:enumeration value="CB"/>
-						<xs:enumeration value="CM"/>
-						<xs:enumeration value="CA"/>
-						<xs:enumeration value="CV"/>
-						<xs:enumeration value="CJ"/>
-						<xs:enumeration value="CT"/>
-						<xs:enumeration value="CD"/>
-						<xs:enumeration value="CI"/>
-						<xs:enumeration value="CH"/>
-						<xs:enumeration value="KT"/>
-						<xs:enumeration value="IP"/>
-						<xs:enumeration value="CK"/>
-						<xs:enumeration value="CO"/>
-						<xs:enumeration value="CN"/>
-						<xs:enumeration value="CF"/>
-						<xs:enumeration value="CW"/>
-						<xs:enumeration value="CR"/>
-						<xs:enumeration value="CS"/>
-						<xs:enumeration value="IV"/>
-						<xs:enumeration value="HR"/>
-						<xs:enumeration value="CU"/>
-						<xs:enumeration value="CY"/>
-						<xs:enumeration value="EZ"/>
-						<xs:enumeration value="DA"/>
-						<xs:enumeration value="DJ"/>
-						<xs:enumeration value="DO"/>
-						<xs:enumeration value="DR"/>
-						<xs:enumeration value="EC"/>
-						<xs:enumeration value="EG"/>
-						<xs:enumeration value="ES"/>
-						<xs:enumeration value="EK"/>
-						<xs:enumeration value="ER"/>
-						<xs:enumeration value="EN"/>
-						<xs:enumeration value="ET"/>
-						<xs:enumeration value="EU"/>
-						<xs:enumeration value="FK"/>
-						<xs:enumeration value="FO"/>
-						<xs:enumeration value="FM"/>
-						<xs:enumeration value="FJ"/>
-						<xs:enumeration value="FI"/>
-						<xs:enumeration value="FR"/>
-						<xs:enumeration value="FG"/>
-						<xs:enumeration value="FP"/>
-						<xs:enumeration value="FS"/>
-						<xs:enumeration value="GB"/>
-						<xs:enumeration value="GA"/>
-						<xs:enumeration value="GZ"/>
-						<xs:enumeration value="GG"/>
-						<xs:enumeration value="GM"/>
-						<xs:enumeration value="GH"/>
-						<xs:enumeration value="GI"/>
-						<xs:enumeration value="GO"/>
-						<xs:enumeration value="GR"/>
-						<xs:enumeration value="GL"/>
-						<xs:enumeration value="GJ"/>
-						<xs:enumeration value="GP"/>
-						<xs:enumeration value="GQ"/>
-						<xs:enumeration value="GT"/>
-						<xs:enumeration value="GK"/>
-						<xs:enumeration value="GV"/>
-						<xs:enumeration value="PU"/>
-						<xs:enumeration value="GY"/>
-						<xs:enumeration value="HA"/>
-						<xs:enumeration value="HM"/>
-						<xs:enumeration value="HO"/>
-						<xs:enumeration value="HK"/>
-						<xs:enumeration value="HQ"/>
-						<xs:enumeration value="HU"/>
-						<xs:enumeration value="IC"/>
-						<xs:enumeration value="IN"/>
-						<xs:enumeration value="ID"/>
-						<xs:enumeration value="IR"/>
-						<xs:enumeration value="IZ"/>
-						<xs:enumeration value="EI"/>
-						<xs:enumeration value="IS"/>
-						<xs:enumeration value="IT"/>
-						<xs:enumeration value="JM"/>
-						<xs:enumeration value="JN"/>
-						<xs:enumeration value="JA"/>
-						<xs:enumeration value="DQ"/>
-						<xs:enumeration value="JE"/>
-						<xs:enumeration value="JQ"/>
-						<xs:enumeration value="JO"/>
-						<xs:enumeration value="JU"/>
-						<xs:enumeration value="KZ"/>
-						<xs:enumeration value="KE"/>
-						<xs:enumeration value="KQ"/>
-						<xs:enumeration value="KR"/>
-						<xs:enumeration value="KN"/>
-						<xs:enumeration value="KS"/>
-						<xs:enumeration value="KU"/>
-						<xs:enumeration value="KG"/>
-						<xs:enumeration value="LA"/>
-						<xs:enumeration value="LG"/>
-						<xs:enumeration value="LE"/>
-						<xs:enumeration value="LT"/>
-						<xs:enumeration value="LI"/>
-						<xs:enumeration value="LY"/>
-						<xs:enumeration value="LS"/>
-						<xs:enumeration value="LH"/>
-						<xs:enumeration value="LU"/>
-						<xs:enumeration value="MC"/>
-						<xs:enumeration value="MK"/>
-						<xs:enumeration value="MA"/>
-						<xs:enumeration value="MI"/>
-						<xs:enumeration value="MY"/>
-						<xs:enumeration value="MV"/>
-						<xs:enumeration value="ML"/>
-						<xs:enumeration value="MT"/>
-						<xs:enumeration value="IM"/>
-						<xs:enumeration value="RM"/>
-						<xs:enumeration value="MB"/>
-						<xs:enumeration value="MR"/>
-						<xs:enumeration value="MP"/>
-						<xs:enumeration value="MF"/>
-						<xs:enumeration value="MX"/>
-						<xs:enumeration value="MQ"/>
-						<xs:enumeration value="MD"/>
-						<xs:enumeration value="MN"/>
-						<xs:enumeration value="MG"/>
-						<xs:enumeration value="MW"/>
-						<xs:enumeration value="MH"/>
-						<xs:enumeration value="MO"/>
-						<xs:enumeration value="MZ"/>
-						<xs:enumeration value="WA"/>
-						<xs:enumeration value="NR"/>
-						<xs:enumeration value="BQ"/>
-						<xs:enumeration value="NP"/>
-						<xs:enumeration value="NL"/>
-						<xs:enumeration value="NT"/>
-						<xs:enumeration value="NC"/>
-						<xs:enumeration value="NZ"/>
-						<xs:enumeration value="NU"/>
-						<xs:enumeration value="NG"/>
-						<xs:enumeration value="NI"/>
-						<xs:enumeration value="NE"/>
-						<xs:enumeration value="NF"/>
-						<xs:enumeration value="CQ"/>
-						<xs:enumeration value="NO"/>
-						<xs:enumeration value="MU"/>
-						<xs:enumeration value="PK"/>
-						<xs:enumeration value="LQ"/>
-						<xs:enumeration value="PM"/>
-						<xs:enumeration value="PP"/>
-						<xs:enumeration value="PF"/>
-						<xs:enumeration value="PA"/>
-						<xs:enumeration value="PE"/>
-						<xs:enumeration value="RP"/>
-						<xs:enumeration value="PC"/>
-						<xs:enumeration value="PL"/>
-						<xs:enumeration value="PO"/>
-						<xs:enumeration value="RQ"/>
-						<xs:enumeration value="QA"/>
-						<xs:enumeration value="RE"/>
-						<xs:enumeration value="RO"/>
-						<xs:enumeration value="RS"/>
-						<xs:enumeration value="RW"/>
-						<xs:enumeration value="SM"/>
-						<xs:enumeration value="TP"/>
-						<xs:enumeration value="SA"/>
-						<xs:enumeration value="SG"/>
-						<xs:enumeration value="SR"/>
-						<xs:enumeration value="SE"/>
-						<xs:enumeration value="SL"/>
-						<xs:enumeration value="SN"/>
-						<xs:enumeration value="LO"/>
-						<xs:enumeration value="SI"/>
-						<xs:enumeration value="BP"/>
-						<xs:enumeration value="SO"/>
-						<xs:enumeration value="SF"/>
-						<xs:enumeration value="SX"/>
-						<xs:enumeration value="SP"/>
-						<xs:enumeration value="PG"/>
-						<xs:enumeration value="CE"/>
-						<xs:enumeration value="SH"/>
-						<xs:enumeration value="SC"/>
-						<xs:enumeration value="ST"/>
-						<xs:enumeration value="SB"/>
-						<xs:enumeration value="VC"/>
-						<xs:enumeration value="SU"/>
-						<xs:enumeration value="NS"/>
-						<xs:enumeration value="SV"/>
-						<xs:enumeration value="WZ"/>
-						<xs:enumeration value="SW"/>
-						<xs:enumeration value="SZ"/>
-						<xs:enumeration value="SY"/>
-						<xs:enumeration value="TW"/>
-						<xs:enumeration value="TI"/>
-						<xs:enumeration value="TZ"/>
-						<xs:enumeration value="TH"/>
-						<xs:enumeration value="TO"/>
-						<xs:enumeration value="TL"/>
-						<xs:enumeration value="TN"/>
-						<xs:enumeration value="TD"/>
-						<xs:enumeration value="TE"/>
-						<xs:enumeration value="PS"/>
-						<xs:enumeration value="TS"/>
-						<xs:enumeration value="TU"/>
-						<xs:enumeration value="TX"/>
-						<xs:enumeration value="TK"/>
-						<xs:enumeration value="TV"/>
-						<xs:enumeration value="UG"/>
-						<xs:enumeration value="UP"/>
-						<xs:enumeration value="TC"/>
-						<xs:enumeration value="UK"/>
-						<xs:enumeration value="US"/>
-						<xs:enumeration value="UY"/>
-						<xs:enumeration value="UZ"/>
-						<xs:enumeration value="NH"/>
-						<xs:enumeration value="VT"/>
-						<xs:enumeration value="VE"/>
-						<xs:enumeration value="VM"/>
-						<xs:enumeration value="VQ"/>
-						<xs:enumeration value="WQ"/>
-						<xs:enumeration value="WF"/>
-						<xs:enumeration value="WE"/>
-						<xs:enumeration value="WI"/>
-						<xs:enumeration value="WS"/>
-						<xs:enumeration value="YM"/>
-						<xs:enumeration value="CG"/>
-						<xs:enumeration value="ZA"/>
-						<xs:enumeration value="ZI"/>
-					</xs:restriction>
-				</xs:simpleType>
-			</xs:element> -->
-			<xs:element name="Code" minOccurs="0">
+<xs:element name="Code" minOccurs="0">
 				<xs:simpleType>
 					<xs:annotation>
 						<xs:documentation>

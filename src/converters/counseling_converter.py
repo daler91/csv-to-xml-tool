@@ -251,8 +251,6 @@ class CounselingConverter(BaseConverter):
 
         # Auto-correct: If ReportableImpact is Yes, VerifiedToBeInBusiness must also be Yes
         if reportable_impact == 'Yes' and verified_in_business != 'Yes':
-            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_VALUE,
-                "VerifiedToBeInBusiness", f"VerifiedToBeInBusiness was '{verified_in_business}' but ReportableImpact is 'Yes'. Auto-correcting VerifiedToBeInBusiness to 'Yes'.")
             verified_in_business = 'Yes'
 
         create_element(counselor_record, 'VerifiedToBeInBusiness', verified_in_business)
@@ -318,6 +316,7 @@ class CounselingConverter(BaseConverter):
 
         cp_element = create_element(counselor_record, 'CounselingProvided')
         provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
+        provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
         cp_other = row.get('Other Counseling Provided', '').strip()
         for code in provided_codes:
             create_element(cp_element, 'Code', code)

@@ -1,9 +1,9 @@
 import logging
 import os
+import tempfile
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import DATA_DIR, sanitize_id, sanitize_filename
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.conversion_service import run_conversion
 
@@ -14,28 +14,36 @@ router = APIRouter()
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert(req: ConvertRequest):
+    tmp_csv = None
+    tmp_xml = None
     try:
-        safe_id = sanitize_id(req.job_id)
-        safe_name = sanitize_filename(req.file_name)
+        # Write streamed CSV content to a temp file
+        tmp_csv = tempfile.NamedTemporaryFile(
+            suffix=".csv", delete=False, mode="w", encoding="utf-8"
+        )
+        tmp_csv.write(req.file_content)
+        tmp_csv.close()
 
-        # Construct and validate input path
-        csv_path = os.path.realpath(os.path.join(DATA_DIR, "uploads", safe_id, safe_name))
-        if not csv_path.startswith(DATA_DIR + os.sep):
-            raise HTTPException(status_code=400, detail="Invalid path")
-
-        # Construct and validate output path
-        output_dir = os.path.realpath(os.path.join(DATA_DIR, "output", safe_id))
-        if not output_dir.startswith(DATA_DIR + os.sep):
-            raise HTTPException(status_code=400, detail="Invalid path")
-        os.makedirs(output_dir, exist_ok=True)
-        xml_path = os.path.join(output_dir, f"{safe_id}.xml")
+        # Create a temp file for XML output
+        tmp_xml = tempfile.NamedTemporaryFile(
+            suffix=".xml", delete=False
+        )
+        tmp_xml.close()
 
         result = run_conversion(
-            csv_path=csv_path,
-            xml_path=xml_path,
+            csv_path=tmp_csv.name,
+            xml_path=tmp_xml.name,
             converter_type=req.converter_type,
             column_mapping=req.column_mapping,
         )
+
+        # Read generated XML and include in response
+        xml_content = None
+        if os.path.exists(tmp_xml.name):
+            with open(tmp_xml.name, "r", encoding="utf-8") as f:
+                xml_content = f.read()
+
+        result["xml_content"] = xml_content
         return result
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found")
@@ -46,3 +54,8 @@ async def convert(req: ConvertRequest):
     except Exception:
         logger.exception("Conversion failed")
         raise HTTPException(status_code=500, detail="Internal conversion error")
+    finally:
+        if tmp_csv and os.path.exists(tmp_csv.name):
+            os.unlink(tmp_csv.name)
+        if tmp_xml and os.path.exists(tmp_xml.name):
+            os.unlink(tmp_xml.name)

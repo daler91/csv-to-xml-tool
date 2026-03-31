@@ -23,6 +23,7 @@ export interface ConvertRequest {
 
 export interface ConvertResponse {
   xml_path: string;
+  xml_content?: string;
   stats: {
     total: number;
     successful: number;

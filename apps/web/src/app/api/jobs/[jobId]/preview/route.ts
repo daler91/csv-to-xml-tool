@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readFile } from "fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
@@ -20,12 +21,16 @@ export async function GET(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    // Read file content and stream to worker
+    const fileContent = await readFile(job.inputFilePath, "utf-8");
+
     const preview = await workerFetch<PreviewResponse>("/preview", {
       method: "POST",
       body: JSON.stringify({
         job_id: jobId,
         file_name: job.inputFileName,
         converter_type: job.converterType,
+        file_content: fileContent,
       }),
     });
 

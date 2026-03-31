@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function ConvertPage() {
+function ConvertForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const previousJobId = searchParams.get("previousJobId");
+
   const [converterType, setConverterType] = useState("counseling");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (previousJobId) {
+      fetch(`/api/jobs/${previousJobId}`)
+        .then((r) => r.json())
+        .then((job) => {
+          if (job.converterType) setConverterType(job.converterType);
+        })
+        .catch(() => {});
+    }
+  }, [previousJobId]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -20,6 +34,9 @@ export default function ConvertPage() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("converterType", converterType);
+    if (previousJobId) {
+      formData.append("previousJobId", previousJobId);
+    }
 
     try {
       const res = await fetch("/api/upload", {
@@ -129,5 +146,19 @@ export default function ConvertPage() {
         </button>
       </form>
     </main>
+  );
+}
+
+export default function ConvertPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="max-w-2xl mx-auto px-4 py-8">
+          <p className="text-gray-500">Loading...</p>
+        </main>
+      }
+    >
+      <ConvertForm />
+    </Suspense>
   );
 }

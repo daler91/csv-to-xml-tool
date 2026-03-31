@@ -36,7 +36,7 @@ export default function ProgressPage() {
       } catch {
         // ignore poll errors
       }
-    }, 2000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [jobId, router]);

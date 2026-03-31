@@ -39,7 +39,7 @@ export default function PreviewPage() {
     try {
       const res = await fetch(`/api/jobs/${jobId}/start`, { method: "POST" });
       if (!res.ok) throw new Error("Conversion failed");
-      router.push(`/convert/${jobId}/results`);
+      router.push(`/convert/${jobId}/progress`);
     } catch {
       setError("Conversion failed");
       setConverting(false);

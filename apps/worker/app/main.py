@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routes import health, preview, convert, validate
 
-app = FastAPI(title="CSV-to-XML Worker", version="1.0.0")
+app = FastAPI(title="CSV-to-XML Worker", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,

@@ -11,6 +11,7 @@ reports/
 !schemas/*.xsd
 
 # Next.js
+*.tsbuildinfo
 apps/web/.next/
 apps/web/node_modules/
 apps/web/.env.local

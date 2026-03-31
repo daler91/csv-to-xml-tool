@@ -23,10 +23,10 @@ interface CleaningDiffEntry {
 export default async function ResultsPage({
   params,
   searchParams,
-}: {
+}: Readonly<{
   params: Promise<{ jobId: string }>;
   searchParams: Promise<{ tab?: string; filter?: string; showAll?: string }>;
-}) {
+}>) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -166,20 +166,22 @@ export default async function ResultsPage({
       {/* XSD Validation */}
       <div className="bg-white border rounded p-4 mb-6">
         <h2 className="font-semibold mb-2">XSD Validation</h2>
-        {job.xsdValid === null ? (
+        {job.xsdValid === null && (
           <p className="text-sm text-gray-500">Not validated</p>
-        ) : job.xsdValid ? (
+        )}
+        {job.xsdValid === true && (
           <p className="text-sm text-green-600">
             XML is valid against the XSD schema
           </p>
-        ) : (
+        )}
+        {job.xsdValid === false && (
           <div>
             <p className="text-sm text-red-600 mb-2">
               XML failed XSD validation ({xsdErrors.length} errors)
             </p>
             <ul className="text-xs text-red-500 space-y-1 max-h-40 overflow-y-auto">
-              {xsdErrors.map((err, i) => (
-                <li key={i} className="font-mono">
+              {xsdErrors.map((err) => (
+                <li key={err} className="font-mono">
                   {err}
                 </li>
               ))}
@@ -250,11 +252,11 @@ function SummaryCard({
   label,
   value,
   color,
-}: {
+}: Readonly<{
   label: string;
   value: number;
   color?: string;
-}) {
+}>) {
   const colors: Record<string, string> = {
     green: "text-green-600",
     red: "text-red-600",
@@ -271,7 +273,7 @@ function SummaryCard({
   );
 }
 
-function IssueTable({ issues }: { issues: ValidationIssue[] }) {
+function IssueTable({ issues }: Readonly<{ issues: ValidationIssue[] }>) {
   return (
     <div className="bg-white border rounded overflow-x-auto">
       <table className="w-full text-xs">
@@ -284,8 +286,8 @@ function IssueTable({ issues }: { issues: ValidationIssue[] }) {
           </tr>
         </thead>
         <tbody>
-          {issues.slice(0, 100).map((issue, i) => (
-            <tr key={i} className="border-b">
+          {issues.slice(0, 100).map((issue) => (
+            <tr key={`${issue.record_id}-${issue.field_name}-${issue.category}`} className="border-b">
               <td className="px-3 py-2 font-mono">{issue.record_id}</td>
               <td className="px-3 py-2">{issue.category}</td>
               <td className="px-3 py-2">{issue.field_name}</td>
@@ -308,18 +310,18 @@ function CleaningDiffView({
   filter,
   showAll,
   jobId,
-}: {
+}: Readonly<{
   diffs: CleaningDiffEntry[];
   filter?: string;
   showAll: boolean;
   jobId: string;
-}) {
+}>) {
   // Group by cleaning type for summary
   const typeCounts: Record<string, number> = {};
   for (const d of diffs) {
     typeCounts[d.cleaning_type] = (typeCounts[d.cleaning_type] || 0) + 1;
   }
-  const types = Object.keys(typeCounts).sort();
+  const types = Object.keys(typeCounts).sort((a, b) => a.localeCompare(b));
 
   const LABELS: Record<string, string> = {
     format_date: "dates standardized",
@@ -352,7 +354,7 @@ function CleaningDiffView({
           <Link
             href={`/convert/${jobId}/results?tab=diff`}
             className={`px-2 py-1 text-xs rounded border ${
-              !filter ? "bg-blue-100 border-blue-300" : "hover:bg-gray-50"
+              filter ? "hover:bg-gray-50" : "bg-blue-100 border-blue-300"
             }`}
           >
             All ({diffs.length})
@@ -387,8 +389,8 @@ function CleaningDiffView({
             </tr>
           </thead>
           <tbody>
-            {displayed.map((d, i) => (
-              <tr key={i} className="border-b">
+            {displayed.map((d) => (
+              <tr key={`${d.row}-${d.record_id}-${d.field}`} className="border-b">
                 <td className="px-3 py-2 font-mono">{d.row}</td>
                 <td className="px-3 py-2 font-mono">{d.record_id}</td>
                 <td className="px-3 py-2">{d.field}</td>
@@ -409,7 +411,7 @@ function CleaningDiffView({
               Showing {displayLimit} of {filtered.length} changes
             </p>
             <Link
-              href={`/convert/${jobId}/results?tab=diff${filter ? `&filter=${filter}` : ""}&showAll=true`}
+              href={"/convert/" + jobId + "/results?tab=diff" + (filter ? "&filter=" + filter : "") + "&showAll=true"}
               className="text-xs text-blue-600 underline"
             >
               Show all

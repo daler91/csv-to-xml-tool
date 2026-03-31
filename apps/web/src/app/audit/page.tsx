@@ -58,7 +58,7 @@ export default function AuditPage() {
             <option value="download">Download</option>
           </select>
           <a
-            href={`/api/audit?format=csv${actionFilter ? `&action=${actionFilter}` : ""}`}
+            href={"/api/audit?format=csv" + (actionFilter ? "&action=" + actionFilter : "")}
             className="px-4 py-1.5 border rounded text-sm hover:bg-gray-50"
           >
             Export CSV
@@ -78,19 +78,21 @@ export default function AuditPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {loading && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                   Loading...
                 </td>
               </tr>
-            ) : entries.length === 0 ? (
+            )}
+            {!loading && entries.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                   No audit entries found
                 </td>
               </tr>
-            ) : (
+            )}
+            {!loading && entries.length > 0 &&
               entries.map((entry) => (
                 <tr key={entry.id} className="border-b hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-500 text-xs">
@@ -112,7 +114,7 @@ export default function AuditPage() {
                   </td>
                 </tr>
               ))
-            )}
+            }
           </tbody>
         </table>
       </div>

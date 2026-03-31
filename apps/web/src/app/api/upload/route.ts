@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { writeFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 

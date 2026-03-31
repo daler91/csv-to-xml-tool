@@ -10,8 +10,8 @@ from src.main import main
 
 class TestMain(unittest.TestCase):
     def setUp(self):
-        # Prevent argparse from actually exiting the test suite on error
-        self.exit_patcher = patch('sys.exit')
+        # Make sys.exit raise SystemExit so execution stops at the call site
+        self.exit_patcher = patch('sys.exit', side_effect=SystemExit)
         self.mock_exit = self.exit_patcher.start()
 
     def tearDown(self):
@@ -65,7 +65,8 @@ class TestMain(unittest.TestCase):
         with patch.dict('src.main.CONVERTERS', {'training': MagicMock()}):
             test_args = ['main.py', 'convert', 'training', '--input', 'missing.csv', '--log-dir', 'test_logs', '--report-dir', 'test_reports']
             with patch.object(sys, 'argv', test_args):
-                main()
+                with self.assertRaises(SystemExit):
+                    main()
 
             # Assertions
             mock_exists.assert_any_call('missing.csv')
@@ -110,7 +111,8 @@ class TestMain(unittest.TestCase):
         with patch.dict('src.main.CONVERTERS', {'training': mock_converter_class}):
             test_args = ['main.py', 'convert', 'training', '--input', 'test.csv', '--log-dir', 'test_logs', '--report-dir', 'test_reports']
             with patch.object(sys, 'argv', test_args):
-                main()
+                with self.assertRaises(SystemExit):
+                    main()
 
             # Assertions
             mock_logger_instance.error.assert_called_once()

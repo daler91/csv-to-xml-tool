@@ -17,6 +17,7 @@ from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
 
 from ..core.security import DATA_DIR
+from .diff_service import generate_cleaning_diff
 
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
 
@@ -66,6 +67,12 @@ def run_conversion(
         df.to_csv(tmp_mapped.name, index=False)
         actual_csv_path = tmp_mapped.name
 
+    # Generate cleaning diff before conversion
+    try:
+        diffs = generate_cleaning_diff(actual_csv_path, converter_type)
+    except Exception:
+        diffs = []
+
     try:
         # Set up logger and tracker
         logger = ConversionLogger(
@@ -102,7 +109,7 @@ def run_conversion(
             "xsd_valid": xsd_valid,
             "xsd_errors": xsd_errors,
             "issues": tracker_data["issues"],
-            "cleaning_diff": [],  # Populated by diff_service separately
+            "cleaning_diff": diffs,
         }
     finally:
         if tmp_mapped and os.path.exists(tmp_mapped.name):

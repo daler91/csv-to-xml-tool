@@ -58,7 +58,10 @@ export default function AuditPage() {
             <option value="download">Download</option>
           </select>
           <a
-            href={"/api/audit?format=csv" + (actionFilter ? "&action=" + actionFilter : "")}
+            href={
+              "/api/audit?format=csv" +
+              (actionFilter ? "&action=" + encodeURIComponent(actionFilter) : "")
+            }
             className="px-4 py-1.5 border rounded text-sm hover:bg-gray-50"
           >
             Export CSV

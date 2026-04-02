@@ -12,6 +12,9 @@ import glob
 from datetime import datetime
 
 
+EXIT_PROMPT = "\nPress Enter to exit..."
+
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -29,33 +32,129 @@ def find_files(directory, extension):
     return sorted(glob.glob(pattern))
 
 
-def pick_from_list(prompt, options, allow_custom=False):
-    """Let the user pick from a numbered list."""
+def _display_name(option):
+    """Show just the filename, not the full path."""
+    return os.path.basename(option) if os.sep in option or '/' in option else option
+
+
+def _print_options(prompt, options, allow_custom=False):
+    """Print numbered options list."""
     print(prompt)
     print("-" * 40)
     for i, option in enumerate(options, 1):
-        # Show just the filename, not the full path
-        display = os.path.basename(option) if os.sep in option or '/' in option else option
-        print(f"  {i}. {display}")
+        print(f"  {i}. {_display_name(option)}")
     if allow_custom:
         print(f"  {len(options) + 1}. Enter a custom file path")
     print()
 
+
+def _handle_choice(choice, options, allow_custom):
+    """Process user choice, returning selected option or None if invalid."""
+    try:
+        num = int(choice)
+    except ValueError:
+        return None
+
+    if 1 <= num <= len(options):
+        return options[num - 1]
+    if allow_custom and num == len(options) + 1:
+        custom = input("Enter the full file path: ").strip().strip('"').strip("'")
+        if os.path.exists(custom):
+            return custom
+        print(f"  File not found: {custom}")
+    return None
+
+
+def pick_from_list(prompt, options, allow_custom=False):
+    """Let the user pick from a numbered list."""
+    _print_options(prompt, options, allow_custom)
+
     while True:
         choice = input("Enter your choice (number): ").strip()
-        try:
-            num = int(choice)
-            if 1 <= num <= len(options):
-                return options[num - 1]
-            if allow_custom and num == len(options) + 1:
-                custom = input("Enter the full file path: ").strip().strip('"').strip("'")
-                if os.path.exists(custom):
-                    return custom
-                print(f"  File not found: {custom}")
-                continue
-        except ValueError:
-            pass
+        result = _handle_choice(choice, options, allow_custom)
+        if result is not None:
+            return result
         print("  Invalid choice. Please try again.")
+
+
+def _pick_input_csv(script_dir):
+    """Step 2: pick or enter input CSV path."""
+    csv_files = find_files(script_dir, ".csv")
+
+    if csv_files:
+        return pick_from_list(
+            "Step 2: Which CSV file do you want to convert?",
+            csv_files,
+            allow_custom=True,
+        )
+
+    print("Step 2: No CSV files found in the current folder.")
+    return input("  Enter the full path to your CSV file: ").strip().strip('"').strip("'")
+
+
+def _pick_output_path(script_dir, input_path):
+    """Step 3: choose output location."""
+    base_name = os.path.splitext(os.path.basename(input_path))[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_output = os.path.join(script_dir, "output", f"{base_name}_{timestamp}.xml")
+
+    print("Step 3: Where should the XML file be saved?")
+    print(f"  Default: output/{os.path.basename(default_output)}")
+    custom_output = input("  Press Enter for default, or type a custom path: ").strip().strip('"').strip("'")
+    output_path = custom_output if custom_output else default_output
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    print(f"  -> {output_path}")
+    print()
+    return output_path
+
+
+def _pick_xsd(script_dir):
+    """Step 4: optionally pick XSD for validation."""
+    xsd_files = find_files(script_dir, ".xsd")
+    if not xsd_files:
+        print()
+        return None
+
+    print("Step 4: Would you like to validate the output against an XSD schema?")
+    print("  1. Yes")
+    print("  2. No, skip validation")
+    print()
+    validate_choice = input("Enter your choice (number): ").strip()
+    if validate_choice == "1":
+        xsd_path = pick_from_list("\n  Which XSD schema file?", xsd_files)
+        print(f"  -> {os.path.basename(xsd_path)}")
+        return xsd_path
+
+    print("  -> Skipping validation")
+    print()
+    return None
+
+
+def _run_xsd_validation(output_path, xsd_path):
+    """Run XSD validation and print results."""
+    print()
+    print("-" * 60)
+    print("  VALIDATING AGAINST XSD...")
+    print("-" * 60)
+    print()
+
+    from src.xml_validator import validate_against_xsd
+    _r = validate_against_xsd(output_path, xsd_path)
+    is_valid, errors = _r["is_valid"], _r["errors"]
+
+    if is_valid:
+        print("  RESULT: XML is VALID!")
+        return
+
+    print(f"  RESULT: XML has {len(errors)} validation error(s).")
+    print()
+    for i, error in enumerate(errors[:10], 1):
+        print(f"    {i}. {error}")
+    if len(errors) > 10:
+        print(f"    ... and {len(errors) - 10} more.")
+    print()
+    print("  The XML file was still saved. You may need to review")
+    print("  the data in your CSV for the issues listed above.")
 
 
 def main():
@@ -78,58 +177,21 @@ def main():
 
     # --- Step 2: Pick input CSV file ---
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_files = find_files(script_dir, ".csv")
-
-    if csv_files:
-        input_path = pick_from_list(
-            "Step 2: Which CSV file do you want to convert?",
-            csv_files,
-            allow_custom=True
-        )
-    else:
-        print("Step 2: No CSV files found in the current folder.")
-        input_path = input("  Enter the full path to your CSV file: ").strip().strip('"').strip("'")
+    input_path = _pick_input_csv(script_dir)
 
     if not os.path.exists(input_path):
         print(f"\n  ERROR: File not found: {input_path}")
-        input("\nPress Enter to exit...")
+        input(EXIT_PROMPT)
         sys.exit(1)
 
     print(f"  -> {os.path.basename(input_path)}")
     print()
 
     # --- Step 3: Choose output location ---
-    base_name = os.path.splitext(os.path.basename(input_path))[0]
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    default_output = os.path.join(script_dir, "output", f"{base_name}_{timestamp}.xml")
-
-    print("Step 3: Where should the XML file be saved?")
-    print(f"  Default: output/{os.path.basename(default_output)}")
-    custom_output = input("  Press Enter for default, or type a custom path: ").strip().strip('"').strip("'")
-    output_path = custom_output if custom_output else default_output
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    print(f"  -> {output_path}")
-    print()
+    output_path = _pick_output_path(script_dir, input_path)
 
     # --- Step 4: Pick XSD for validation (optional) ---
-    xsd_files = find_files(script_dir, ".xsd")
-    xsd_path = None
-
-    if xsd_files:
-        print("Step 4: Would you like to validate the output against an XSD schema?")
-        print("  1. Yes")
-        print("  2. No, skip validation")
-        print()
-        validate_choice = input("Enter your choice (number): ").strip()
-        if validate_choice == "1":
-            xsd_path = pick_from_list(
-                "\n  Which XSD schema file?",
-                xsd_files
-            )
-            print(f"  -> {os.path.basename(xsd_path)}")
-        else:
-            print("  -> Skipping validation")
-    print()
+    xsd_path = _pick_xsd(script_dir)
 
     # --- Confirm and run ---
     print("=" * 60)
@@ -138,16 +200,14 @@ def main():
     print(f"  Type:    {chosen_name}")
     print(f"  Input:   {os.path.basename(input_path)}")
     print(f"  Output:  {output_path}")
-    if xsd_path:
-        print(f"  Schema:  {os.path.basename(xsd_path)}")
-    else:
-        print(f"  Schema:  (no validation)")
+    schema_display = os.path.basename(xsd_path) if xsd_path else "(no validation)"
+    print(f"  Schema:  {schema_display}")
     print("=" * 60)
     print()
     confirm = input("Ready to convert? (Y/n): ").strip().lower()
     if confirm and confirm != 'y':
         print("Cancelled.")
-        input("\nPress Enter to exit...")
+        input(EXIT_PROMPT)
         sys.exit(0)
 
     print()
@@ -183,7 +243,7 @@ def main():
         converter.convert(input_path, output_path)
     except Exception as e:
         print(f"\n  ERROR during conversion: {e}")
-        input("\nPress Enter to exit...")
+        input(EXIT_PROMPT)
         sys.exit(1)
 
     print()
@@ -197,29 +257,7 @@ def main():
 
     # --- XSD Validation ---
     if xsd_path:
-        print()
-        print("-" * 60)
-        print("  VALIDATING AGAINST XSD...")
-        print("-" * 60)
-        print()
-
-        from src.xml_validator import validate_against_xsd
-        _r = validate_against_xsd(output_path, xsd_path)
-        is_valid, errors = _r["is_valid"], _r["errors"]
-
-        if is_valid:
-            print("  RESULT: XML is VALID!")
-        else:
-            print(f"  RESULT: XML has {len(errors)} validation error(s).")
-            print()
-            # Show first 10 errors in a user-friendly way
-            for i, error in enumerate(errors[:10], 1):
-                print(f"    {i}. {error}")
-            if len(errors) > 10:
-                print(f"    ... and {len(errors) - 10} more.")
-            print()
-            print("  The XML file was still saved. You may need to review")
-            print("  the data in your CSV for the issues listed above.")
+        _run_xsd_validation(output_path, xsd_path)
 
     # --- Final summary ---
     print()

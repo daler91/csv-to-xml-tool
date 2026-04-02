@@ -16,10 +16,6 @@ export default function PreviewPage() {
   useEffect(() => {
     async function loadPreview() {
       try {
-        // Get job details
-        const jobRes = await fetch(`/api/jobs/${jobId}`);
-        const job = await jobRes.json();
-
         // Call worker preview via our API proxy
         const res = await fetch(`/api/jobs/${jobId}/preview`);
         if (!res.ok) throw new Error("Failed to load preview");
@@ -97,8 +93,8 @@ export default function PreviewPage() {
           <p className="text-sm font-medium text-blue-700 mb-2">
             Column mapping suggestions:
           </p>
-          {column_status.suggestions.map((s, i) => (
-            <p key={i} className="text-sm text-blue-600">
+          {column_status.suggestions.map((s) => (
+            <p key={s.csv_column} className="text-sm text-blue-600">
               &quot;{s.csv_column}&quot; looks like &quot;{s.suggested_match}&quot; ({s.score}% match)
             </p>
           ))}
@@ -125,9 +121,9 @@ export default function PreviewPage() {
             </tr>
           </thead>
           <tbody>
-            {preview.rows.map((row, i) => (
-              <tr key={i} className="border-b hover:bg-gray-50">
-                <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+            {preview.rows.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`} className="border-b hover:bg-gray-50">
+                <td className="px-3 py-2 text-gray-400">{rowIndex + 1}</td>
                 {preview.headers.map((h) => (
                   <td key={h} className="px-3 py-2 whitespace-nowrap max-w-[200px] truncate">
                     {row[h] || ""}

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import tempfile
@@ -12,18 +13,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/preview", response_model=PreviewResponse)
+@router.post(
+    "/preview",
+    response_model=PreviewResponse,
+    responses={
+        400: {"description": "Invalid request parameters"},
+        500: {"description": "Internal preview error"},
+    },
+)
 async def preview(req: PreviewRequest):
     tmp = None
     try:
         # Write streamed CSV content to a temp file
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".csv", delete=False, mode="w", encoding="utf-8"
+        tmp = await asyncio.to_thread(
+            tempfile.NamedTemporaryFile,
+            suffix=".csv", delete=False, mode="w", encoding="utf-8",
         )
-        tmp.write(req.file_content)
-        tmp.close()
+        await asyncio.to_thread(tmp.write, req.file_content)
+        await asyncio.to_thread(tmp.close)
 
-        result = read_csv_preview(tmp.name, req.converter_type)
+        result = await asyncio.to_thread(read_csv_preview, tmp.name, req.converter_type)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

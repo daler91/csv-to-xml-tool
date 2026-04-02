@@ -94,22 +94,33 @@ def generate_cleaning_diff(
                 f"Row_{row_index}"
             )
 
-            for csv_col, func, cleaning_type in cleaning_map:
-                original = row.get(csv_col, "")
-                if not original or str(original).strip() == "" or str(original).lower() == "nan":
-                    continue
-
-                original_str = str(original).strip()
-                cleaned = str(func(original_str))
-
-                if cleaned != original_str and cleaned != "":
-                    diffs.append({
-                        "row": row_index,
-                        "record_id": str(record_id),
-                        "field": csv_col,
-                        "original": original_str,
-                        "cleaned": cleaned,
-                        "cleaning_type": cleaning_type,
-                    })
+            _diff_row(row, row_index, record_id, cleaning_map, diffs)
 
     return diffs
+
+
+def _diff_row(
+    row: dict,
+    row_index: int,
+    record_id: str,
+    cleaning_map: list,
+    diffs: list[dict],
+) -> None:
+    """Apply cleaning functions to a single row and append diffs."""
+    for csv_col, func, cleaning_type in cleaning_map:
+        original = row.get(csv_col, "")
+        if not original or str(original).strip() == "" or str(original).lower() == "nan":
+            continue
+
+        original_str = str(original).strip()
+        cleaned = str(func(original_str))
+
+        if cleaned != original_str and cleaned != "":
+            diffs.append({
+                "row": row_index,
+                "record_id": str(record_id),
+                "field": csv_col,
+                "original": original_str,
+                "cleaned": cleaned,
+                "cleaning_type": cleaning_type,
+            })

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import tempfile
@@ -12,25 +13,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/convert", response_model=ConvertResponse)
+@router.post(
+    "/convert",
+    response_model=ConvertResponse,
+    responses={
+        404: {"description": "CSV file not found"},
+        400: {"description": "Invalid request parameters"},
+        500: {"description": "Internal conversion error"},
+    },
+)
 async def convert(req: ConvertRequest):
     tmp_csv = None
     tmp_xml = None
     try:
         # Write streamed CSV content to a temp file
-        tmp_csv = tempfile.NamedTemporaryFile(
-            suffix=".csv", delete=False, mode="w", encoding="utf-8"
+        tmp_csv = await asyncio.to_thread(
+            tempfile.NamedTemporaryFile,
+            suffix=".csv", delete=False, mode="w", encoding="utf-8",
         )
-        tmp_csv.write(req.file_content)
-        tmp_csv.close()
+        await asyncio.to_thread(tmp_csv.write, req.file_content)
+        await asyncio.to_thread(tmp_csv.close)
 
         # Create a temp file for XML output
-        tmp_xml = tempfile.NamedTemporaryFile(
-            suffix=".xml", delete=False
+        tmp_xml = await asyncio.to_thread(
+            tempfile.NamedTemporaryFile,
+            suffix=".xml", delete=False,
         )
-        tmp_xml.close()
+        await asyncio.to_thread(tmp_xml.close)
 
-        result = run_conversion(
+        result = await asyncio.to_thread(
+            run_conversion,
             csv_path=tmp_csv.name,
             xml_path=tmp_xml.name,
             converter_type=req.converter_type,
@@ -39,9 +51,11 @@ async def convert(req: ConvertRequest):
 
         # Read generated XML and include in response
         xml_content = None
-        if os.path.exists(tmp_xml.name):
-            with open(tmp_xml.name, "r", encoding="utf-8") as f:
-                xml_content = f.read()
+        if await asyncio.to_thread(os.path.exists, tmp_xml.name):
+            def _read_xml():
+                with open(tmp_xml.name, "r", encoding="utf-8") as f:
+                    return f.read()
+            xml_content = await asyncio.to_thread(_read_xml)
 
         result["xml_content"] = xml_content
         return result

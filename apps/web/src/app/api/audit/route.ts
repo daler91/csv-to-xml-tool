@@ -6,8 +6,8 @@ export async function GET(req: Request) {
   try {
     const user = await getRequiredUser();
     const url = new URL(req.url);
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const pageSize = parseInt(url.searchParams.get("pageSize") || "50");
+    const page = Number.parseInt(url.searchParams.get("page") || "1");
+    const pageSize = Number.parseInt(url.searchParams.get("pageSize") || "50");
     const action = url.searchParams.get("action");
     const format = url.searchParams.get("format");
 
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
             e.job?.converterType || "",
             meta ? JSON.stringify(meta) : "",
           ]
-            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+            .map((v) => `"${String(v).replaceAll('"', '""')}"`)
             .join(",");
         }),
       ].join("\n");

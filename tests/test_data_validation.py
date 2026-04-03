@@ -14,6 +14,9 @@ from src.data_validation import (
 )
 from src.config import ValidationCategory as VC, CounselingConfig, TrainingConfig
 
+# Use a date within the current fiscal year for valid test cases
+_VALID_DATE = CounselingConfig.MIN_COUNSELING_DATE.replace("-01", "-15")
+
 class TestDataValidation(unittest.TestCase):
 
     def setUp(self):
@@ -24,7 +27,7 @@ class TestDataValidation(unittest.TestCase):
             CounselingConfig.REQUIRED_FIELDS[0]: "C-123",
             'Last Name': 'Doe',
             'First Name': 'John',
-            'Date': '2023-10-15'
+            'Date': _VALID_DATE
         }
 
         result = validate_counseling_record(row, 1, self.validator)
@@ -37,7 +40,7 @@ class TestDataValidation(unittest.TestCase):
         row = {
             'Last Name': 'Doe',
             'First Name': 'John',
-            'Date': '2023-10-15'
+            'Date': _VALID_DATE
         }
 
         result = validate_counseling_record(row, 2, self.validator)
@@ -52,7 +55,7 @@ class TestDataValidation(unittest.TestCase):
         row = {
             CounselingConfig.REQUIRED_FIELDS[0]: "C-124",
             'First Name': 'John',
-            'Date': '2023-10-15'
+            'Date': _VALID_DATE
         }
 
         result = validate_counseling_record(row, 3, self.validator)
@@ -122,7 +125,7 @@ class TestDataValidation(unittest.TestCase):
 
     def test_analyze_counseling_csv(self):
         rows = [
-            {CounselingConfig.REQUIRED_FIELDS[0]: "C-1", 'Last Name': 'Doe', 'First Name': 'John', 'Date': '2023-10-15'},
+            {CounselingConfig.REQUIRED_FIELDS[0]: "C-1", 'Last Name': 'Doe', 'First Name': 'John', 'Date': _VALID_DATE},
             {'Last Name': 'Smith', 'First Name': 'Alice'}, # missing id
             {CounselingConfig.REQUIRED_FIELDS[0]: "C-3", 'First Name': 'Bob'}, # missing last name
             {CounselingConfig.REQUIRED_FIELDS[0]: "C-4", 'Last Name': 'Brown', 'Date': 'invalid'}, # invalid date, missing first name

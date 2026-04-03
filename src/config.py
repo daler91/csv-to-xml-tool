@@ -7,6 +7,14 @@ This module is structured with classes to group configurations by their domain:
 - TrainingConfig: Settings specific to the Management Training Report.
 - ValidationCategory: Enumeration of validation issue types.
 """
+from datetime import date
+
+
+def _fiscal_year_start():
+    """Compute the start of the current SBA fiscal year (October 1)."""
+    today = date.today()
+    year = today.year if today.month >= 10 else today.year - 1
+    return f"{year}-10-01"
 
 # =============================================================================
 # GENERAL CONFIGURATION
@@ -25,7 +33,7 @@ class CounselingConfig:
     REQUIRED_FIELDS = ["Contact ID"]
     DEFAULT_SESSION_TYPE = "Telephone"
     DEFAULT_URBAN_RURAL = "Undetermined"
-    MIN_COUNSELING_DATE = "2023-10-01"
+    MIN_COUNSELING_DATE = _fiscal_year_start()
 
     # List of session types that don't require contact hours
     NO_CONTACT_HOUR_SESSION_TYPES = [

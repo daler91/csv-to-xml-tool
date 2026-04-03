@@ -28,6 +28,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "File size exceeds 50MB limit" },
+        { status: 413 }
+      );
+    }
+
     if (!["counseling", "training"].includes(converterType)) {
       return NextResponse.json(
         { error: "Converter type must be 'counseling' or 'training'" },
@@ -35,12 +43,15 @@ export async function POST(req: Request) {
       );
     }
 
+    // Sanitize filename to prevent path traversal
+    const sanitizedFileName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
+
     // Create job first to get ID
     const job = await prisma.job.create({
       data: {
         userId: user.id,
         converterType,
-        inputFileName: file.name,
+        inputFileName: sanitizedFileName,
         inputFilePath: "", // Will update after save
         ...(previousJobId ? { previousJobId } : {}),
       },
@@ -49,7 +60,7 @@ export async function POST(req: Request) {
     // Save file to volume
     const uploadDir = path.join(DATA_DIR, "uploads", job.id);
     await mkdir(uploadDir, { recursive: true });
-    const filePath = path.join(uploadDir, file.name);
+    const filePath = path.join(uploadDir, sanitizedFileName);
     const bytes = await file.arrayBuffer();
     await writeFile(filePath, Buffer.from(bytes));
 

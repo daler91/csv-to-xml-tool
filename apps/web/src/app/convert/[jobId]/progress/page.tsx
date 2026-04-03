@@ -13,8 +13,14 @@ export default function ProgressPage() {
   const [warnings, setWarnings] = useState(0);
 
   useEffect(() => {
-    // Poll for progress
-    const interval = setInterval(async () => {
+    let pollInterval = 1000;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    const startTime = Date.now();
+    const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes
+
+    async function poll() {
+      if (cancelled) return;
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
         const job = await res.json();
@@ -30,15 +36,32 @@ export default function ProgressPage() {
         }
 
         if (job.status === "complete" || job.status === "error") {
-          clearInterval(interval);
           router.push(`/convert/${jobId}/results`);
+          return;
+        }
+
+        if (Date.now() - startTime > MAX_WAIT_MS) {
+          setStatus("timeout");
+          return;
         }
       } catch {
-        // ignore poll errors
+        // ignore transient poll errors
       }
-    }, 1000);
 
-    return () => clearInterval(interval);
+      // Gradually back off: 1s -> 2s -> 5s
+      if (pollInterval < 2000) pollInterval = 2000;
+      else if (pollInterval < 5000) pollInterval = 5000;
+
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, pollInterval);
+      }
+    }
+
+    timeoutId = setTimeout(poll, pollInterval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [jobId, router]);
 
   const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
@@ -46,11 +69,15 @@ export default function ProgressPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-16">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold mb-2">Converting...</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          {status === "timeout" ? "Conversion Timed Out" : "Converting..."}
+        </h1>
         <p className="text-sm text-gray-500">
-          {status === "converting"
-            ? `Processing row ${processed} of ${total}`
-            : status}
+          {status === "timeout"
+            ? "The conversion is taking longer than expected. Please check back later or try again."
+            : status === "converting"
+              ? `Processing row ${processed} of ${total}`
+              : status}
         </p>
       </div>
 

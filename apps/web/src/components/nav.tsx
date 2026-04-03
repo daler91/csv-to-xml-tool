@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 export function Nav() {
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   if (!session) return null;
+
+  const links = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/convert", label: "Convert" },
+    { href: "/audit", label: "Audit Trail" },
+  ];
 
   return (
     <nav className="border-b bg-white">
@@ -15,27 +23,27 @@ export function Nav() {
           <Link href="/dashboard" className="font-semibold text-lg">
             SBA Converter
           </Link>
-          <Link
-            href="/dashboard"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/convert"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            Convert
-          </Link>
-          <Link
-            href="/audit"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            Audit Trail
-          </Link>
+          {links.map(({ href, label }) => {
+            const isActive = pathname === href || pathname.startsWith(href + "/");
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`text-sm ${
+                  isActive
+                    ? "text-blue-600 font-medium"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">{session.user.email}</span>
+          <span className="text-sm text-gray-500 truncate max-w-48">
+            {session.user.email}
+          </span>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
             className="text-sm text-gray-600 hover:text-gray-900"

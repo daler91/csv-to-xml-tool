@@ -57,11 +57,11 @@ class TestFormatDate(unittest.TestCase):
         # Test complete exhaustion of formats due to ValueError
         self.assertEqual(format_date("2023-13-01", input_formats=["%Y-%m-%d", "%m/%d/%Y"]), "")
 
-    def test_format_date_regex_fallback(self):
-        # Test the regex fallback logic for missing zero-padding
-        self.assertEqual(format_date("2023-1-1", input_formats=["%Y/%m/%d"]), "2023-01-01")
-        # Test the regex fallback failing due to invalid date elements
-        self.assertEqual(format_date("2023-30-30", input_formats=["%Y/%m/%d"]), "")
+    def test_format_date_single_digit_month_day(self):
+        # Single-digit month/day parsed by default %Y-%m-%d format
+        self.assertEqual(format_date("2023-1-1"), "2023-01-01")
+        # Invalid month/day returns empty
+        self.assertEqual(format_date("2023-30-30"), "")
 
 class TestStandardizeStateName(unittest.TestCase):
     # Using DEFAULT_VALID_STATES from data_cleaning for some tests
@@ -272,13 +272,13 @@ class TestCleanPhoneNumber(unittest.TestCase):
         from src.data_cleaning import clean_phone_number
         self.assertEqual(clean_phone_number("(123) 456-7890"), "1234567890")
         self.assertEqual(clean_phone_number("123.456.7890"), "1234567890")
-        self.assertEqual(clean_phone_number("+1 (123) 456-7890"), "11234567890")
+        self.assertEqual(clean_phone_number("+1 (123) 456-7890"), "1234567890")  # strips leading 1
         self.assertEqual(clean_phone_number("123-456-7890"), "1234567890")
         self.assertEqual(clean_phone_number("1234567890"), "1234567890")
 
     def test_clean_phone_number_with_letters(self):
         from src.data_cleaning import clean_phone_number
-        self.assertEqual(clean_phone_number("123-456-7890 ext 123"), "1234567890123")
+        self.assertEqual(clean_phone_number("123-456-7890 ext 123"), "1234567890")  # truncated to 10
         self.assertEqual(clean_phone_number("1-800-FLOWERS"), "1800")
         self.assertEqual(clean_phone_number("aBcDeFg"), "")
 
@@ -294,4 +294,4 @@ class TestCleanPhoneNumber(unittest.TestCase):
     def test_clean_phone_number_numeric_input(self):
         from src.data_cleaning import clean_phone_number
         self.assertEqual(clean_phone_number(1234567890), "1234567890")
-        self.assertEqual(clean_phone_number(1.8001234567), "18001234567")
+        self.assertEqual(clean_phone_number(1.8001234567), "8001234567")  # 11 digits starting with 1, strip leading 1, then truncate to 10

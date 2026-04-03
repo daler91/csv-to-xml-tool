@@ -6,7 +6,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.xml_utils import create_element, escape_xml
+from src.xml_utils import create_element
 
 class TestXmlElementCreation(unittest.TestCase):
 
@@ -28,27 +28,19 @@ class TestXmlElementCreation(unittest.TestCase):
         root = ET.Element("root")
         parent_element = create_element(root, "parent")
         child_element = create_element(parent_element, "child", "Child Text")
-        
+
         self.assertIs(root.find("parent"), parent_element)
         self.assertIs(parent_element.find("child"), child_element)
         self.assertEqual(child_element.text, "Child Text")
 
-class TestXmlEscaping(unittest.TestCase):
-
-    def test_escape_all_special_characters(self):
-        self.assertEqual(escape_xml('&<>"\''), "&amp;&lt;&gt;&quot;&apos;")
-
-    def test_escape_mixed_content(self):
-        self.assertEqual(escape_xml('Test & "quotes" <tag>'), "Test &amp; &quot;quotes&quot; &lt;tag&gt;")
-
-    def test_escape_no_special_characters(self):
-        self.assertEqual(escape_xml("Hello World"), "Hello World")
-
-    def test_escape_empty_string(self):
-        self.assertEqual(escape_xml(""), "")
-
-    def test_escape_none_input(self):
-        self.assertEqual(escape_xml(None), "")
+    def test_create_element_auto_escapes_special_chars(self):
+        """Verify that ET automatically escapes XML special characters in text content."""
+        parent = ET.Element("root")
+        element = create_element(parent, "child", 'Test & "quotes" <tag>')
+        self.assertEqual(element.text, 'Test & "quotes" <tag>')
+        xml_str = ET.tostring(parent, encoding="unicode")
+        self.assertIn("&amp;", xml_str)
+        self.assertIn("&lt;", xml_str)
 
 if __name__ == '__main__':
     unittest.main()

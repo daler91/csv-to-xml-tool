@@ -9,7 +9,7 @@ def create_element(parent: ET.Element, element_name: str, element_text: str = No
         element.text = element_text
     return element
 
-def escape_xml(text: str = None) -> str:
+def escape_xml(text: str | None = None) -> str:
     """
     Replaces XML special characters (&, <, >, ", ') with their corresponding entities.
     Returns an empty string if the input is None.

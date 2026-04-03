@@ -7,6 +7,9 @@ import re
 from datetime import datetime
 from .config import CounselingConfig
 
+UNITED_STATES = "United States"
+UNITED_KINGDOM = "United Kingdom"
+
 DEFAULT_STATE_MAPPINGS = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
     'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
@@ -30,70 +33,68 @@ DEFAULT_VALID_STATES = set(DEFAULT_STATE_MAPPINGS.values()) | {
     "United States Minor Outlying Islands"
 }
 
+# Reverse mapping: lowercase full name -> canonical full name
+_STATE_NAME_LOOKUP = {name.lower(): name for name in DEFAULT_STATE_MAPPINGS.values()}
+
+
+def _resolve_state_name(state_str, valid_states_list):
+    """Resolve a state string to its canonical name via abbreviation, full name, or valid states lookup."""
+    if state_str.lower() == 'd.c.':
+        return 'District of Columbia'
+
+    upper = state_str.upper()
+    if upper in DEFAULT_STATE_MAPPINGS:
+        return DEFAULT_STATE_MAPPINGS[upper]
+
+    lower = state_str.lower()
+    if lower in _STATE_NAME_LOOKUP:
+        return _STATE_NAME_LOOKUP[lower]
+
+    reference_list = valid_states_list if valid_states_list is not None else DEFAULT_VALID_STATES
+    for valid_st in reference_list:
+        if lower == valid_st.lower():
+            return valid_st
+
+    return state_str
+
+
+def _case_insensitive_lookup(name, valid_states_list):
+    """Find name in valid_states_list case-insensitively. Returns canonical name or None."""
+    lower = name.lower()
+    for item in valid_states_list:
+        if lower == item.lower():
+            return item
+    return None
+
 
 def standardize_state_name(state_value, valid_states_list=None, default_return=""):
     """
     Standardizes state codes/names. Converts abbreviations to full names,
     validates against an optional list, and handles various formats.
-    
+
     Args:
         state_value: State name or code.
         valid_states_list: Optional list/set of valid state names. If provided,
                            the standardized name must be in this list.
         default_return: Value to return if input is empty, unstandardizable,
                         or not in valid_states_list (if provided).
-        
+
     Returns:
         Standardized and validated state name, or default_return.
     """
     if not state_value or str(state_value).strip() == "" or str(state_value).lower() == "nan":
         return default_return
-    
+
     state_str = str(state_value).strip()
-    standardized_name = ""
+    standardized_name = _resolve_state_name(state_str, valid_states_list)
 
-    # Handle special cases first
-    if state_str.lower() == 'd.c.':
-        return 'District of Columbia'
-
-    # Check direct abbreviation mapping (case-insensitive)
-    if state_str.upper() in DEFAULT_STATE_MAPPINGS:
-        standardized_name = DEFAULT_STATE_MAPPINGS[state_str.upper()]
-    else:
-        # Check if it's already a full name (case-insensitive match against values)
-        for abbr, full_name in DEFAULT_STATE_MAPPINGS.items():
-            if state_str.lower() == full_name.lower():
-                standardized_name = full_name # Use the canonical casing
-                break
-        if not standardized_name: # If still not found, it might be a non-abbreviated valid state or an unknown one
-            # Attempt a direct case-insensitive match against a broader list of known full names
-            # This helps if valid_states_list is not provided but we still want to match "california" to "California"
-            temp_valid_list = valid_states_list if valid_states_list is not None else DEFAULT_VALID_STATES
-            for valid_st in temp_valid_list:
-                if state_str.lower() == valid_st.lower():
-                    standardized_name = valid_st # Use the canonical casing from the list
-                    break
-            if not standardized_name: # If it's not in any known mapping or list, it's unstandardizable
-                 # If not found after all checks, return the original value if no validation list,
-                 # or prepare for validation failure if a list is provided.
-                 standardized_name = state_str # Keep original if truly unknown
-
-    if not standardized_name: # Should not happen if state_str was not empty initially, but as a safeguard
+    if not standardized_name:
         return default_return
 
-    # Validate against the provided list if one is given
-    if valid_states_list is not None:
-        if standardized_name not in valid_states_list:
-            # Try a case-insensitive check against valid_states_list as a last resort
-            found_in_list_case_insensitive = False
-            for valid_item in valid_states_list:
-                if standardized_name.lower() == valid_item.lower():
-                    standardized_name = valid_item # Correct casing from valid_states_list
-                    found_in_list_case_insensitive = True
-                    break
-            if not found_in_list_case_insensitive:
-                return default_return
-    
+    if valid_states_list is not None and standardized_name not in valid_states_list:
+        match = _case_insensitive_lookup(standardized_name, valid_states_list)
+        return match if match else default_return
+
     return standardized_name
 
 def map_value(value, mapping_dict, default_value, case_sensitive=False):
@@ -149,34 +150,34 @@ def standardize_country_code(country):
         Standardized country name
     """
     if not country or str(country).strip() == "" or str(country).lower() == "nan":
-        return "United States"  # Default to United States if empty
-    
+        return UNITED_STATES  # Default to United States if empty
+
     country_str = str(country).strip()
-    
+
     # Convert to uppercase for consistent comparison
     country_upper = country_str.upper()
-    
+
     # Hard-coded conversion for US variants with case-insensitive matching
     us_variants = ["US", "USA", "U.S.", "U.S.A.", "UNITED STATES"]
     if country_upper in us_variants:
-        return "United States"
-        
+        return UNITED_STATES
+
     # Common variations to standardize (case-insensitive)
     country_map = {
-        "USA": "United States",
-        "U.S.": "United States",
-        "U.S.A.": "United States",
-        "UNITED STATES OF AMERICA": "United States",
-        "AMERICA": "United States",
+        "USA": UNITED_STATES,
+        "U.S.": UNITED_STATES,
+        "U.S.A.": UNITED_STATES,
+        "UNITED STATES OF AMERICA": UNITED_STATES,
+        "AMERICA": UNITED_STATES,
         "CA": "Canada",
         "CAN": "Canada",
         "MX": "Mexico",
         "MEX": "Mexico",
-        "UK": "United Kingdom",
-        "GB": "United Kingdom",
-        "GBR": "United Kingdom",
-        "GREAT BRITAIN": "United Kingdom",
-        "ENGLAND": "United Kingdom"
+        "UK": UNITED_KINGDOM,
+        "GB": UNITED_KINGDOM,
+        "GBR": UNITED_KINGDOM,
+        "GREAT BRITAIN": UNITED_KINGDOM,
+        "ENGLAND": UNITED_KINGDOM
     }
     
     # Try exact match first (case-insensitive)
@@ -293,7 +294,7 @@ def map_gender_to_sex(gender_value):
     
     if "female" in gender_str:
         return "Female"
-    elif "male" in gender_str and not "female" in gender_str:  # Handle edge case for "Female" containing "male"
+    elif "male" in gender_str and "female" not in gender_str:  # Handle edge case for "Female" containing "male"
         return "Male"
     
     # Return empty string for any other values like "Non-binary", "Prefer not to say", etc.

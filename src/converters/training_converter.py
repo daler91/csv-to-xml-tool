@@ -35,9 +35,8 @@ class TrainingConverter(BaseConverter):
                 return str(record[col])
         return default
 
-    def convert(self, input_path: str, output_path: str):
-        self.logger.info(f"Starting conversion of training data: {input_path}")
-
+    def _read_and_validate_csv(self, input_path):
+        """Read CSV, validate columns and rows. Returns (event_groups, event_id_col) or (None, None)."""
         try:
             df = pd.read_csv(input_path)
             self.logger.info(f"Successfully read CSV with {len(df)} records.")
@@ -50,88 +49,20 @@ class TrainingConverter(BaseConverter):
         if not event_id_col or event_id_col not in df.columns:
             self.logger.error(f"Required column '{event_id_col}' not found in the CSV.")
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, event_id_col, "Event ID column is missing.")
-            return
+            return None, None
 
-        # Pre-validate all rows to ensure they have an event ID
-        valid_rows = []
-        for index, row in df.iterrows():
-            if data_validation.validate_training_record(row, index, self.validator):
-                valid_rows.append(row)
-
+        valid_rows = [row for index, row in df.iterrows() if data_validation.validate_training_record(row, index, self.validator)]
         if not valid_rows:
             self.logger.error("No valid rows found in the CSV to process.")
-            return
+            return None, None
 
         df_valid = pd.DataFrame(valid_rows)
         event_groups = df_valid.groupby(event_id_col)
         self.logger.info(f"Found {len(event_groups)} unique training events.")
+        return event_groups, event_id_col
 
-        root = Element('ManagementTrainingReport')
-        root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
-
-        for event_id, group_df in event_groups:
-            if group_df.empty:
-                continue
-
-            first_record = group_df.iloc[0]
-            self.validator.set_current_record_id(str(event_id))
-
-            try:
-                record = create_element(root, 'ManagementTrainingRecord')
-
-                create_element(record, 'PartnerTrainingNumber', str(event_id))
-
-                # FundingSource - optional element based on XSD, but placing it correctly.
-                funding_source = self._get_column_value(first_record, 'funding_source')
-                if funding_source:
-                    create_element(record, 'FundingSource', funding_source)
-
-                location = create_element(record, 'Location')
-                create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
-
-                date_val = self._get_column_value(first_record, "start_date")
-                formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS, self.config.DEFAULT_START_DATE)
-                create_element(record, 'DateTrainingStarted', formatted_date)
-
-                create_element(record, 'NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS)
-                create_element(record, 'TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS)
-
-                title_val = self._get_column_value(first_record, "event_name")
-                if not title_val:
-                    title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
-                create_element(record, 'TrainingTitle', title_val)
-
-                self._build_location_section(record, first_record)
-                demographics = self._calculate_demographics(group_df)
-                self._build_demographics_section(record, demographics)
-
-                topic_val = self._get_column_value(first_record, "training_topic")
-                mapped_topic = data_cleaning.map_value(topic_val, self.config.TRAINING_TOPIC_MAPPINGS, self.config.DEFAULT_TRAINING_TOPIC, False)
-                training_topic_element = create_element(record, 'TrainingTopic')
-                create_element(training_topic_element, 'Code', mapped_topic)
-
-                partners_element = create_element(record, 'TrainingPartners')
-                create_element(partners_element, 'Code', self.config.DEFAULT_TRAINING_PARTNER_CODE)
-
-                format_val = self._get_column_value(first_record, "event_type")
-                program_format_text = data_cleaning.map_value(format_val, self.config.PROGRAM_FORMAT_MAPPINGS, self.config.DEFAULT_PROGRAM_FORMAT, False)
-                create_element(record, 'ProgramFormatType', program_format_text)
-
-                create_element(record, 'DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES)
-                language_element = create_element(record, 'Language')
-                create_element(language_element, 'Code', self.general_config.DEFAULT_LANGUAGE)
-
-                cosponsor_name = self._get_column_value(first_record, "cosponsor")
-                if cosponsor_name and cosponsor_name.lower() != 'n/a':
-                    create_element(record, 'CosponsorsName', cosponsor_name)
-
-                self.validator.record_processed(success=True)
-
-            except Exception as e:
-                self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
-                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Unhandled error: {e}")
-                self.validator.record_processed(success=False)
-
+    def _write_xml_output(self, root, output_path):
+        """Format and write XML tree to output file."""
         rough_string = tostring(root, 'utf-8')
         reparsed = md.parseString(rough_string)
         pretty_xml = '\n'.join([line for line in reparsed.toprettyxml(indent="  ").split('\n') if line.strip()])
@@ -139,6 +70,80 @@ class TrainingConverter(BaseConverter):
         with open(output_path, 'w') as f:
             f.write(pretty_xml)
         self.logger.info(f"XML file successfully created at {output_path}")
+
+    def _build_training_record(self, root, event_id, group_df):
+        """Build a single ManagementTrainingRecord element."""
+        first_record = group_df.iloc[0]
+        self.validator.set_current_record_id(str(event_id))
+
+        record = create_element(root, 'ManagementTrainingRecord')
+        create_element(record, 'PartnerTrainingNumber', str(event_id))
+
+        funding_source = self._get_column_value(first_record, 'funding_source')
+        if funding_source:
+            create_element(record, 'FundingSource', funding_source)
+
+        location = create_element(record, 'Location')
+        create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
+
+        date_val = self._get_column_value(first_record, "start_date")
+        formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS, self.config.DEFAULT_START_DATE)
+        create_element(record, 'DateTrainingStarted', formatted_date)
+
+        create_element(record, 'NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS)
+        create_element(record, 'TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS)
+
+        title_val = self._get_column_value(first_record, "event_name")
+        if not title_val:
+            title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
+        create_element(record, 'TrainingTitle', title_val)
+
+        self._build_location_section(record, first_record)
+        demographics = self._calculate_demographics(group_df)
+        self._build_demographics_section(record, demographics)
+
+        topic_val = self._get_column_value(first_record, "training_topic")
+        mapped_topic = data_cleaning.map_value(topic_val, self.config.TRAINING_TOPIC_MAPPINGS, self.config.DEFAULT_TRAINING_TOPIC, False)
+        training_topic_element = create_element(record, 'TrainingTopic')
+        create_element(training_topic_element, 'Code', mapped_topic)
+
+        partners_element = create_element(record, 'TrainingPartners')
+        create_element(partners_element, 'Code', self.config.DEFAULT_TRAINING_PARTNER_CODE)
+
+        format_val = self._get_column_value(first_record, "event_type")
+        program_format_text = data_cleaning.map_value(format_val, self.config.PROGRAM_FORMAT_MAPPINGS, self.config.DEFAULT_PROGRAM_FORMAT, False)
+        create_element(record, 'ProgramFormatType', program_format_text)
+
+        create_element(record, 'DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES)
+        language_element = create_element(record, 'Language')
+        create_element(language_element, 'Code', self.general_config.DEFAULT_LANGUAGE)
+
+        cosponsor_name = self._get_column_value(first_record, "cosponsor")
+        if cosponsor_name and cosponsor_name.lower() != 'n/a':
+            create_element(record, 'CosponsorsName', cosponsor_name)
+
+    def convert(self, input_path: str, output_path: str):
+        self.logger.info(f"Starting conversion of training data: {input_path}")
+
+        event_groups, event_id_col = self._read_and_validate_csv(input_path)
+        if event_groups is None:
+            return
+
+        root = Element('ManagementTrainingReport')
+        root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+
+        for event_id, group_df in event_groups:
+            if group_df.empty:
+                continue
+            try:
+                self._build_training_record(root, event_id, group_df)
+                self.validator.record_processed(success=True)
+            except Exception as e:
+                self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
+                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Unhandled error: {e}")
+                self.validator.record_processed(success=False)
+
+        self._write_xml_output(root, output_path)
 
     def _build_location_section(self, parent, record):
         training_location = create_element(parent, 'TrainingLocation')

@@ -251,7 +251,7 @@ class TestFixSBAXML(unittest.TestCase):
             mock_process_single_file.assert_called_once()
             args, _ = mock_process_single_file.call_args[0][:2]
             self.assertEqual(args.file, 'test.xml')
-            self.assertEqual(mock_process_single_file.call_args[0][2], False) # mimic_original_add_missing
+            self.assertFalse(mock_process_single_file.call_args[0][2]) # mimic_original_add_missing
 
     @patch('src.fix_sba_xml.process_directory')
     @patch('src.fix_sba_xml.setup_logger')
@@ -269,8 +269,8 @@ class TestFixSBAXML(unittest.TestCase):
             mock_process_directory.assert_called_once()
             args, _ = mock_process_directory.call_args[0][:2]
             self.assertEqual(args.directory, 'test_dir')
-            self.assertEqual(mock_process_directory.call_args[0][2], True) # always_fix
-            self.assertEqual(mock_process_directory.call_args[0][3], False) # mimic_original_add_missing
+            self.assertTrue(mock_process_directory.call_args[0][2]) # always_fix
+            self.assertFalse(mock_process_directory.call_args[0][3]) # mimic_original_add_missing
 
     @patch('src.fix_sba_xml.process_single_file')
     @patch('src.fix_sba_xml.setup_logger')

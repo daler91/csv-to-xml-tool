@@ -3,12 +3,22 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { rateLimit } from "@/lib/rate-limit";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
 export async function POST(req: Request) {
   try {
     const user = await getRequiredUser();
+
+    const { success, remaining } = await rateLimit(`upload:${user.id}`, 10, 60);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const converterType = formData.get("converterType") as string;

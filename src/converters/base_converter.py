@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Defines the base class for all data converters.
 
@@ -18,7 +20,7 @@ class BaseConverter(abc.ABC):
     validation tracker.
     """
 
-    def __init__(self, logger, validator):
+    def __init__(self, logger: object, validator: object) -> None:
         """
         Initializes the converter with a logger and a validator.
 
@@ -30,7 +32,7 @@ class BaseConverter(abc.ABC):
         self.validator = validator
 
     @abc.abstractmethod
-    def convert(self, input_path: str, output_path: str):
+    def convert(self, input_path: str, output_path: str) -> None:
         """
         Performs the data conversion.
 

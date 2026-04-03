@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Validation reporting for CSV to XML conversion.
 This module tracks validation issues and generates reports.
@@ -12,7 +14,7 @@ class ValidationTracker:
     """Tracks validation issues during the conversion process."""
     
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the validation tracker."""
         self.issues = []
         self.issue_counts = defaultdict(Counter)
@@ -21,10 +23,10 @@ class ValidationTracker:
         self.failed_records = 0
         self.current_record_id = None
 
-    def set_current_record_id(self, record_id):
+    def set_current_record_id(self, record_id: str) -> None:
         self.current_record_id = record_id
     
-    def add_issue(self, record_id, severity, category, field_name, message):
+    def add_issue(self, record_id: str, severity: str, category: str, field_name: str, message: str) -> None:
         """
         Add a validation issue.
         
@@ -47,7 +49,7 @@ class ValidationTracker:
         self.issues.append(issue)
         self.issue_counts[severity][category] += 1
     
-    def record_processed(self, success=True):
+    def record_processed(self, success: bool = True) -> None:
         """
         Record that a record was processed.
         
@@ -58,7 +60,7 @@ class ValidationTracker:
         if success:
             self.successful_records += 1
     
-    def get_summary(self):
+    def get_summary(self) -> dict:
         """
         Get a summary of validation issues.
         
@@ -76,14 +78,14 @@ class ValidationTracker:
             'warnings_by_category': dict(self.issue_counts['warning'])
         }
     
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Return all tracker state as a JSON-serializable dict."""
         return {
             "summary": self.get_summary(),
             "issues": self.issues,
         }
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         """Print a summary of validation issues to the console."""
         summary = self.get_summary()
         
@@ -109,7 +111,7 @@ class ValidationTracker:
         
         print("="*50)
     
-    def save_issues_to_csv(self, output_dir="."):
+    def save_issues_to_csv(self, output_dir: str = ".") -> str | None:
         """
         Save all validation issues to a CSV file.
         
@@ -143,7 +145,7 @@ class ValidationTracker:
         return csv_file
     
 
-    def _generate_html_header(self):
+    def _generate_html_header(self) -> str:
         """Generate the HTML header and styles."""
         return f"""<!DOCTYPE html>
 <html>
@@ -167,7 +169,7 @@ class ValidationTracker:
     <p>Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
 """
 
-    def _generate_summary_section(self, summary):
+    def _generate_summary_section(self, summary: dict) -> str:
         """Generate the summary section HTML."""
         return f"""
     <div class="summary">
@@ -180,7 +182,7 @@ class ValidationTracker:
     </div>
 """
 
-    def _generate_category_table(self, title, categories):
+    def _generate_category_table(self, title: str, categories: dict) -> str:
         """Generate a table for issue categories."""
         if not categories:
             return ""
@@ -202,7 +204,7 @@ class ValidationTracker:
         html_content += "    </table>\n"
         return html_content
 
-    def _generate_issues_table(self):
+    def _generate_issues_table(self) -> str:
         """Generate the detailed issues table."""
         if not self.issues:
             return ""
@@ -236,7 +238,7 @@ class ValidationTracker:
         html_content += "    </table>\n"
         return html_content
 
-    def generate_html_report(self, output_dir="."):
+    def generate_html_report(self, output_dir: str = ".") -> str:
         """
         Generate an HTML report of validation issues.
 

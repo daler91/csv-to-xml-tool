@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Logging utility for CSV to XML conversion.
 This module provides configurable logging functionality for the conversion process.
@@ -10,14 +12,14 @@ from datetime import datetime
 class ConversionLogger:
     """Handles logging for the CSV to XML conversion process and other utilities."""
     
-    def __init__(self, 
-                 logger_name="conversion_logger", 
-                 log_level=logging.INFO, 
-                 log_to_file=True, 
-                 log_dir="logs", 
+    def __init__(self,
+                 logger_name="conversion_logger",
+                 log_level=logging.INFO,
+                 log_to_file=True,
+                 log_dir="logs",
                  log_file_path=None,
                  console_format='%(levelname)s: %(message)s',
-                 file_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'):
+                 file_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') -> None:
         """
         Initialize the logger.
         
@@ -66,11 +68,11 @@ class ConversionLogger:
             
             self.logger.info(f"Logging to file: {actual_log_file_path}")
     
-    def info(self, message):
+    def info(self, message: str) -> None:
         """Log an info message."""
         self.logger.info(message)
     
-    def warning(self, message, record_id=None):
+    def warning(self, message: str, record_id: str | None = None) -> None:
         """
         Log a warning message.
         
@@ -83,7 +85,7 @@ class ConversionLogger:
         else:
             self.logger.warning(message)
     
-    def error(self, message, record_id=None):
+    def error(self, message: str, record_id: str | None = None) -> None:
         """
         Log an error message.
         
@@ -96,7 +98,7 @@ class ConversionLogger:
         else:
             self.logger.error(message)
     
-    def debug(self, message):
+    def debug(self, message: str) -> None:
         """Log a debug message."""
         self.logger.debug(message)
 

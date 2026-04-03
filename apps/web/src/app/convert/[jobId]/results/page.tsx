@@ -354,7 +354,7 @@ function CleaningDiffView({
           <Link
             href={`/convert/${jobId}/results?tab=diff`}
             className={`px-2 py-1 text-xs rounded border ${
-              !filter ? "bg-blue-100 border-blue-300" : "hover:bg-gray-50"
+              filter ? "hover:bg-gray-50" : "bg-blue-100 border-blue-300"
             }`}
           >
             All ({diffs.length})

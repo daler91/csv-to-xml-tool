@@ -95,8 +95,7 @@ class CounselingConverter(BaseConverter):
         signature_onfile = row.get('Client Signature(On File)', 'No')
         create_element(signature, 'OnFile', 'Yes' if signature_onfile in ['1', 1] else 'No')
 
-    def _build_client_intake_section(self, parent, row, record_id):
-        client_intake = create_element(parent, 'ClientIntake')
+    def _build_race(self, client_intake, row, record_id):
         race_element = create_element(client_intake, 'Race')
         race_codes = data_cleaning.split_multi_value(row.get('Race', ''))
         if race_codes:
@@ -106,6 +105,7 @@ class CounselingConverter(BaseConverter):
             create_element(race_element, 'Code', 'Prefer not to say')
             self.validator.add_issue(record_id, "warning", ValidationCategory.MISSING_FIELD, "Race", "Race missing, defaulted to 'Prefer not to say'.")
 
+    def _build_demographics(self, client_intake, row):
         ethnicity_csv = row.get('Ethnicity:', '').strip()
         if ethnicity_csv:
             create_element(client_intake, 'Ethnicity', ethnicity_csv)
@@ -118,6 +118,7 @@ class CounselingConverter(BaseConverter):
         if disability_csv:
             create_element(client_intake, 'Disability', disability_csv)
 
+    def _build_military_status(self, client_intake, row, record_id):
         military_status_csv = row.get('Veteran Status', '').strip()
         if military_status_csv:
             create_element(client_intake, 'MilitaryStatus', military_status_csv)
@@ -130,6 +131,7 @@ class CounselingConverter(BaseConverter):
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "BranchOfService", f"BranchOfService required for MilitaryStatus '{military_status_csv}' but is missing/invalid.")
 
+    def _build_media_and_internet(self, client_intake, row, record_id):
         media_codes = data_cleaning.split_multi_value(row.get('What Prompted you to contact us?', ''))
         media_other = row.get('Internet (specify)', '').strip()
         if media_codes or media_other:
@@ -143,12 +145,13 @@ class CounselingConverter(BaseConverter):
         if internet_usage:
             create_element(client_intake, 'Internet', internet_usage)
 
-        # Validate: Internet field is mandatory when media code is 'Internet'
         has_internet_media = any(c.strip().lower() == 'internet' for c in media_codes)
         if has_internet_media and not internet_usage and not media_other:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "Internet", "Internet field should be mandatory when the media code is 'Internet'.")
 
+    def _build_business_fields(self, client_intake, row):
+        """Build business status, ownership, employees, and income fields. Returns in_business_val."""
         in_business_raw = row.get('Currently In Business?', '').strip()
         in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
         create_element(client_intake, 'CurrentlyInBusiness', in_business_val)
@@ -182,20 +185,24 @@ class CounselingConverter(BaseConverter):
         create_element(income_part2, 'ProfitLoss', profit_loss if profit_loss else '0')
         create_element(income_part2, 'ExportGrossRevenuesOrSales', '0')
 
-        if in_business_val.lower() == 'yes':
-            le_element = create_element(client_intake, 'LegalEntity')
-            le_codes = data_cleaning.split_multi_value(row.get('Legal Entity of Business', ''))
-            le_other = row.get('Other legal entity (specify)', '').strip()
-            if le_codes:
-                for code in le_codes: create_element(le_element, 'Code', code)
-            elif le_other:
-                create_element(le_element, 'Code', 'Other')
-            else:
-                self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "LegalEntity", "Client is in business, but Legal Entity is missing.")
-                create_element(le_element, 'Code', 'Other')
-            if le_other:
-                create_element(le_element, 'Other', le_other)
+        return in_business_val
 
+    def _build_legal_entity(self, client_intake, row, record_id):
+        le_element = create_element(client_intake, 'LegalEntity')
+        le_codes = data_cleaning.split_multi_value(row.get('Legal Entity of Business', ''))
+        le_other = row.get('Other legal entity (specify)', '').strip()
+        if le_codes:
+            for code in le_codes:
+                create_element(le_element, 'Code', code)
+        elif le_other:
+            create_element(le_element, 'Code', 'Other')
+        else:
+            self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "LegalEntity", "Client is in business, but Legal Entity is missing.")
+            create_element(le_element, 'Code', 'Other')
+        if le_other:
+            create_element(le_element, 'Other', le_other)
+
+    def _build_rural_urban(self, client_intake, row, record_id):
         rural_urban_val = row.get('Rural_vs_Urban', self.config.DEFAULT_URBAN_RURAL)
         create_element(client_intake, 'Rural_vs_Urban', rural_urban_val)
 
@@ -206,26 +213,37 @@ class CounselingConverter(BaseConverter):
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "FIPS_Code", f"FIPS Code required for Rural/Urban status '{rural_urban_val}' but is missing.")
 
+    def _build_counseling_seeking(self, client_intake, row, record_id, in_business_val):
         cs_codes = data_cleaning.split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
         cs_other = row.get('Nature of the Counseling Seeking - Other Detail', '').strip()
         if cs_codes or cs_other:
             cs_element = create_element(client_intake, 'CounselingSeeking')
             is_other_present = any(c.lower() == 'other' for c in cs_codes)
-            for code in cs_codes: create_element(cs_element, 'Code', code)
+            for code in cs_codes:
+                create_element(cs_element, 'Code', code)
             if is_other_present and not cs_other:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "CounselingSeeking/Other", "CounselingSeeking is 'Other' but detail text is missing.")
             create_element(cs_element, 'Other', cs_other)
 
-        # Validate: CounselingSeeking is required under Part 2 if client is in business
         if in_business_val == 'Yes' and not cs_codes:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "CounselingSeeking", "Counseling Seeking is required under Part 2 if Client is in Business.")
 
-    def _build_counselor_record_section(self, parent, row, record_id):
-        counselor_record = create_element(parent, 'CounselorRecord')
+    def _build_client_intake_section(self, parent, row, record_id):
+        client_intake = create_element(parent, 'ClientIntake')
+        self._build_race(client_intake, row, record_id)
+        self._build_demographics(client_intake, row)
+        self._build_military_status(client_intake, row, record_id)
+        self._build_media_and_internet(client_intake, row, record_id)
+        in_business_val = self._build_business_fields(client_intake, row)
+        if in_business_val.lower() == 'yes':
+            self._build_legal_entity(client_intake, row, record_id)
+        self._build_rural_urban(client_intake, row, record_id)
+        self._build_counseling_seeking(client_intake, row, record_id, in_business_val)
+
+    def _build_counselor_identity(self, counselor_record, row, record_id):
         create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))
 
-        # FundingSource is an enum - only emit if a valid value is present
         funding_source = row.get('Funding Source', '').strip()
         if funding_source:
             create_element(counselor_record, 'FundingSource', funding_source)
@@ -236,20 +254,18 @@ class CounselingConverter(BaseConverter):
         create_element(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
 
         create_element(counselor_record, 'Email', row.get('Email', ''))
-
         self._build_phone(counselor_record, 'PhonePart3', row)
-
         self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
+    def _build_business_verification(self, counselor_record, row):
+        """Build business verification and reportable impact fields. Returns session-relevant values."""
         verified_in_business = row.get('Verified To Be In Business', 'Undetermined').strip()
         if verified_in_business not in ('Yes', 'No', 'Undetermined'):
             verified_in_business = 'Undetermined'
 
-        # ReportableImpact must be Yes/No
         reportable_raw = row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS).strip()
         reportable_impact = reportable_raw if reportable_raw in ('Yes', 'No') else 'No'
 
-        # Auto-correct: If ReportableImpact is Yes, VerifiedToBeInBusiness must also be Yes
         if reportable_impact == 'Yes' and verified_in_business != 'Yes':
             verified_in_business = 'Yes'
 
@@ -265,6 +281,7 @@ class CounselingConverter(BaseConverter):
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
+    def _build_financial_data(self, counselor_record, row):
         total_employees = data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0')))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
@@ -273,7 +290,6 @@ class CounselingConverter(BaseConverter):
         if exporting_employees2 and float(exporting_employees2) > 0:
             create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
 
-        # ClientAnnualIncomePart3 - only emit sub-elements with valid values
         gross_rev_part3 = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '')))
         profit_loss_part3 = data_cleaning.clean_numeric(row.get('Profit & Loss (Meeting)', row.get('Profits/Losses', '')))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
@@ -281,7 +297,6 @@ class CounselingConverter(BaseConverter):
         create_element(income_part3, 'ProfitLoss', profit_loss_part3 if profit_loss_part3 else '0')
         create_element(income_part3, 'ExportGrossRevenuesOrSales', '0')
 
-        # ResourcePartnerServiceContributed - XSD expects this wrapper around loan amounts
         sba_loan = data_cleaning.clean_numeric(row.get('SBA Loan Amount', '0'))
         non_sba_loan = data_cleaning.clean_numeric(row.get('Non-SBA Loan Amount', '0'))
         equity_capital = data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', '0'))
@@ -290,30 +305,19 @@ class CounselingConverter(BaseConverter):
         create_element(rpsc, 'NonSBALoanAmount', non_sba_loan if non_sba_loan else '0')
         create_element(rpsc, 'EquityCapitalReceived', equity_capital if equity_capital else '0')
 
-        # Certifications - only emit if CSV has values
-        cert_codes = data_cleaning.split_multi_value(row.get('Certifications (SDB, HUBZONE, etc)', ''))
-        cert_other = row.get('Other Certifications', '').strip()
-        if cert_codes or cert_other:
-            cert_element = create_element(counselor_record, 'Certifications')
-            for code in cert_codes:
-                create_element(cert_element, 'Code', code)
-            if not cert_codes and cert_other:
-                create_element(cert_element, 'Code', 'Other')
-            if cert_other:
-                create_element(cert_element, 'Other', cert_other)
+    def _build_coded_section(self, parent, element_name, codes, other_text, default_other_code=None):
+        """Build an optional section with Code elements and an Other field."""
+        if not codes and not other_text:
+            return
+        element = create_element(parent, element_name)
+        for code in codes:
+            create_element(element, 'Code', code)
+        if not codes and other_text and default_other_code:
+            create_element(element, 'Code', default_other_code)
+        if other_text:
+            create_element(element, 'Other', other_text)
 
-        # SBAFinancialAssistance - only emit if CSV has values
-        sba_fa_codes = data_cleaning.split_multi_value(row.get('SBA Financial Assistance', ''))
-        sba_fa_other = row.get('Other SBA Financial Assistance', '').strip()
-        if sba_fa_codes or sba_fa_other:
-            sba_fa_element = create_element(counselor_record, 'SBAFinancialAssistance')
-            for code in sba_fa_codes:
-                create_element(sba_fa_element, 'Code', code)
-            if not sba_fa_codes and sba_fa_other:
-                create_element(sba_fa_element, 'Code', 'Other(SBIR, SBIC, 7(a) 504, etc)')
-            if sba_fa_other:
-                create_element(sba_fa_element, 'Other', sba_fa_other)
-
+    def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
         provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
         provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
@@ -327,18 +331,7 @@ class CounselingConverter(BaseConverter):
         if cp_other:
             create_element(cp_element, 'Other', cp_other)
 
-        # ReferredClient - only emit if CSV has values
-        referred_codes = data_cleaning.split_multi_value(row.get('Referred Client to', ''))
-        referred_other = row.get('Other (Referred Client to)', '').strip()
-        if referred_codes or referred_other:
-            referred_element = create_element(counselor_record, 'ReferredClient')
-            for code in referred_codes:
-                create_element(referred_element, 'Code', code)
-            if not referred_codes and referred_other:
-                create_element(referred_element, 'Code', 'Other')
-            if referred_other:
-                create_element(referred_element, 'Other', referred_other)
-
+    def _build_session_details(self, counselor_record, row, record_id):
         session_type_raw = row.get('Type of Session', self.config.DEFAULT_SESSION_TYPE)
         session_type = "Update Only" if session_type_raw.strip() == "Update" else session_type_raw.strip()
         if session_type not in self.config.VALID_SESSION_TYPES:
@@ -372,6 +365,28 @@ class CounselingConverter(BaseConverter):
         counselor_notes = data_cleaning.truncate_counselor_notes(row.get('Comments', ''), self.config.MAX_FIELD_LENGTHS["CounselorNotes"])
         if counselor_notes:
             create_element(counselor_record, 'CounselorNotes', counselor_notes)
+
+    def _build_counselor_record_section(self, parent, row, record_id):
+        counselor_record = create_element(parent, 'CounselorRecord')
+        self._build_counselor_identity(counselor_record, row, record_id)
+        self._build_business_verification(counselor_record, row)
+        self._build_financial_data(counselor_record, row)
+
+        self._build_coded_section(counselor_record, 'Certifications',
+            data_cleaning.split_multi_value(row.get('Certifications (SDB, HUBZONE, etc)', '')),
+            row.get('Other Certifications', '').strip(), 'Other')
+
+        self._build_coded_section(counselor_record, 'SBAFinancialAssistance',
+            data_cleaning.split_multi_value(row.get('SBA Financial Assistance', '')),
+            row.get('Other SBA Financial Assistance', '').strip(), 'Other(SBIR, SBIC, 7(a) 504, etc)')
+
+        self._build_counseling_provided(counselor_record, row, record_id)
+
+        self._build_coded_section(counselor_record, 'ReferredClient',
+            data_cleaning.split_multi_value(row.get('Referred Client to', '')),
+            row.get('Other (Referred Client to)', '').strip(), 'Other')
+
+        self._build_session_details(counselor_record, row, record_id)
 
 
     def _build_address(self, parent, element_name, row, record_id):

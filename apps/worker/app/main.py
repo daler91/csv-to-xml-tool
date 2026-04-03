@@ -36,11 +36,12 @@ logger.info("=========================")
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(path: str, request: Request):
-    logger.error(f"CATCH-ALL: {request.method} /{path} (no route matched)")
+    sanitized_path = path.replace("\n", "").replace("\r", "")[:200]
+    logger.error("CATCH-ALL: %s /%s (no route matched)", request.method, sanitized_path)
     return JSONResponse(
         status_code=404,
         content={
-            "detail": f"No route matched: {request.method} /{path}",
+            "detail": "No route matched",
             "registered_routes": _registered,
         },
     )

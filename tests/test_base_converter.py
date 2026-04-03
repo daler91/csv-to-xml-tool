@@ -38,7 +38,7 @@ class TestBaseConverter(unittest.TestCase):
         """
         class CompleteConverter(BaseConverter):
             def convert(self, input_path: str, output_path: str):
-                pass
+                """No-op implementation to satisfy abstract method for testing."""
 
         converter = CompleteConverter(self.logger, self.validator)
         self.assertIsInstance(converter, CompleteConverter)

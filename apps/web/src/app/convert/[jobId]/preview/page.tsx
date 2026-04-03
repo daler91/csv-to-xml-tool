@@ -122,7 +122,7 @@ export default function PreviewPage() {
           </thead>
           <tbody>
             {preview.rows.map((row, rowIndex) => (
-              <tr key={`row-${rowIndex}`} className="border-b hover:bg-gray-50">
+              <tr key={`row-${rowIndex}-${row[preview.headers[0]] ?? ""}`} className="border-b hover:bg-gray-50">
                 <td className="px-3 py-2 text-gray-400">{rowIndex + 1}</td>
                 {preview.headers.map((h) => (
                   <td key={h} className="px-3 py-2 whitespace-nowrap max-w-[200px] truncate">

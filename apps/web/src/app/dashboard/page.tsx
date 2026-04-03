@@ -64,11 +64,7 @@ export default async function DashboardPage() {
                         : "-"}
                     </td>
                     <td className="px-4 py-3">
-                      {job.xsdValid === null
-                        ? "-"
-                        : job.xsdValid
-                        ? <span className="text-green-600">Valid</span>
-                        : <span className="text-red-600">Invalid</span>}
+                      <XsdStatus xsdValid={job.xsdValid} />
                     </td>
                     <td className="px-4 py-3 text-gray-500">
                       {new Date(job.createdAt).toLocaleDateString()}
@@ -92,7 +88,13 @@ export default async function DashboardPage() {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function XsdStatus({ xsdValid }: Readonly<{ xsdValid: boolean | null }>) {
+  if (xsdValid === null) return <>-</>;
+  if (xsdValid) return <span className="text-green-600">Valid</span>;
+  return <span className="text-red-600">Invalid</span>;
+}
+
+function StatusBadge({ status }: Readonly<{ status: string }>) {
   const colors: Record<string, string> = {
     uploaded: "bg-gray-100 text-gray-700",
     previewed: "bg-blue-100 text-blue-700",

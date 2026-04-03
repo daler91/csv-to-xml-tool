@@ -205,8 +205,8 @@ class TestFixSBAXML(unittest.TestCase):
     @patch('src.fix_sba_xml.validator_process_directory')
     @patch('os.makedirs')
     @patch('os.path.exists')
-    def test_process_directory_with_output(self, mock_exists, mock_makedirs, mock_validator_process_directory):
-        """Test directory processing with output directory creation."""
+    def test_process_directory_with_output_side_effect(self, mock_exists, mock_makedirs, mock_validator_process_directory):
+        """Test directory processing with output directory creation and side effects."""
         mock_validator_process_directory.return_value = 2
         # Patch exists to only return false for 'out_dir' to not break system calls
         def side_effect(path):

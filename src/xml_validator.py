@@ -37,9 +37,11 @@ def validate_against_xsd(xml_file, xsd_file):
         # Resolve and validate file paths against traversal
         xml_file = os.path.realpath(xml_file)
         xsd_file = os.path.realpath(xsd_file)
-        _data_dir = os.path.realpath(os.environ.get("DATA_DIR", "/"))
-        if not xml_file.startswith(_data_dir):
-            return {"is_valid": False, "errors": ["Invalid XML file path"]}
+        _data_dir_env = os.environ.get("DATA_DIR", "")
+        if _data_dir_env:
+            _data_dir = os.path.realpath(_data_dir_env)
+            if not xml_file.startswith(_data_dir):
+                return {"is_valid": False, "errors": ["Invalid XML file path"]}
         if not xsd_file.startswith(os.sep):
             return {"is_valid": False, "errors": ["Invalid XSD file path"]}
 

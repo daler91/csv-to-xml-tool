@@ -320,12 +320,12 @@ class CounselingConverter(BaseConverter):
     def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
         provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
+        has_other_code = any(c.strip().lower() == 'other' for c in provided_codes)
         provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
         cp_other = row.get('Other Counseling Provided', '').strip()
         for code in provided_codes:
             create_element(cp_element, 'Code', code)
-        is_cp_other_present = any(c.strip().lower() == 'other' for c in provided_codes)
-        if is_cp_other_present and not cp_other:
+        if has_other_code and not cp_other:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "CounselingProvided/Other", "Other Counseling Provided is required when Counseling Provided Code is 'Other'.")
         if cp_other:

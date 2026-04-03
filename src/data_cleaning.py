@@ -1,11 +1,15 @@
-  
+from __future__ import annotations
+
 """
 Enhanced data cleaning and formatting utilities for Salesforce CSV to XML conversion.
 This module contains functions for cleaning and standardizing Salesforce data formats.
 """
+import logging
 import re
 from datetime import datetime
 from .config import CounselingConfig
+
+_logger = logging.getLogger(__name__)
 
 UNITED_STATES = "United States"
 UNITED_KINGDOM = "United Kingdom"
@@ -37,7 +41,7 @@ DEFAULT_VALID_STATES = set(DEFAULT_STATE_MAPPINGS.values()) | {
 _STATE_NAME_LOOKUP = {name.lower(): name for name in DEFAULT_STATE_MAPPINGS.values()}
 
 
-def _resolve_state_name(state_str, valid_states_list):
+def _resolve_state_name(state_str: str, valid_states_list: set[str] | list[str] | None) -> str:
     """Resolve a state string to its canonical name via abbreviation, full name, or valid states lookup."""
     if state_str.lower() == 'd.c.':
         return 'District of Columbia'
@@ -58,7 +62,7 @@ def _resolve_state_name(state_str, valid_states_list):
     return state_str
 
 
-def _case_insensitive_lookup(name, valid_states_list):
+def _case_insensitive_lookup(name: str, valid_states_list: set[str] | list[str]) -> str | None:
     """Find name in valid_states_list case-insensitively. Returns canonical name or None."""
     lower = name.lower()
     for item in valid_states_list:
@@ -67,7 +71,7 @@ def _case_insensitive_lookup(name, valid_states_list):
     return None
 
 
-def standardize_state_name(state_value, valid_states_list=None, default_return=""):
+def standardize_state_name(state_value: str | None, valid_states_list: set[str] | list[str] | None = None, default_return: str = "") -> str:
     """
     Standardizes state codes/names. Converts abbreviations to full names,
     validates against an optional list, and handles various formats.
@@ -97,7 +101,7 @@ def standardize_state_name(state_value, valid_states_list=None, default_return="
 
     return standardized_name
 
-def map_value(value, mapping_dict, default_value, case_sensitive=False):
+def map_value(value: object, mapping_dict: dict, default_value: object, case_sensitive: bool = False) -> object:
     """
     Maps an input value using a dictionary, with options for case sensitivity
     and a default return value.
@@ -138,7 +142,7 @@ def map_value(value, mapping_dict, default_value, case_sensitive=False):
 
     return default_value
 
-def standardize_country_code(country):
+def standardize_country_code(country: str | None) -> str:
     """
     Standardizes country codes to ensure they match the required format in XSD.
     Handles various forms of country codes including "US", "USA", etc.
@@ -175,7 +179,7 @@ def standardize_country_code(country):
 
     return country_map.get(country_upper, str(country).strip())
 
-def clean_phone_number(phone):
+def clean_phone_number(phone: str | None) -> str:
     """
     Removes all non-numeric characters from a phone number and normalizes to 10 digits.
     Strips leading country code '1' from 11-digit numbers.
@@ -195,7 +199,7 @@ def clean_phone_number(phone):
         digits = digits[1:]
     return digits[:10]
 
-def format_date(date_str, input_formats=None, default_return=""):
+def format_date(date_str: str | None, input_formats: list[str] | None = None, default_return: str = "") -> str:
     """
     Converts date from various formats to YYYY-MM-DD format.
     Returns default_return if date_str is empty, None, or cannot be parsed.
@@ -225,13 +229,16 @@ def format_date(date_str, input_formats=None, default_return=""):
     for fmt in input_formats:
         try:
             dt_object = datetime.strptime(date_str, fmt)
-            return dt_object.strftime('%Y-%m-%d')
+            result = dt_object.strftime('%Y-%m-%d')
+            _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
+            return result
         except ValueError:
             continue
 
+    _logger.debug("Failed to parse date '%s' with any known format", date_str)
     return default_return
 
-def clean_whitespace(text):
+def clean_whitespace(text: str | None) -> str:
     """
     Cleans excess whitespace from text while preserving normal spacing between words and sentences.
     - Replaces multiple spaces with a single space
@@ -262,7 +269,7 @@ def clean_whitespace(text):
     # Join with single newlines
     return '\n'.join(cleaned_lines)
 
-def map_gender_to_sex(gender_value):
+def map_gender_to_sex(gender_value: str | None) -> str:
     """
     Maps various gender values to just 'Female' or 'Male' per XSD requirements.
     Returns empty string if no match or missing.
@@ -280,7 +287,7 @@ def map_gender_to_sex(gender_value):
     # Return empty string for any other values like "Non-binary", "Prefer not to say", etc.
     return ""
 
-def split_multi_value(value, delimiter=";"):
+def split_multi_value(value: str | None, delimiter: str = ";") -> list[str]:
     """
     Splits multi-value fields with the specified delimiter.
     Returns an empty list if the value is empty or None.
@@ -290,7 +297,7 @@ def split_multi_value(value, delimiter=";"):
     
     return [item.strip() for item in str(value).split(delimiter) if item.strip()]
 
-def clean_numeric(value):
+def clean_numeric(value: str | int | float | None) -> str:
     """
     Cleans a numeric string by removing commas, currency symbols, and whitespace.
     Extracts digits and optional decimal point.
@@ -308,7 +315,7 @@ def clean_numeric(value):
     except (ValueError, TypeError):
         return ""
 
-def clean_percentage(value):
+def clean_percentage(value: str | int | float | None) -> str:
     """
     Cleans a percentage string, removing the % symbol and converting to a decimal.
     Returns a number between 0 and 100.
@@ -332,7 +339,7 @@ def clean_percentage(value):
     except (ValueError, TypeError):
         return "0"
 
-def truncate_counselor_notes(notes, max_length=CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"]):
+def truncate_counselor_notes(notes: str | None, max_length: int = CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"]) -> str:
     """
     Cleans counselor notes and ensures they don't exceed the maximum length.
     If notes exceed max_length, they are truncated at a sentence or word boundary.

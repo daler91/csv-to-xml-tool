@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Nav } from "@/components/nav";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: "SBA CSV to XML Converter",
@@ -18,7 +19,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-gray-50 antialiased">
         <Providers>
           <Nav />
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </Providers>
       </body>
     </html>

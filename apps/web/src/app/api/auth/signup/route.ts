@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const { success, remaining } = await rateLimit(`signup:${ip}`, 5, 60);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "X-RateLimit-Remaining": String(remaining) } }
+      );
+    }
+
     const { email, password, name } = await req.json();
 
     if (!email || !password) {

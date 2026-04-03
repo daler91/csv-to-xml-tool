@@ -41,9 +41,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    // Whitelist fields that clients are allowed to update
+    const allowedFields = ["columnMapping", "status"] as const;
+    const sanitizedData: Record<string, unknown> = {};
+    for (const key of allowedFields) {
+      if (key in data) {
+        sanitizedData[key] = data[key];
+      }
+    }
+
+    if (Object.keys(sanitizedData).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
     const updated = await prisma.job.update({
       where: { id: jobId },
-      data,
+      data: sanitizedData,
     });
 
     return NextResponse.json(updated);

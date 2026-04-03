@@ -4,8 +4,7 @@ Handles the conversion of SBA Management Training Reports from CSV to XML.
 
 from .. import data_validation
 import pandas as pd
-import xml.dom.minidom as md
-from xml.etree.ElementTree import Element, tostring
+import xml.etree.ElementTree as ET
 import re
 
 from .base_converter import BaseConverter
@@ -63,12 +62,9 @@ class TrainingConverter(BaseConverter):
 
     def _write_xml_output(self, root, output_path):
         """Format and write XML tree to output file."""
-        rough_string = tostring(root, 'utf-8')
-        reparsed = md.parseString(rough_string)
-        pretty_xml = '\n'.join([line for line in reparsed.toprettyxml(indent="  ").split('\n') if line.strip()])
-
-        with open(output_path, 'w') as f:
-            f.write(pretty_xml)
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="  ")
+        tree.write(output_path, encoding='utf-8', xml_declaration=True)
         self.logger.info(f"XML file successfully created at {output_path}")
 
     def _build_training_record(self, root, event_id, group_df):
@@ -129,7 +125,7 @@ class TrainingConverter(BaseConverter):
         if event_groups is None:
             return
 
-        root = Element('ManagementTrainingReport')
+        root = ET.Element('ManagementTrainingReport')
         root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
 
         for event_id, group_df in event_groups:

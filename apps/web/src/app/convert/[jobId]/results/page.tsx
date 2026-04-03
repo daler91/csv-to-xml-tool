@@ -211,7 +211,7 @@ export default async function ResultsPage({
           <h2 className="font-semibold mb-2 text-red-700">
             Errors ({errors.length})
           </h2>
-          <IssueTable issues={errors} />
+          <IssueTable issues={errors} showAll={showAll === "true"} jobId={jobId} />
         </div>
       )}
 
@@ -220,7 +220,7 @@ export default async function ResultsPage({
           <h2 className="font-semibold mb-2 text-yellow-700">
             Warnings ({warnings.length})
           </h2>
-          <IssueTable issues={warnings} />
+          <IssueTable issues={warnings} showAll={showAll === "true"} jobId={jobId} />
         </div>
       )}
 
@@ -273,7 +273,18 @@ function SummaryCard({
   );
 }
 
-function IssueTable({ issues }: Readonly<{ issues: ValidationIssue[] }>) {
+function IssueTable({
+  issues,
+  showAll,
+  jobId,
+}: Readonly<{
+  issues: ValidationIssue[];
+  showAll: boolean;
+  jobId: string;
+}>) {
+  const DISPLAY_LIMIT = 100;
+  const displayed = showAll ? issues : issues.slice(0, DISPLAY_LIMIT);
+
   return (
     <div className="bg-white border rounded overflow-x-auto">
       <table className="w-full text-xs">
@@ -286,7 +297,7 @@ function IssueTable({ issues }: Readonly<{ issues: ValidationIssue[] }>) {
           </tr>
         </thead>
         <tbody>
-          {issues.slice(0, 100).map((issue) => (
+          {displayed.map((issue) => (
             <tr key={`${issue.record_id}-${issue.field_name}-${issue.category}`} className="border-b">
               <td className="px-3 py-2 font-mono">{issue.record_id}</td>
               <td className="px-3 py-2">{issue.category}</td>
@@ -296,10 +307,18 @@ function IssueTable({ issues }: Readonly<{ issues: ValidationIssue[] }>) {
           ))}
         </tbody>
       </table>
-      {issues.length > 100 && (
-        <p className="text-xs text-gray-500 p-3">
-          Showing 100 of {issues.length} issues
-        </p>
+      {!showAll && issues.length > DISPLAY_LIMIT && (
+        <div className="p-3">
+          <p className="text-xs text-gray-500 mb-1">
+            Showing {DISPLAY_LIMIT} of {issues.length} issues
+          </p>
+          <Link
+            href={`/convert/${jobId}/results?showAll=true`}
+            className="text-xs text-blue-600 underline"
+          >
+            Show all
+          </Link>
+        </div>
       )}
     </div>
   );

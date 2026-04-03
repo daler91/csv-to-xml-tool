@@ -142,31 +142,24 @@ def standardize_country_code(country):
     """
     Standardizes country codes to ensure they match the required format in XSD.
     Handles various forms of country codes including "US", "USA", etc.
-    
+
     Args:
         country: Country name or code
-        
+
     Returns:
         Standardized country name
     """
     if not country or str(country).strip() == "" or str(country).lower() == "nan":
         return UNITED_STATES  # Default to United States if empty
 
-    country_str = str(country).strip()
+    country_upper = str(country).strip().upper()
 
-    # Convert to uppercase for consistent comparison
-    country_upper = country_str.upper()
-
-    # Hard-coded conversion for US variants with case-insensitive matching
-    us_variants = ["US", "USA", "U.S.", "U.S.A.", "UNITED STATES"]
-    if country_upper in us_variants:
-        return UNITED_STATES
-
-    # Common variations to standardize (case-insensitive)
     country_map = {
+        "US": UNITED_STATES,
         "USA": UNITED_STATES,
         "U.S.": UNITED_STATES,
         "U.S.A.": UNITED_STATES,
+        "UNITED STATES": UNITED_STATES,
         "UNITED STATES OF AMERICA": UNITED_STATES,
         "AMERICA": UNITED_STATES,
         "CA": "Canada",
@@ -177,31 +170,30 @@ def standardize_country_code(country):
         "GB": UNITED_KINGDOM,
         "GBR": UNITED_KINGDOM,
         "GREAT BRITAIN": UNITED_KINGDOM,
-        "ENGLAND": UNITED_KINGDOM
+        "ENGLAND": UNITED_KINGDOM,
     }
-    
-    # Try exact match first (case-insensitive)
-    for code, name in country_map.items():
-        if country_upper == code:
-            return name
-    
-    # If we couldn't match it, return the original value
-    return country_str
+
+    return country_map.get(country_upper, str(country).strip())
 
 def clean_phone_number(phone):
     """
-    Removes all non-numeric characters from a phone number.
+    Removes all non-numeric characters from a phone number and normalizes to 10 digits.
+    Strips leading country code '1' from 11-digit numbers.
     Returns empty string if phone is None or empty.
-    
+
     Examples:
         "(123) 456-7890" -> "1234567890"
         "123.456.7890" -> "1234567890"
-        "+1 (123) 456-7890" -> "11234567890"
+        "+1 (123) 456-7890" -> "1234567890"
     """
     if not phone or str(phone).strip() == "" or str(phone).lower() == "nan":
         return ""
-        
-    return ''.join(char for char in str(phone) if char.isdigit())
+
+    digits = ''.join(char for char in str(phone) if char.isdigit())
+    # Strip leading US country code
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]
+    return digits[:10]
 
 def format_date(date_str, input_formats=None, default_return=""):
     """
@@ -232,22 +224,10 @@ def format_date(date_str, input_formats=None, default_return=""):
 
     for fmt in input_formats:
         try:
-            # Handle cases like 'YYYY-M-D' by first parsing and then reformatting
             dt_object = datetime.strptime(date_str, fmt)
             return dt_object.strftime('%Y-%m-%d')
         except ValueError:
             continue
-    
-    # If direct parsing fails, try to handle YYYY-MM-DD with potentially single-digit month/day
-    # This was partially handled by regex before, now using strptime flexibility
-    # and ensuring output is zero-padded.
-    if re.match(r'\d{4}-\d{1,2}-\d{1,2}', date_str):
-        try:
-            # This will parse 'YYYY-M-D' and similar
-            dt_object = datetime.strptime(date_str, '%Y-%m-%d') 
-            return dt_object.strftime('%Y-%m-%d')
-        except ValueError:
-            pass # If it fails here, it's truly unparseable by this specific pattern
 
     return default_return
 

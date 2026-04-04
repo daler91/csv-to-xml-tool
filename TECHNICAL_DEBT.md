@@ -74,9 +74,56 @@ There is no `.env.example` file documenting required environment variables.
 
 ---
 
+### 6. Path Traversal Risk in File Download
+
+`apps/web/src/app/api/jobs/[jobId]/download/route.ts:22` reads from `job.outputFilePath` directly from the database without validating the path stays within the expected data directory:
+
+```typescript
+const fileBuffer = await readFile(job.outputFilePath);
+```
+
+If the database record is compromised, arbitrary files could be read.
+
+**Recommended fix:** Reconstruct the file path from the `jobId` and `DATA_DIR` rather than trusting the stored path. Validate that `realpath(outputFilePath)` starts with the expected data directory.
+
+---
+
+### 7. Unpinned Python Dependencies
+
+`requirements.txt` has no version pinning:
+
+```
+pandas
+pytest
+defusedxml
+lxml
+```
+
+This leads to non-reproducible builds. A new version of any dependency could break the application silently.
+
+**Recommended fix:** Pin all versions (e.g., `pandas==2.2.0`, `lxml==5.1.0`). Consider adding a `requirements-lock.txt` or migrating to `pyproject.toml` with locked dependencies.
+
+---
+
+### 8. CI Build Failure Silently Ignored
+
+`.github/workflows/ci.yml:45` allows the web build to fail without stopping the pipeline:
+
+```yaml
+- name: Build
+  run: npm run build
+  continue-on-error: true
+```
+
+This masks real build failures in production code.
+
+**Recommended fix:** Remove `continue-on-error: true` so build failures block the pipeline.
+
+---
+
 ## MEDIUM Priority
 
-### 6. Code Duplication
+### 9. Code Duplication
 
 | Pattern | Location | Occurrences |
 |---------|----------|-------------|
@@ -93,7 +140,7 @@ There is no `.env.example` file documenting required environment variables.
 
 ---
 
-### 7. Magic Numbers and Hardcoded Values
+### 10. Magic Numbers and Hardcoded Values
 
 | Location | Value | Meaning |
 |----------|-------|---------|
@@ -106,7 +153,7 @@ There is no `.env.example` file documenting required environment variables.
 
 ---
 
-### 8. No Web Application Tests
+### 11. No Web Application Tests
 
 - No `apps/web/__tests__/` directory exists -- zero frontend test coverage.
 - No integration tests for API routes in `apps/web/src/app/api/`.
@@ -117,7 +164,7 @@ There is no `.env.example` file documenting required environment variables.
 
 ---
 
-### 9. Docker Compose Missing Health Checks
+### 12. Docker Compose Missing Health Checks
 
 No `healthcheck` is defined for any service (web, worker, db, redis). The `depends_on` directive without `condition: service_healthy` means services may start before their dependencies are actually ready.
 
@@ -125,7 +172,7 @@ No `healthcheck` is defined for any service (web, worker, db, redis). The `depen
 
 ---
 
-### 10. Large Functions Needing Decomposition
+### 13. Large Functions Needing Decomposition
 
 | Location | Function | Lines | Issue |
 |----------|----------|-------|-------|
@@ -136,21 +183,63 @@ No `healthcheck` is defined for any service (web, worker, db, redis). The `depen
 
 ---
 
+### 14. Weak Password Validation
+
+`apps/web/src/app/api/auth/signup/route.ts:26` only checks password length:
+
+```typescript
+if (password.length < 8) {
+```
+
+No complexity requirements (uppercase, numbers, special characters). Weak passwords like `aaaaaaaa` are accepted.
+
+**Recommended fix:** Add password complexity rules (e.g., require at least one uppercase letter, one digit, one special character).
+
+---
+
+### 15. Rate Limiting Based on Spoofable Header
+
+`apps/web/src/app/api/auth/signup/route.ts:8` uses `x-forwarded-for` for rate limiting:
+
+```typescript
+const ip = req.headers.get("x-forwarded-for") || "unknown";
+```
+
+This header can be spoofed by clients to bypass rate limits.
+
+**Recommended fix:** Validate `x-forwarded-for` against a trusted proxy list, or use a more reliable client identifier.
+
+---
+
+### 16. Memory Risk with Large CSV Files
+
+Both converters load entire files into memory:
+
+- `src/converters/counseling_converter.py:31-33` -- `rows = list(reader)` loads all CSV rows
+- `src/converters/training_converter.py:40` -- `pd.read_csv(input_path)` loads entire DataFrame
+
+With a 50MB upload limit (`apps/web/src/app/api/upload/route.ts:41`), this could consume significant memory.
+
+**Recommended fix:** Implement streaming/chunked processing for large files, or reduce the upload size limit.
+
+---
+
 ## LOW Priority
 
-### 11. Dead and Incomplete Code
+### 17. Dead and Incomplete Code
 
 | Location | Issue |
 |----------|-------|
 | `src/config.py:71-75` | `FIELD_MAPPING` dict kept as "reference" but unused by any code |
 | `src/config.py:129+` | `TRAINING_TOPIC_MAPPINGS` contains placeholder comments (`# ... (and so on)`) |
 | `src/fix_sba_xml.py:137-151` | Contradictory comments about `add_missing` behavior ("set to True" then "should be False") |
+| `update_validation.py` | Standalone script at repo root, never imported or referenced by any module |
 
-**Recommended fix:** Remove unused `FIELD_MAPPING`. Complete or remove the placeholder mappings. Resolve the contradictory comments and finalize the `add_missing` behavior.
+**Recommended fix:** Remove unused `FIELD_MAPPING`. Complete or remove the placeholder mappings. Resolve the contradictory comments and finalize the `add_missing` behavior. Remove or integrate `update_validation.py`.
 
 ---
 
-### 12. Inconsistent Naming Conventions
+### 18. Inconsistent Naming Conventions
 
 - `src/data_cleaning.py` mixes underscore-prefixed private functions (`_resolve_state_name`, `_case_insensitive_lookup`) with public functions that serve similar internal roles (`standardize_state_name`).
 - Error message formatting varies across modules (some include full context, others are minimal).
@@ -160,7 +249,7 @@ No `healthcheck` is defined for any service (web, worker, db, redis). The `depen
 
 ---
 
-### 13. Missing Python Linting and Formatting
+### 19. Missing Python Linting and Formatting
 
 - No `ruff`, `flake8`, or `black` is configured for the Python codebase.
 - No `pyproject.toml` or equivalent configuration file for Python tooling.

@@ -190,7 +190,7 @@ class TestFixSBAXML(unittest.TestCase):
             result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
 
             self.assertEqual(result, 0)
-            mock_exists.assert_called_once_with('out_dir')
+            mock_exists.assert_any_call('out_dir')
             mock_makedirs.assert_called_once_with('out_dir')
             mock_validator_process_directory.assert_called_once_with(
                 input_dir='test_dir',

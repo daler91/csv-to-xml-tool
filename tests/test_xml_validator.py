@@ -24,7 +24,7 @@ class TestValidateAgainstXsd(unittest.TestCase):
 
             # Verify the exception was caught and returned correctly
             self.assertFalse(result["is_valid"])
-            self.assertTrue(len(result["errors"]) > 0)
+            self.assertGreater(len(result["errors"]), 0)
 
 
 class TestProcessDirectory(unittest.TestCase):

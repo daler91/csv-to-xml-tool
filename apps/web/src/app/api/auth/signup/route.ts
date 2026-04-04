@@ -23,7 +23,7 @@ function validatePasswordComplexity(password: string): string | null {
   if (!/[A-Z]/.test(password)) {
     return "Password must contain at least one uppercase letter";
   }
-  if (!/[0-9]/.test(password)) {
+  if (!/\d/.test(password)) {
     return "Password must contain at least one digit";
   }
   if (!/[^A-Za-z0-9]/.test(password)) {

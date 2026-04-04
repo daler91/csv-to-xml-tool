@@ -10,12 +10,9 @@ import os
 import sys
 
 import argparse
-import logging # Keep standard logging import for levels like logging.INFO
+import logging
+import xml.etree.ElementTree as ET
 from datetime import datetime
-
-
-import sys
-import os
 
 # Ensure the script can be run from anywhere by adding its directory to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -88,7 +85,7 @@ def process_single_file(args, logger, mimic_original_add_missing):
             import shutil
             shutil.copy2(args.file, backup_file)
             logger.info(f"[fix-sba-xml wrapper] Created backup at {backup_file}")
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"[fix-sba-xml wrapper] Could not create backup: {str(e)}")
 
     fix_success = validator_fix_order(
@@ -134,20 +131,9 @@ def main():
     args = parse_arguments()
     logger = setup_logger(args)
     
-    # Note: fix-sba-xml.py implicitly always fixes and adds missing elements.
-    # We map its behavior to the new flags in xml-validator.
     always_fix = True
-    always_add_missing = True # Based on original behavior of fix_client_intake_section
-                              # which didn't have a flag to disable add_missing_required_elements.
-                              # However, add_missing_required_elements was not actually called in fix_client_intake_section.
-                              # For now, we'll set it to True to match the spirit of "fixing".
-                              # This might need review based on desired behavior for this wrapper.
-                              # The original fix_client_intake_section did not call add_missing_required_elements.
-                              # So, to truly mimic, always_add_missing should be False.
-                              # Let's assume for now the goal is to use the "full fix" capability.
-                              # Re-evaluating: The original fix_client_intake_section in fix-sba-xml.py
-                              # did NOT call add_missing_required_elements. So, to be a true wrapper,
-                              # this should be False.
+    # The original fix_client_intake_section did not add missing elements,
+    # so we preserve that behavior here.
     mimic_original_add_missing = False
 
     try:
@@ -156,7 +142,7 @@ def main():
         elif args.directory:
             return process_directory(args, logger, always_fix, mimic_original_add_missing)
             
-    except Exception as e:
+    except (OSError, ET.ParseError) as e:
         logger.error(f"[fix-sba-xml wrapper] Error: {str(e)}")
         return 1
 

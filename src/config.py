@@ -9,12 +9,22 @@ This module is structured with classes to group configurations by their domain:
 """
 from datetime import date
 
+FISCAL_YEAR_START_MONTH = 10
+
+# Shared date input formats (single source of truth)
+DATE_INPUT_FORMATS = [
+    '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y',
+    '%m/%d/%y', '%d-%m-%Y',
+    '%Y/%m/%d', '%y/%m/%d',
+    '%m-%d-%y',
+]
+
 
 def _fiscal_year_start():
     """Compute the start of the current SBA fiscal year (October 1)."""
     today = date.today()
-    year = today.year if today.month >= 10 else today.year - 1
-    return f"{year}-10-01"
+    year = today.year if today.month >= FISCAL_YEAR_START_MONTH else today.year - 1
+    return f"{year}-{FISCAL_YEAR_START_MONTH:02d}-01"
 
 # =============================================================================
 # GENERAL CONFIGURATION
@@ -31,6 +41,18 @@ class GeneralConfig:
 class CounselingConfig:
     """Configuration specific to the Counseling (Form 641) XML conversion."""
     REQUIRED_FIELDS = ["Contact ID"]
+
+    # Correct XSD element order for ClientIntake section
+    CLIENT_INTAKE_ELEMENT_ORDER = [
+        'Race', 'Ethnicity', 'Sex', 'Disability', 'MilitaryStatus',
+        'BranchOfService', 'Media', 'Internet', 'CurrentlyInBusiness',
+        'CurrentlyExporting', 'CompanyName', 'BusinessType',
+        'BusinessOwnership', 'ConductingBusinessOnline',
+        'ClientIntake_Certified8a', 'Employee_Owned', 'TotalNumberOfEmployees',
+        'NumberOfEmployeesInExportingBusiness', 'ClientAnnualIncomePart2',
+        'LegalEntity', 'Rural_vs_Urban', 'FIPS_Code', 'CounselingSeeking',
+        'ExportCountries'
+    ]
     DEFAULT_SESSION_TYPE = "Telephone"
     DEFAULT_URBAN_RURAL = "Undetermined"
     MIN_COUNSELING_DATE = _fiscal_year_start()
@@ -65,15 +87,6 @@ class CounselingConfig:
         "PartnerSessionNumber": 20
     }
 
-    # Mapping from CSV headers to a conceptual model. This is not used directly
-    # by the new converter but is kept for reference. The new converter will use
-    # more specific mappings.
-    FIELD_MAPPING = {
-        "Contact ID": "PartnerClientNumber",
-        "Last Name": "ClientRequest_LastName",
-        # ... (rest of the original FIELD_MAPPING can be kept for reference if needed)
-    }
-
 # =============================================================================
 # TRAINING REPORT CONFIGURATION (MANAGEMENT TRAINING)
 # =============================================================================
@@ -97,10 +110,8 @@ class TrainingConfig:
         "country": "United States"
     }
 
-    # Date formats to try when parsing
-    DATE_INPUT_FORMATS = [
-        '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%m-%d-%Y', '%m/%d/%y'
-    ]
+    # Date formats to try when parsing (references the shared list)
+    DATE_INPUT_FORMATS = DATE_INPUT_FORMATS
 
     # Mapping for CSV column names. This allows flexibility if headers change.
     COLUMN_MAPPING = {
@@ -126,17 +137,15 @@ class TrainingConfig:
 
     # Mappings for specific field values
     TRAINING_TOPIC_MAPPINGS = {
-        'Technology': 'Technology', 'Tech': 'Technology', 'IT': 'Technology', # ... (and so on)
+        'Technology': 'Technology', 'Tech': 'Technology', 'IT': 'Technology',
         'Marketing': 'Marketing/Sales', 'Sales': 'Marketing/Sales',
         'Start-up': 'Business Start-up/Preplanning', 'Startup': 'Business Start-up/Preplanning',
         'Business Plan': 'Business Plan',
-        # ... (full map from original config)
     }
 
     PROGRAM_FORMAT_MAPPINGS = {
         'Hybrid': 'Hybrid', 'In-person': 'In-person', 'On Demand': 'On Demand', 'Online': 'Online',
         'Seminar': 'In-person', 'Webinar': 'Online', 'Virtual': 'Online', 'Remote': 'Online',
-        # ... (full map from original config)
     }
 
     # Keywords for parsing demographic data from free-text fields

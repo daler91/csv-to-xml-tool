@@ -3,9 +3,38 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 
+function getClientIdentifier(req: Request): string {
+  // Use x-forwarded-for but take only the first (client) IP,
+  // and fall back to a connection-based identifier
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const firstIp = forwarded.split(",")[0].trim();
+    if (firstIp && firstIp !== "unknown") {
+      return firstIp;
+    }
+  }
+  return "unknown";
+}
+
+function validatePasswordComplexity(password: string): string | null {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter";
+  }
+  if (!/\d/.test(password)) {
+    return "Password must contain at least one digit";
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must contain at least one special character";
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIdentifier(req);
     const { success, remaining } = await rateLimit(`signup:${ip}`, 5, 60);
     if (!success) {
       return NextResponse.json(
@@ -23,9 +52,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (password.length < 8) {
+    const passwordError = validatePasswordComplexity(password);
+    if (passwordError) {
       return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
+        { error: passwordError },
         { status: 400 }
       );
     }

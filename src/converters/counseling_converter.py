@@ -32,7 +32,7 @@ class CounselingConverter(BaseConverter):
                 reader = csv.DictReader(csv_file)
                 rows = list(reader)
                 self.logger.info(f"Successfully read CSV file with {len(rows)} records")
-        except Exception as e:
+        except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {str(e)}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {str(e)}")
             raise
@@ -63,9 +63,9 @@ class CounselingConverter(BaseConverter):
                 processed_records += 1
                 self.validator.record_processed(success=True)
 
-            except Exception as e:
+            except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing record {record_id}: {str(e)}", exc_info=True)
-                self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Unhandled error processing record: {str(e)}")
+                self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing record: {str(e)}")
                 self.validator.record_processed(success=False)
 
         try:
@@ -75,7 +75,7 @@ class CounselingConverter(BaseConverter):
             self.logger.info(f"XML file created successfully with {processed_records} records at {output_path}")
             if skipped_records > 0:
                 self.logger.info(f"Skipped {skipped_records} records due to validation errors.")
-        except Exception as e:
+        except OSError as e:
             self.logger.error(f"Failed to write XML file: {str(e)}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_WRITE, "output_file", f"Failed to write XML file: {str(e)}")
             raise

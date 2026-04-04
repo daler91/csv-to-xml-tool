@@ -39,7 +39,7 @@ class TrainingConverter(BaseConverter):
         try:
             df = pd.read_csv(input_path)
             self.logger.info(f"Successfully read CSV with {len(df)} records.")
-        except Exception as e:
+        except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {e}")
             raise
@@ -134,9 +134,9 @@ class TrainingConverter(BaseConverter):
             try:
                 self._build_training_record(root, event_id, group_df)
                 self.validator.record_processed(success=True)
-            except Exception as e:
+            except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
-                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Unhandled error: {e}")
+                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}")
                 self.validator.record_processed(success=False)
 
         self._write_xml_output(root, output_path)
@@ -163,50 +163,49 @@ class TrainingConverter(BaseConverter):
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 
+    def _resolve_column(self, df, column_key):
+        """Resolve a config column key to the actual DataFrame column name."""
+        possible = self.config.COLUMN_MAPPING.get(column_key, [])
+        if isinstance(possible, str):
+            possible = [possible]
+        return next((c for c in possible if c in df.columns), None)
+
+    def _count_matches(self, df, column_key, keywords):
+        """Count rows matching any keyword in the specified column."""
+        column_name = self._resolve_column(df, column_key)
+        if not column_name:
+            return 0
+        pattern = '|'.join(keywords)
+        return sum(df[column_name].fillna('').astype(str).str.lower().str.contains(pattern))
+
     def _calculate_demographics(self, df):
         demographics = {}
         total = len(df)
         demographics['total'] = max(total, 2) # XSD minimum
 
-        # Helper to resolve a config column key to the actual DataFrame column name
-        def resolve_column(column_key):
-            possible = self.config.COLUMN_MAPPING.get(column_key, [])
-            if isinstance(possible, str):
-                possible = [possible]
-            return next((c for c in possible if c in df.columns), None)
-
-        # Helper to count matches for a given set of keywords in a specified column
-        def count_matches(column_key, keywords_map):
-            column_name = resolve_column(column_key)
-            if not column_name:
-                return 0
-
-            pattern = '|'.join(keywords_map)
-            return sum(df[column_name].fillna('').astype(str).str.lower().str.contains(pattern))
-
         # Business Status
-        business_status_col = resolve_column('business_status')
+        business_status_col = self._resolve_column(df, 'business_status')
         if business_status_col:
             currently_in_business = sum(df[business_status_col].fillna('').astype(str).str.lower().str.contains('yes|true|1|y'))
             demographics['currently_in_business'] = currently_in_business
             demographics['not_in_business'] = total - currently_in_business
 
         # Gender, Disability, Military
-        demographics['female'] = count_matches('gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['female'])
-        demographics['male'] = count_matches('gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['male'])
-        demographics['disabilities'] = count_matches('disability', ['yes', 'true', '1', 'y'])
-        demographics['active_duty'] = count_matches('military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['active_duty'])
-        demographics['veterans'] = count_matches('military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['veteran'])
-        demographics['service_disabled_veterans'] = count_matches('military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['service_disabled_veteran'])
-        demographics['reserve_guard'] = count_matches('military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['reserve_guard'])
-        demographics['military_spouse'] = count_matches('military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['spouse'])
+        demographics['female'] = self._count_matches(df, 'gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['female'])
+        demographics['male'] = self._count_matches(df, 'gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['male'])
+        demographics['disabilities'] = self._count_matches(df, 'disability', ['yes', 'true', '1', 'y'])
+        demographics['active_duty'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['active_duty'])
+        demographics['veterans'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['veteran'])
+        demographics['service_disabled_veterans'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['service_disabled_veteran'])
+        demographics['reserve_guard'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['reserve_guard'])
+        demographics['military_spouse'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['spouse'])
 
         # Race
-        demographics['race'] = {key: count_matches('race', keywords) for key, keywords in self.config.DEMOGRAPHIC_KEYWORDS['race'].items()}
+        demographics['race'] = {key: self._count_matches(df, 'race', keywords) for key, keywords in self.config.DEMOGRAPHIC_KEYWORDS['race'].items()}
 
         # Ethnicity
-        hispanic_count = count_matches('ethnicity', self.config.DEMOGRAPHIC_KEYWORDS['ethnicity']['hispanic'])
-        ethnicity_col_name = resolve_column('ethnicity')
+        hispanic_count = self._count_matches(df, 'ethnicity', self.config.DEMOGRAPHIC_KEYWORDS['ethnicity']['hispanic'])
+        ethnicity_col_name = self._resolve_column(df, 'ethnicity')
         non_hispanic_count = 0
         if ethnicity_col_name:
             non_hispanic_mask = (~df[ethnicity_col_name].fillna('').astype(str).str.lower().str.contains('hispanic|latino')) & (df[ethnicity_col_name] != '')

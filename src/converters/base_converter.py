@@ -10,6 +10,11 @@ logic for reading, processing, and writing data, but must conform to the
 """
 
 import abc
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..validation_report import ValidationTracker
 
 class BaseConverter(abc.ABC):
     """
@@ -20,7 +25,7 @@ class BaseConverter(abc.ABC):
     validation tracker.
     """
 
-    def __init__(self, logger: object, validator: object) -> None:
+    def __init__(self, logger: logging.Logger, validator: ValidationTracker) -> None:
         """
         Initializes the converter with a logger and a validator.
 

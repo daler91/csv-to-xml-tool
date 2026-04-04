@@ -136,12 +136,15 @@ class ValidationTracker:
         fieldnames = ['record_id', 'severity', 'category', 'field_name', 'message', 'timestamp']
         
         # Write issues to CSV
-        with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for issue in self.issues:
-                writer.writerow(issue)
-        
+        try:
+            with open(csv_file, 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for issue in self.issues:
+                    writer.writerow(issue)
+        except OSError as e:
+            raise OSError(f"Failed to write validation CSV report to {csv_file}: {e}") from e
+
         return csv_file
     
 
@@ -268,7 +271,10 @@ class ValidationTracker:
 """
         
         # Write HTML content to file
-        with open(html_file, 'w') as f:
-            f.write(html_content)
-        
+        try:
+            with open(html_file, 'w') as f:
+                f.write(html_content)
+        except OSError as e:
+            raise OSError(f"Failed to write HTML report to {html_file}: {e}") from e
+
         return html_file

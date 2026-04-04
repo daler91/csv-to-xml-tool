@@ -7,11 +7,16 @@ This module contains functions for validating data before XML conversion.
 
 from datetime import datetime
 
+from typing import TYPE_CHECKING
+
 from .data_cleaning import (
     clean_phone_number, format_date,
     standardize_country_code, standardize_state_name
 )
 from .config import ValidationCategory as VC, CounselingConfig, TrainingConfig
+
+if TYPE_CHECKING:
+    from .validation_report import ValidationTracker
 
 
 def validate_counseling_date(date_str: str) -> bool:
@@ -38,7 +43,7 @@ def validate_counseling_date(date_str: str) -> bool:
 # COUNSELING-SPECIFIC VALIDATION
 # =============================================================================
 
-def validate_counseling_record(row: dict[str, str], row_index: int, validator: object) -> bool:
+def validate_counseling_record(row: dict[str, str], row_index: int, validator: ValidationTracker) -> bool:
     """
     Validates a single record for the Counseling converter.
     """
@@ -68,7 +73,7 @@ def validate_counseling_record(row: dict[str, str], row_index: int, validator: o
 # TRAINING-SPECIFIC VALIDATION
 # =============================================================================
 
-def validate_training_record(row: dict[str, str], row_index: int, validator: object) -> bool:
+def validate_training_record(row: dict[str, str], row_index: int, validator: ValidationTracker) -> bool:
     """
     Validates a single record for the Training converter.
     For training data, the main validation is ensuring the event ID exists.

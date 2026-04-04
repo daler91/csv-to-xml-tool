@@ -2,39 +2,55 @@ services:
   web:
     build: ./apps/web
     ports: ["3000:3000"]
+    env_file: .env
     environment:
-      - DATABASE_URL=postgresql://user:pass@db:5432/csvtoxml
-      - REDIS_URL=redis://redis:6379
       - WORKER_URL=http://worker:8000
-      - NEXTAUTH_SECRET=dev-secret-change-me
       - NEXTAUTH_URL=http://localhost:3000
     volumes:
       - shared-data:/data
-    depends_on: [db, redis, worker]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
 
   worker:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
     ports: ["8000:8000"]
+    env_file: .env
     environment:
-      - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data
       - SCHEMAS_DIR=/app/schemas
     volumes:
       - shared-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   db:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: csvtoxml
+    env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   redis:
     image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   shared-data:

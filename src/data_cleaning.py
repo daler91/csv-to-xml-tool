@@ -7,12 +7,27 @@ This module contains functions for cleaning and standardizing Salesforce data fo
 import logging
 import re
 from datetime import datetime
-from .config import CounselingConfig
+from typing import Any
+from .config import CounselingConfig, DATE_INPUT_FORMATS as DEFAULT_DATE_FORMATS
 
 _logger = logging.getLogger(__name__)
 
 UNITED_STATES = "United States"
 UNITED_KINGDOM = "United Kingdom"
+
+# Named constants for magic numbers
+PHONE_NUMBER_DIGITS = 10
+PHONE_WITH_COUNTRY_CODE_DIGITS = 11
+PERCENTAGE_MIN = 0
+PERCENTAGE_MAX = 100
+
+
+def is_empty(value: Any) -> bool:
+    """Check if a value is empty, None, or NaN."""
+    if not value:
+        return True
+    s = str(value).strip()
+    return s == "" or s.lower() == "nan"
 
 DEFAULT_STATE_MAPPINGS = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
@@ -86,7 +101,7 @@ def standardize_state_name(state_value: str | None, valid_states_list: set[str] 
     Returns:
         Standardized and validated state name, or default_return.
     """
-    if not state_value or str(state_value).strip() == "" or str(state_value).lower() == "nan":
+    if is_empty(state_value):
         return default_return
 
     state_str = str(state_value).strip()
@@ -101,7 +116,7 @@ def standardize_state_name(state_value: str | None, valid_states_list: set[str] 
 
     return standardized_name
 
-def map_value(value: object, mapping_dict: dict, default_value: object, case_sensitive: bool = False) -> object:
+def map_value(value: Any, mapping_dict: dict, default_value: Any, case_sensitive: bool = False) -> Any:
     """
     Maps an input value using a dictionary, with options for case sensitivity
     and a default return value.
@@ -153,7 +168,7 @@ def standardize_country_code(country: str | None) -> str:
     Returns:
         Standardized country name
     """
-    if not country or str(country).strip() == "" or str(country).lower() == "nan":
+    if is_empty(country):
         return UNITED_STATES  # Default to United States if empty
 
     country_upper = str(country).strip().upper()
@@ -190,14 +205,14 @@ def clean_phone_number(phone: str | None) -> str:
         "123.456.7890" -> "1234567890"
         "+1 (123) 456-7890" -> "1234567890"
     """
-    if not phone or str(phone).strip() == "" or str(phone).lower() == "nan":
+    if is_empty(phone):
         return ""
 
     digits = ''.join(char for char in str(phone) if char.isdigit())
     # Strip leading US country code
-    if len(digits) == 11 and digits.startswith('1'):
+    if len(digits) == PHONE_WITH_COUNTRY_CODE_DIGITS and digits.startswith('1'):
         digits = digits[1:]
-    return digits[:10]
+    return digits[:PHONE_NUMBER_DIGITS]
 
 def format_date(date_str: str | None, input_formats: list[str] | None = None, default_return: str = "") -> str:
     """
@@ -210,21 +225,13 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
                        If None, uses a default list.
         default_return: Value to return if parsing fails or input is empty.
     """
-    if not date_str or str(date_str).strip() == "" or str(date_str).lower() == "nan":
+    if is_empty(date_str):
         return default_return
 
     date_str = str(date_str).strip()
 
     if input_formats is None or not input_formats:
-        # Default list of formats, similar to what was in classDataConverter.py
-        # and data_cleaning.py (implicitly)
-        input_formats = [
-            '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y', 
-            '%m/%d/%y', '%d-%m-%Y', # Added %d-%m-%Y from classDataConverter
-            # The following are variations to catch common cases if year is 2 digits
-            '%Y/%m/%d', '%y/%m/%d', 
-            '%m-%d-%y', 
-        ]
+        input_formats = DEFAULT_DATE_FORMATS
 
     for fmt in input_formats:
         try:
@@ -246,7 +253,7 @@ def clean_whitespace(text: str | None) -> str:
     - Preserves single newlines but removes extras
     - Handles Salesforce-specific patterns
     """
-    if not text or str(text).strip() == "" or str(text).lower() == "nan":
+    if is_empty(text):
         return ""
         
     # Convert to string explicitly
@@ -274,7 +281,7 @@ def map_gender_to_sex(gender_value: str | None) -> str:
     Maps various gender values to just 'Female' or 'Male' per XSD requirements.
     Returns empty string if no match or missing.
     """
-    if not gender_value or str(gender_value).strip() == "" or str(gender_value).lower() == "nan":
+    if is_empty(gender_value):
         return ""
     
     gender_str = str(gender_value).lower()
@@ -292,7 +299,7 @@ def split_multi_value(value: str | None, delimiter: str = ";") -> list[str]:
     Splits multi-value fields with the specified delimiter.
     Returns an empty list if the value is empty or None.
     """
-    if not value or str(value).strip() == "" or str(value).lower() == "nan":
+    if is_empty(value):
         return []
     
     return [item.strip() for item in str(value).split(delimiter) if item.strip()]
@@ -302,7 +309,7 @@ def clean_numeric(value: str | int | float | None) -> str:
     Cleans a numeric string by removing commas, currency symbols, and whitespace.
     Extracts digits and optional decimal point.
     """
-    if value is None or str(value).strip() == "" or str(value).strip().lower() == "nan":
+    if is_empty(value):
         return ""
     
     cleaned_str = str(value).replace(" ", "").replace("$", "").replace(",", "")
@@ -320,7 +327,7 @@ def clean_percentage(value: str | int | float | None) -> str:
     Cleans a percentage string, removing the % symbol and converting to a decimal.
     Returns a number between 0 and 100.
     """
-    if not value or str(value).strip() == "" or str(value).lower() == "nan":
+    if is_empty(value):
         return "0"
     
     value_str = str(value).strip()
@@ -330,7 +337,7 @@ def clean_percentage(value: str | int | float | None) -> str:
     try:
         float_val = float(value_str)
         # Ensure it's between 0 and 100
-        float_val = float(max(0, min(100, float_val)))
+        float_val = float(max(PERCENTAGE_MIN, min(PERCENTAGE_MAX, float_val)))
 
         if float_val.is_integer():
             return str(int(float_val))

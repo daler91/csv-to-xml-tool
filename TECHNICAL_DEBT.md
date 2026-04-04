@@ -2,154 +2,80 @@
 
 This document catalogs known technical debt across the CSV-to-XML tool codebase, organized by priority. Each item includes affected files, line references, and a recommended fix.
 
+Items marked with **[RESOLVED]** have been addressed.
+
 ---
 
 ## HIGH Priority
 
-### 1. Weak Type Annotations (Python)
+### 1. Weak Type Annotations (Python) **[RESOLVED]**
 
-Several core interfaces use `object` instead of proper types, defeating static analysis and IDE support.
-
-| Location | Issue |
-|----------|-------|
-| `src/converters/base_converter.py:23` | `logger: object` and `validator: object` should be `logging.Logger` and `ValidationTracker` |
-| `src/data_validation.py:41` | `validate_counseling_record(... validator: object)` |
-| `src/data_validation.py:71` | `validate_training_record(... validator: object)` |
-| `src/data_cleaning.py:104` | `map_value(value: object, ..., default_value: object) -> object` |
-
-**Recommended fix:** Replace `object` with the actual types (`logging.Logger`, `ValidationTracker`, `str`, etc.). Add `from __future__ import annotations` where needed to avoid circular imports.
+Replaced `object` with proper types (`logging.Logger`, `ValidationTracker`, `Any`) in `base_converter.py`, `data_validation.py`, and `data_cleaning.py`. Added `TYPE_CHECKING` guards to avoid circular imports.
 
 ---
 
-### 2. Overly Broad Exception Handling
+### 2. Overly Broad Exception Handling **[RESOLVED]**
 
-Generic `except Exception` blocks mask specific errors (I/O failures, XML parse errors, pandas errors), making debugging harder and hiding root causes.
-
-| Location | Context |
-|----------|---------|
-| `src/xml_validator.py:66` | Catches all errors during XSD validation |
-| `src/xml_validator.py:160` | Catches all errors during XML fix |
-| `src/converters/counseling_converter.py:35,66,78` | CSV reading and record conversion |
-| `src/converters/training_converter.py:42,137` | CSV reading and event processing |
-| `src/fix_sba_xml.py:91,159` | XML element reordering |
-
-**Recommended fix:** Replace with specific exception types: `IOError`, `lxml.etree.XMLSyntaxError`, `pd.errors.ParserError`, `ValueError`, etc. Keep a final `except Exception` only at the top-level entry point as a last resort.
+Replaced generic `except Exception` blocks with specific exception types (`OSError`, `csv.Error`, `pd.errors.ParserError`, `etree.XMLSyntaxError`, `ValueError`, `KeyError`, etc.) across all converters, `xml_validator.py`, and `fix_sba_xml.py`. Updated corresponding tests.
 
 ---
 
-### 3. Missing Input Validation
+### 3. Missing Input Validation **[RESOLVED]**
 
-| Location | Issue |
-|----------|-------|
-| `src/converters/counseling_converter.py` (throughout) | No pre-check that expected CSV columns exist before `row.get()` calls |
-| `src/converters/training_converter.py` (throughout) | Same issue |
-| `src/validation_report.py:139-143,271-272` | File write operations have no exception handling |
-| `src/xml_validator.py:147-148` | `.text` accessed on XML element without `None` guard |
+- Added `try/except OSError` around file writes in `validation_report.py` (CSV and HTML report generation).
+- Added `None` guard for `.text` access on XML elements in `xml_validator.py`.
 
-**Recommended fix:** After reading the CSV DataFrame, validate that all required columns are present and log/fail early if they are missing. Wrap file I/O in try/except with meaningful error messages. Guard `.text` access with explicit `None` checks.
+**Remaining:** CSV column existence pre-checks in converters could still be added for more robust early failure.
 
 ---
 
-### 4. Hardcoded Credentials in docker-compose.yml
+### 4. Hardcoded Credentials in docker-compose.yml **[RESOLVED]**
 
-`docker-compose.yml` contains hardcoded secrets that could leak into version control:
-
-| Line | Value |
-|------|-------|
-| 9 | `NEXTAUTH_SECRET=dev-secret-change-me` |
-| 30 | `POSTGRES_USER: user` |
-| 31 | `POSTGRES_PASSWORD: pass` |
-
-There is no `.env.example` file documenting required environment variables.
-
-**Recommended fix:** Move all secrets to a `.env` file (git-ignored). Add a `.env.example` with placeholder values. Reference via `env_file:` in docker-compose.yml.
+Moved all secrets to an `env_file` reference in `docker-compose.yml`. Created `.env.example` with placeholder values. Added `.env` to `.gitignore`.
 
 ---
 
 ### 5. Beta Dependency in Production
 
-`apps/web/package.json:27` depends on `next-auth@5.0.0-beta.30`, a pre-release version. Beta APIs may change without notice, and security patches may lag behind stable releases.
+`apps/web/package.json` depends on `next-auth@5.0.0-beta.30`, a pre-release version. Beta APIs may change without notice, and security patches may lag behind stable releases.
 
-**Recommended fix:** Track the next-auth stable release roadmap. Pin the current version exactly. Document the risk and migration plan for when a stable release is available.
-
----
-
-### 6. Path Traversal Risk in File Download
-
-`apps/web/src/app/api/jobs/[jobId]/download/route.ts:22` reads from `job.outputFilePath` directly from the database without validating the path stays within the expected data directory:
-
-```typescript
-const fileBuffer = await readFile(job.outputFilePath);
-```
-
-If the database record is compromised, arbitrary files could be read.
-
-**Recommended fix:** Reconstruct the file path from the `jobId` and `DATA_DIR` rather than trusting the stored path. Validate that `realpath(outputFilePath)` starts with the expected data directory.
+**Status:** Not yet resolved. Requires monitoring for a stable release.
 
 ---
 
-### 7. Unpinned Python Dependencies
+### 6. Path Traversal Risk in File Download **[RESOLVED]**
 
-`requirements.txt` has no version pinning:
-
-```
-pandas
-pytest
-defusedxml
-lxml
-```
-
-This leads to non-reproducible builds. A new version of any dependency could break the application silently.
-
-**Recommended fix:** Pin all versions (e.g., `pandas==2.2.0`, `lxml==5.1.0`). Consider adding a `requirements-lock.txt` or migrating to `pyproject.toml` with locked dependencies.
+Added `realpath()` validation in `apps/web/src/app/api/jobs/[jobId]/download/route.ts` to ensure the file path stays within `DATA_DIR` before reading.
 
 ---
 
-### 8. CI Build Failure Silently Ignored
+### 7. Unpinned Python Dependencies **[RESOLVED]**
 
-`.github/workflows/ci.yml:45` allows the web build to fail without stopping the pipeline:
+Added version range pins to `requirements.txt` (e.g., `pandas>=2.2.0,<3`).
 
-```yaml
-- name: Build
-  run: npm run build
-  continue-on-error: true
-```
+---
 
-This masks real build failures in production code.
+### 8. CI Build Failure Silently Ignored **[RESOLVED]**
 
-**Recommended fix:** Remove `continue-on-error: true` so build failures block the pipeline.
+Removed `continue-on-error: true` from the web build step in `.github/workflows/ci.yml`.
 
 ---
 
 ## MEDIUM Priority
 
-### 9. Code Duplication
+### 9. Code Duplication **[RESOLVED]**
 
-| Pattern | Location | Occurrences |
-|---------|----------|-------------|
-| `row.get('Field', '').strip()` | `src/converters/counseling_converter.py` | 14+ times |
-| Empty/NaN guard: `if not value or str(value).strip() == "" or str(value).lower() == "nan"` | `src/data_cleaning.py` | 9 times |
-| CSV reading with try/except and pandas | `src/converters/counseling_converter.py:30-38`, `src/converters/training_converter.py:39-45` | 2 files |
-| XML element ordering lists | `src/xml_validator.py:133-143` | Hardcoded instead of in config |
+- Extracted `is_empty(value)` helper in `data_cleaning.py` to replace 9 repeated empty/NaN guard patterns.
+- Moved `client_intake_order` from `xml_validator.py` to `CounselingConfig.CLIENT_INTAKE_ELEMENT_ORDER` in `config.py`.
+- Consolidated date format lists to a single `DATE_INPUT_FORMATS` in `config.py`.
 
-**Recommended fixes:**
-- Extract a `get_field(row, name, default='')` helper to replace the `row.get().strip()` pattern.
-- Extract an `is_empty(value)` utility in `data_cleaning.py` for the repeated NaN/empty check.
-- Move CSV reading logic into `BaseConverter` so both converters inherit it.
-- Move element ordering definitions to `src/config.py`.
+**Remaining:** `row.get('Field', '').strip()` pattern in `counseling_converter.py` (14+ occurrences) could still benefit from a helper, but this is lower-impact.
 
 ---
 
-### 10. Magic Numbers and Hardcoded Values
+### 10. Magic Numbers and Hardcoded Values **[RESOLVED]**
 
-| Location | Value | Meaning |
-|----------|-------|---------|
-| `src/data_cleaning.py:198-200` | `10`, `11` | Phone number digit count and country code prefix length |
-| `src/data_cleaning.py:333` | `0`, `100` | Percentage bounds |
-| `src/config.py:16` | `10` | Fiscal year start month (October) |
-| `src/config.py:101-103` and `src/data_cleaning.py` | Date format lists | Duplicated between two files |
-
-**Recommended fix:** Define named constants (`PHONE_DIGITS = 10`, `FISCAL_YEAR_START_MONTH = 10`, `PERCENTAGE_MIN = 0`, `PERCENTAGE_MAX = 100`). Consolidate the date format list to a single source of truth in `config.py`.
+Added named constants in `data_cleaning.py` (`PHONE_NUMBER_DIGITS`, `PHONE_WITH_COUNTRY_CODE_DIGITS`, `PERCENTAGE_MIN`, `PERCENTAGE_MAX`) and `config.py` (`FISCAL_YEAR_START_MONTH`).
 
 ---
 
@@ -160,92 +86,61 @@ This masks real build failures in production code.
 - No end-to-end tests for the conversion flow through the web UI.
 - No test framework (Jest, Vitest, Playwright) is configured in `apps/web/package.json`.
 
-**Recommended fix:** Add Vitest (or Jest) for unit/integration testing of API routes and components. Consider Playwright for E2E tests covering the conversion wizard flow.
+**Status:** Not yet resolved. Requires adding a test framework and writing tests.
 
 ---
 
-### 12. Docker Compose Missing Health Checks
+### 12. Docker Compose Missing Health Checks **[RESOLVED]**
 
-No `healthcheck` is defined for any service (web, worker, db, redis). The `depends_on` directive without `condition: service_healthy` means services may start before their dependencies are actually ready.
-
-**Recommended fix:** Add `healthcheck` configurations for each service and use `depends_on` with `condition: service_healthy`.
+Added `healthcheck` configurations for db (pg_isready), redis (redis-cli ping), and worker (curl /health). Updated `depends_on` with `condition: service_healthy`.
 
 ---
 
-### 13. Large Functions Needing Decomposition
+### 13. Large Functions Needing Decomposition **[RESOLVED]**
 
-| Location | Function | Lines | Issue |
-|----------|----------|-------|-------|
-| `src/converters/training_converter.py:166-219` | `_calculate_demographics` | ~53 | Nested helper functions and multiple counting patterns |
-| `src/xml_validator.py:25-68` | `validate_against_xsd` | ~43 | Mixes file path validation with XSD validation logic |
-
-**Recommended fix:** Extract sub-functions for demographic counting patterns. Separate file loading/path validation from schema validation logic.
+- Extracted `_resolve_column` and `_count_matches` from nested helpers in `_calculate_demographics` to class methods on `TrainingConverter`.
+- Extracted `_validate_file_paths` from `validate_against_xsd` in `xml_validator.py`.
 
 ---
 
-### 14. Weak Password Validation
+### 14. Weak Password Validation **[RESOLVED]**
 
-`apps/web/src/app/api/auth/signup/route.ts:26` only checks password length:
-
-```typescript
-if (password.length < 8) {
-```
-
-No complexity requirements (uppercase, numbers, special characters). Weak passwords like `aaaaaaaa` are accepted.
-
-**Recommended fix:** Add password complexity rules (e.g., require at least one uppercase letter, one digit, one special character).
+Added `validatePasswordComplexity()` in `apps/web/src/app/api/auth/signup/route.ts` requiring uppercase, digit, and special character.
 
 ---
 
-### 15. Rate Limiting Based on Spoofable Header
+### 15. Rate Limiting Based on Spoofable Header **[RESOLVED]**
 
-`apps/web/src/app/api/auth/signup/route.ts:8` uses `x-forwarded-for` for rate limiting:
-
-```typescript
-const ip = req.headers.get("x-forwarded-for") || "unknown";
-```
-
-This header can be spoofed by clients to bypass rate limits.
-
-**Recommended fix:** Validate `x-forwarded-for` against a trusted proxy list, or use a more reliable client identifier.
+Extracted `getClientIdentifier()` helper that takes only the first IP from `x-forwarded-for` and validates it, instead of blindly trusting the full header.
 
 ---
 
 ### 16. Memory Risk with Large CSV Files
 
-Both converters load entire files into memory:
+Both converters load entire files into memory. With a 50MB upload limit, this could consume significant memory.
 
-- `src/converters/counseling_converter.py:31-33` -- `rows = list(reader)` loads all CSV rows
-- `src/converters/training_converter.py:40` -- `pd.read_csv(input_path)` loads entire DataFrame
-
-With a 50MB upload limit (`apps/web/src/app/api/upload/route.ts:41`), this could consume significant memory.
-
-**Recommended fix:** Implement streaming/chunked processing for large files, or reduce the upload size limit.
+**Status:** Not yet resolved. Would require significant architectural changes to implement streaming.
 
 ---
 
 ## LOW Priority
 
-### 17. Dead and Incomplete Code
+### 17. Dead and Incomplete Code **[RESOLVED]**
 
-| Location | Issue |
-|----------|-------|
-| `src/config.py:71-75` | `FIELD_MAPPING` dict kept as "reference" but unused by any code |
-| `src/config.py:129+` | `TRAINING_TOPIC_MAPPINGS` contains placeholder comments (`# ... (and so on)`) |
-| `src/fix_sba_xml.py:137-151` | Contradictory comments about `add_missing` behavior ("set to True" then "should be False") |
-| `update_validation.py` | Standalone script at repo root, never imported or referenced by any module |
-
-**Recommended fix:** Remove unused `FIELD_MAPPING`. Complete or remove the placeholder mappings. Resolve the contradictory comments and finalize the `add_missing` behavior. Remove or integrate `update_validation.py`.
+- Removed unused `FIELD_MAPPING` from `CounselingConfig`.
+- Cleaned up placeholder comments in `TRAINING_TOPIC_MAPPINGS` and `PROGRAM_FORMAT_MAPPINGS`.
+- Resolved contradictory comments in `fix_sba_xml.py` about `add_missing` behavior.
+- Deleted orphaned `update_validation.py` script.
 
 ---
 
 ### 18. Inconsistent Naming Conventions
 
-- `src/data_cleaning.py` mixes underscore-prefixed private functions (`_resolve_state_name`, `_case_insensitive_lookup`) with public functions that serve similar internal roles (`standardize_state_name`).
-- Error message formatting varies across modules (some include full context, others are minimal).
-- Config access in `src/converters/counseling_converter.py` alternates between `self.config` and `self.general_config` with no clear pattern.
+- `src/data_cleaning.py` mixes underscore-prefixed private functions with public functions that serve similar internal roles.
+- Error message formatting varies across modules.
+- Config access in `src/converters/counseling_converter.py` alternates between `self.config` and `self.general_config`.
 
-**Recommended fix:** Establish a naming convention: prefix truly internal helpers with `_`, keep public API functions without. Standardize error message format. Use a consistent config access pattern.
+**Status:** Partially addressed through code cleanup. Full standardization deferred as low priority.
 
 ---
 
@@ -253,6 +148,6 @@ With a 50MB upload limit (`apps/web/src/app/api/upload/route.ts:41`), this could
 
 - No `ruff`, `flake8`, or `black` is configured for the Python codebase.
 - No `pyproject.toml` or equivalent configuration file for Python tooling.
-- The CI pipeline (`.github/workflows/ci.yml`) runs `pytest` but has no Python linting step.
+- The CI pipeline runs `pytest` but has no Python linting step.
 
-**Recommended fix:** Add `ruff` as the Python linter/formatter. Create a `pyproject.toml` with ruff configuration. Add a lint step to the CI pipeline.
+**Status:** Not yet resolved. Adding `ruff` deferred to avoid scope creep.

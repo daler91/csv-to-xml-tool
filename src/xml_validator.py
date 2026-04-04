@@ -7,8 +7,13 @@ import os
 import defusedxml.ElementTree as ET
 from lxml import etree
 
-import logging # Keep standard logging import for levels like logging.INFO
+import logging
 import re
+
+try:
+    from .config import CounselingConfig
+except ImportError:
+    from config import CounselingConfig
 
 
 # Logger will be instantiated in main() using ConversionLogger,
@@ -22,6 +27,20 @@ def _setup_sys_path():
 
 # ConversionLogger is imported lazily in main() to avoid breaking package imports
 
+def _validate_file_paths(xml_file, xsd_file):
+    """Resolve and validate file paths against traversal. Returns (xml_path, xsd_path) or an error dict."""
+    xml_file = os.path.realpath(xml_file)
+    xsd_file = os.path.realpath(xsd_file)
+    _data_dir_env = os.environ.get("DATA_DIR", "")
+    if _data_dir_env:
+        _data_dir = os.path.realpath(_data_dir_env)
+        if not xml_file.startswith(_data_dir):
+            return {"is_valid": False, "errors": ["Invalid XML file path"]}
+    if not xsd_file.startswith(os.sep):
+        return {"is_valid": False, "errors": ["Invalid XSD file path"]}
+    return xml_file, xsd_file
+
+
 def validate_against_xsd(xml_file, xsd_file):
     """
     Validate XML against an XSD schema.
@@ -31,41 +50,29 @@ def validate_against_xsd(xml_file, xsd_file):
         xsd_file: Path to the XSD schema file
 
     Returns:
-        Tuple (is_valid, errors)
+        Dict with 'is_valid' bool and 'errors' list
     """
     try:
-        # Resolve and validate file paths against traversal
-        xml_file = os.path.realpath(xml_file)
-        xsd_file = os.path.realpath(xsd_file)
-        _data_dir_env = os.environ.get("DATA_DIR", "")
-        if _data_dir_env:
-            _data_dir = os.path.realpath(_data_dir_env)
-            if not xml_file.startswith(_data_dir):
-                return {"is_valid": False, "errors": ["Invalid XML file path"]}
-        if not xsd_file.startswith(os.sep):
-            return {"is_valid": False, "errors": ["Invalid XSD file path"]}
+        path_result = _validate_file_paths(xml_file, xsd_file)
+        if isinstance(path_result, dict):
+            return path_result
+        xml_file, xsd_file = path_result
 
-        # Parse the XSD schema
         parser = etree.XMLParser(resolve_entities=False)
         xmlschema_doc = etree.parse(xsd_file, parser=parser)
         xmlschema = etree.XMLSchema(xmlschema_doc)
-
-        # Parse the XML file
         xml_doc = etree.parse(xml_file, parser=parser)
 
-        # Validate
         is_valid = xmlschema.validate(xml_doc)
-
-        # Get validation errors
         errors = []
         if not is_valid:
             for error in xmlschema.error_log:
                 errors.append(f"Line {error.line}: {error.message}")
 
         return {"is_valid": is_valid, "errors": errors}
-    except Exception:
-        logger.exception("Unexpected error during XML/XSD validation")
-        return {"is_valid": False, "errors": ["Internal validation error"]}
+    except (OSError, etree.XMLSyntaxError, etree.XMLSchemaError, etree.XMLSchemaParseError) as e:
+        logger.error("Error during XML/XSD validation: %s", e)
+        return {"is_valid": False, "errors": [f"Validation error: {e}"]}
 
 def extract_validation_details(error_message):
     """
@@ -130,22 +137,12 @@ def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elem
         tree = ET.parse(xml_file)
         root = tree.getroot()
 
-        # Define the correct order of elements in ClientIntake
-        client_intake_order = [
-            'Race', 'Ethnicity', 'Sex', 'Disability', 'MilitaryStatus',
-            'BranchOfService', 'Media', 'Internet', 'CurrentlyInBusiness',
-            'CurrentlyExporting', 'CompanyName', 'BusinessType',
-            'BusinessOwnership', 'ConductingBusinessOnline',
-            'ClientIntake_Certified8a', 'Employee_Owned', 'TotalNumberOfEmployees',
-            'NumberOfEmployeesInExportingBusiness', 'ClientAnnualIncomePart2',
-            'LegalEntity', 'Rural_vs_Urban', 'FIPS_Code', 'CounselingSeeking',
-            'ExportCountries'
-        ]
+        client_intake_order = CounselingConfig.CLIENT_INTAKE_ELEMENT_ORDER
 
         # Process each CounselingRecord
         for counseling_record in root.findall('CounselingRecord'):
             record_id_element = counseling_record.find('PartnerClientNumber')
-            record_id = record_id_element.text if record_id_element is not None else "UNKNOWN_RECORD"
+            record_id = (record_id_element.text or "UNKNOWN_RECORD") if record_id_element is not None else "UNKNOWN_RECORD"
 
             client_intake = counseling_record.find('ClientIntake')
             if client_intake is not None:
@@ -157,7 +154,7 @@ def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elem
         # Save the fixed XML
         tree.write(output_file, encoding='utf-8', xml_declaration=True)
         return True
-    except Exception as e:
+    except (OSError, ET.ParseError) as e:
         logger.error(f"Error fixing XML file: {str(e)}")
         return False
 

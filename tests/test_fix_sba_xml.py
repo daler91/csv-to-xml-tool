@@ -276,7 +276,7 @@ class TestFixSBAXML(unittest.TestCase):
     @patch('src.fix_sba_xml.setup_logger')
     def test_main_exception(self, mock_setup_logger, mock_process_single_file):
         """Test main entry point handling exception."""
-        mock_process_single_file.side_effect = Exception("Test Error")
+        mock_process_single_file.side_effect = OSError("Test Error")
         logger_mock = MagicMock()
         mock_setup_logger.return_value = logger_mock
 

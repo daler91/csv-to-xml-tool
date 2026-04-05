@@ -70,9 +70,9 @@ def validate_against_xsd(xml_file, xsd_file):
                 errors.append(f"Line {error.line}: {error.message}")
 
         return {"is_valid": is_valid, "errors": errors}
-    except (OSError, etree.XMLSyntaxError, etree.XMLSchemaError, etree.XMLSchemaParseError) as e:
-        logger.error("Error during XML/XSD validation: %s", e)
-        return {"is_valid": False, "errors": [f"Validation error: {e}"]}
+    except (OSError, etree.XMLSyntaxError, etree.XMLSchemaError, etree.XMLSchemaParseError):
+        logger.exception("Error during XML/XSD validation")
+        return {"is_valid": False, "errors": ["Validation error"]}
 
 def extract_validation_details(error_message):
     """

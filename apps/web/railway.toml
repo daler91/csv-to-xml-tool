@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "apps/web/Dockerfile"
 
 [deploy]
-startCommand = "sh -c 'npx prisma db push --skip-generate && node server.js'"
+startCommand = "sh -c 'node scripts/migrate.js && node server.js'"
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

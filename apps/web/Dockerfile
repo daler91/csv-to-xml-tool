@@ -20,5 +20,6 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/prisma ./prisma
 EXPOSE 3000
 CMD ["sh", "-c", "node scripts/migrate.js; node server.js"]

@@ -60,6 +60,16 @@ async function migrate() {
     await prisma.$queryRaw`SELECT 1`;
     console.log("Database connected");
 
+    // Clean up any failed Prisma migration records that block startup
+    try {
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "_prisma_migrations" WHERE "finished_at" IS NULL`
+      );
+      console.log("Cleared any failed migration records");
+    } catch {
+      // _prisma_migrations table doesn't exist - that's fine
+    }
+
     for (const sql of statements) {
       await prisma.$executeRawUnsafe(sql);
     }

@@ -9,7 +9,7 @@ _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.config import CounselingConfig, TrainingConfig
+from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
 
 from ..core.security import DATA_DIR
 
@@ -52,6 +52,17 @@ COUNSELING_EXPECTED = [
 # Training uses flexible COLUMN_MAPPING from config
 TRAINING_EXPECTED = list(TrainingConfig.COLUMN_MAPPING.keys())
 
+# Training client expected columns (the CSV columns before remapping)
+TRAINING_CLIENT_EXPECTED = [
+    "Class/Event ID", "Member Type", "First Name", "Last Name",
+    "Member Status", "Company", "Phone", "Email",
+    "Unique Campaign Members", "Currently in Business?",
+    "Ethnicity", "Race", "Disabilities", "Gender", "Military Status",
+    "Related Record ID", "Training Topic", "Class/Event Type",
+    "Funding Source", "Member ID", "Class Teacher", "Contact ID",
+    "Street", "city", "State", "Zip code", "Start Date", "Class/Event Name",
+]
+
 
 def get_expected_columns(converter_type: str) -> list[str]:
     if converter_type == "counseling":
@@ -62,6 +73,8 @@ def get_expected_columns(converter_type: str) -> list[str]:
         for key, alts in TrainingConfig.COLUMN_MAPPING.items():
             all_headers.append(alts[0] if isinstance(alts, list) and alts else key)
         return all_headers
+    elif converter_type == "training-client":
+        return TRAINING_CLIENT_EXPECTED
     return []
 
 

@@ -147,29 +147,33 @@ class TestTrainingConverter(unittest.TestCase):
         converter = TrainingConverter(self.logger, self.validator)
 
         data = {
-            'Currently in Business?': ['Yes', 'No', 'Yes'],
-            'Gender': ['Female', 'Male', 'Female'],
-            'Disabilities': ['Yes', 'No', 'No'],
-            'Military Status': ['Active Duty', 'Veteran', ''],
-            'Race': ['Asian', 'Black', 'White'],
-            'Ethnicity': ['Hispanic', 'Non-Hispanic', 'Latino']
+            'Currently in Business?': ['Yes', 'No', 'Yes', 'Yes'],
+            'Gender': ['Female', 'Male', 'Female', 'Male'],
+            'Disabilities': ['Yes', 'No', 'No', 'Prefer not to say'],
+            'Military Status': ['Active Duty', 'Veteran', '', ''],
+            'Race': ['Asian', 'Black', 'White', 'White'],
+            'Ethnicity': ['Hispanic', 'Non-Hispanic', 'Latino', 'Prefer not to say']
         }
         df = pd.DataFrame(data)
 
         demographics = converter._calculate_demographics(df)
 
         self.assertIsNotNone(demographics)
-        self.assertEqual(demographics.get('total'), 3)
-        self.assertEqual(demographics.get('currently_in_business'), 2)
+        self.assertEqual(demographics.get('total'), 4)
+        self.assertEqual(demographics.get('currently_in_business'), 3)
         self.assertEqual(demographics.get('not_in_business'), 1)
         self.assertEqual(demographics.get('female'), 2)
-        # Note: 'male' keyword matches inside 'Female' too (str.contains), so count is 3
-        self.assertEqual(demographics.get('male'), 3)
-        self.assertEqual(demographics.get('disabilities'), 1)
+        # Note: 'male' keyword matches inside 'Female' too (str.contains), so count is 4
+        self.assertEqual(demographics.get('male'), 4)
+        self.assertEqual(demographics.get('disabilities'), 1)  # "Prefer not to say" excluded
         self.assertEqual(demographics.get('active_duty'), 1)
         self.assertEqual(demographics.get('veterans'), 1)
         self.assertIn('race', demographics)
         self.assertIn('ethnicity', demographics)
+        # "Non-Hispanic" also matches 'hispanic' substring, so hispanic count includes it
+        self.assertEqual(demographics['ethnicity']['hispanic'], 3)
+        # "Prefer not to say" should NOT count as non-Hispanic
+        self.assertEqual(demographics['ethnicity']['non_hispanic'], 0)
         self.assertIn('minorities', demographics)
 
     def test_cosponsor_included_when_present(self):

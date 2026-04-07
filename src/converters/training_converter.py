@@ -193,7 +193,7 @@ class TrainingConverter(BaseConverter):
         # Gender, Disability, Military
         demographics['female'] = self._count_matches(df, 'gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['female'])
         demographics['male'] = self._count_matches(df, 'gender', self.config.DEMOGRAPHIC_KEYWORDS['gender']['male'])
-        demographics['disabilities'] = self._count_matches(df, 'disability', ['yes', 'true', '1', 'y'])
+        demographics['disabilities'] = self._count_matches(df, 'disability', [r'\byes\b', r'\btrue\b', r'\b1\b', r'\by\b'])
         demographics['active_duty'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['active_duty'])
         demographics['veterans'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['veteran'])
         demographics['service_disabled_veterans'] = self._count_matches(df, 'military_status', self.config.DEMOGRAPHIC_KEYWORDS['military']['service_disabled_veteran'])
@@ -208,7 +208,8 @@ class TrainingConverter(BaseConverter):
         ethnicity_col_name = self._resolve_column(df, 'ethnicity')
         non_hispanic_count = 0
         if ethnicity_col_name:
-            non_hispanic_mask = (~df[ethnicity_col_name].fillna('').astype(str).str.lower().str.contains('hispanic|latino')) & (df[ethnicity_col_name] != '')
+            ethnicity_lower = df[ethnicity_col_name].fillna('').astype(str).str.lower()
+            non_hispanic_mask = (~ethnicity_lower.str.contains('hispanic|latino')) & (df[ethnicity_col_name] != '') & (~ethnicity_lower.str.contains('prefer not'))
             non_hispanic_count = sum(non_hispanic_mask)
         demographics['ethnicity'] = {'hispanic': hispanic_count, 'non_hispanic': non_hispanic_count}
 

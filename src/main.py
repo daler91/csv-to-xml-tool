@@ -15,11 +15,13 @@ from .logging_util import ConversionLogger
 from .validation_report import ValidationTracker
 from .converters.counseling_converter import CounselingConverter
 from .converters.training_converter import TrainingConverter
+from .converters.training_client_converter import TrainingClientConverter
 
 # Mapping of converter names to their classes
 CONVERTERS = {
     "counseling": CounselingConverter,
     "training": TrainingConverter,
+    "training-client": TrainingClientConverter,
 }
 
 def main():

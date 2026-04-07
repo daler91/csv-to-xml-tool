@@ -178,6 +178,90 @@ class TrainingConfig:
 
 
 # =============================================================================
+# TRAINING CLIENT CONFIGURATION (FORM 641 - TRAINING CLIENTS)
+# =============================================================================
+class TrainingClientConfig:
+    """Configuration for converting training client CSV data to Form 641 XML.
+
+    Training clients fill out a smaller form with different column names.
+    This config maps those columns to the counseling-format columns expected
+    by CounselingConverter, and provides defaults for absent fields.
+    """
+
+    # Maps training client CSV column names to counseling converter column names
+    COLUMN_MAPPING = {
+        'Phone': 'Contact: Phone',
+        'Company': 'Account Name',
+        'Street': 'Mailing Street',
+        'city': 'Mailing City',
+        'State': 'Mailing State/Province',
+        'Zip code': 'Mailing Zip/Postal Code',
+        'Disabilities': 'Disability',
+        'Military Status': 'Veteran Status',
+        'Ethnicity': 'Ethnicity:',
+        'Class/Event ID': 'Activity ID',
+        'Class Teacher': 'Name of Counselor',
+        'Start Date': 'Date',
+        'Class/Event Type': 'Type of Session',
+        'Currently in Business?': 'Currently In Business?',
+    }
+
+    # Default values for counseling columns absent from the training client CSV
+    DEFAULTS = {
+        'Middle Name': '',
+        'Contact: Secondary Phone': '',
+        'Mailing Country': 'US',
+        'Agree to Impact Survey': 'No',
+        'Client Signature - Date': '',
+        'Client Signature(On File)': 'No',
+        'Branch Of Service': '',
+        'What Prompted you to contact us?': '',
+        'Internet (specify)': '',
+        'InternetUsage': '',
+        'Are you currently exporting?(old)': 'No',
+        'Type of Business': '',
+        'Business Ownership - % Female(old)': '0',
+        'Conduct Business Online?': 'No',
+        '8(a) Certified?(old)': 'No',
+        'Total Number of Employees': '',
+        'Number of Employees in Exporting Business': '',
+        'Gross Revenues/Sales': '',
+        'Profits/Losses': '',
+        'Rural_vs_Urban': 'Undetermined',
+        'FIPS_Code': '',
+        'Nature of the Counseling Seeking?': '',
+        'Nature of the Counseling Seeking - Other Detail': '',
+        'Legal Entity of Business': '',
+        'Other legal entity (specify)': '',
+        'Verified To Be In Business': 'Undetermined',
+        'Reportable Impact': 'No',
+        'Reportable Impact Date': '',
+        'Business Start Date': '',
+        'Date Started (Meeting)': '',
+        'Total No. of Employees (Meeting)': '',
+        'Gross Revenues/Sales (Meeting)': '',
+        'Profit & Loss (Meeting)': '',
+        'SBA Loan Amount': '0',
+        'Non-SBA Loan Amount': '0',
+        'Amount of Equity Capital Received': '0',
+        'Certifications (SDB, HUBZONE, etc)': '',
+        'Other Certifications': '',
+        'SBA Financial Assistance': '',
+        'Other SBA Financial Assistance': '',
+        'Services Provided': 'Business Start-up/Preplanning',
+        'Other Counseling Provided': '',
+        'Referred Client to': '',
+        'Other (Referred Client to)': '',
+        'Language(s) Used': 'English',
+        'Language(s) Used (Other)': '',
+        'Duration (hours)': '0',
+        'Prep Hours': '0',
+        'Travel Hours': '0',
+        'Comments': '',
+    }
+
+
+# =============================================================================
 # VALIDATION
 # =============================================================================
 class ValidationCategory:

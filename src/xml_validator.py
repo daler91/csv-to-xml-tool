@@ -27,33 +27,35 @@ def _setup_sys_path():
 
 # ConversionLogger is imported lazily in main() to avoid breaking package imports
 
-def _validate_file_paths(xml_file, xsd_file):
+def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
     """Resolve and validate file paths against traversal. Returns (xml_path, xsd_path) or an error dict."""
     xml_file = os.path.realpath(xml_file)
     xsd_file = os.path.realpath(xsd_file)
-    _data_dir_env = os.environ.get("DATA_DIR", "")
-    if _data_dir_env:
-        _data_dir = os.path.realpath(_data_dir_env)
-        if not xml_file.startswith(_data_dir):
-            return {"is_valid": False, "errors": ["Invalid XML file path"]}
+    if enforce_data_dir:
+        _data_dir_env = os.environ.get("DATA_DIR", "")
+        if _data_dir_env:
+            _data_dir = os.path.realpath(_data_dir_env)
+            if not xml_file.startswith(_data_dir):
+                return {"is_valid": False, "errors": ["Invalid XML file path"]}
     if not xsd_file.startswith(os.sep):
         return {"is_valid": False, "errors": ["Invalid XSD file path"]}
     return xml_file, xsd_file
 
 
-def validate_against_xsd(xml_file, xsd_file):
+def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
     """
     Validate XML against an XSD schema.
 
     Args:
         xml_file: Path to the XML file
         xsd_file: Path to the XSD schema file
+        enforce_data_dir: If True, require xml_file to be under DATA_DIR
 
     Returns:
         Dict with 'is_valid' bool and 'errors' list
     """
     try:
-        path_result = _validate_file_paths(xml_file, xsd_file)
+        path_result = _validate_file_paths(xml_file, xsd_file, enforce_data_dir=enforce_data_dir)
         if isinstance(path_result, dict):
             return path_result
         xml_file, xsd_file = path_result

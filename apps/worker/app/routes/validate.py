@@ -46,7 +46,7 @@ async def validate_xsd(job_id: str, schema_type: str):
         if not xml_path.startswith(DATA_DIR + os.sep):
             raise HTTPException(status_code=400, detail="Invalid path")
 
-        result = validate_against_xsd(xml_path, xsd_file)
+        result = validate_against_xsd(xml_path, xsd_file, enforce_data_dir=True)
         is_valid = result.get("is_valid", False)
         errors = result.get("errors", [])
         return {

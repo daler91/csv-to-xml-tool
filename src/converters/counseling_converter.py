@@ -21,6 +21,10 @@ class CounselingConverter(BaseConverter):
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
 
+    def _preprocess_row(self, row):
+        """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
+        return row
+
     def convert(self, input_path: str, output_path: str):
         """
         Performs the data conversion from a CSV file to an XML file.
@@ -42,6 +46,7 @@ class CounselingConverter(BaseConverter):
         skipped_records = 0
 
         for row_index, row in enumerate(rows, 1):
+            row = self._preprocess_row(row)
             record_id = row.get('Contact ID', f"Row_{row_index}")
 
             if not data_validation.validate_counseling_record(row, row_index, self.validator):

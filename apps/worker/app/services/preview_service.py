@@ -13,6 +13,48 @@ from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
 
 from ..core.security import DATA_DIR
 
+# Field requirement levels: "required", "conditional", or "optional"
+COUNSELING_REQUIRED = {
+    "Contact ID", "Race", "Ethnicity:", "Gender", "Disability", "Veteran Status",
+    "Currently In Business?", "Type of Session", "Language(s) Used",
+    "Date", "Name of Counselor", "Duration (hours)",
+}
+COUNSELING_CONDITIONAL = {
+    "Branch Of Service",              # required if military status
+    "Internet (specify)",             # required if media=Internet
+    "InternetUsage",                  # required if media=Internet
+    "Legal Entity of Business",       # required if in business
+    "Other legal entity (specify)",   # required if legal entity=Other
+    "FIPS_Code",                      # required if Rural/Urban
+    "Nature of the Counseling Seeking?",           # required if in business
+    "Nature of the Counseling Seeking - Other Detail",  # required if seeking=Other
+    "Other Counseling Provided",      # required if provided=Other
+}
+
+TRAINING_REQUIRED = {"Class/Event ID"}
+TRAINING_CONDITIONAL: set[str] = set()
+
+TRAINING_CLIENT_REQUIRED = {"Class/Event ID", "Contact ID"}
+TRAINING_CLIENT_CONDITIONAL: set[str] = set()
+
+
+def _build_field_requirements(
+    expected: list[str],
+    required: set[str],
+    conditional: set[str],
+) -> dict[str, str]:
+    """Return a dict mapping each expected field to its requirement level."""
+    result: dict[str, str] = {}
+    for field in expected:
+        if field in required:
+            result[field] = "required"
+        elif field in conditional:
+            result[field] = "conditional"
+        else:
+            result[field] = "optional"
+    return result
+
+
 # Expected columns extracted from converter source code
 COUNSELING_EXPECTED = [
     "Contact ID", "LocationCode", "Last Name", "First Name", "Middle Name",
@@ -115,6 +157,16 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
                 "score": round(ratio * 100),
             })
 
+    # Determine requirement level for each expected field
+    if converter_type == "counseling":
+        field_requirements = _build_field_requirements(expected, COUNSELING_REQUIRED, COUNSELING_CONDITIONAL)
+    elif converter_type == "training":
+        field_requirements = _build_field_requirements(expected, TRAINING_REQUIRED, TRAINING_CONDITIONAL)
+    elif converter_type == "training-client":
+        field_requirements = _build_field_requirements(expected, TRAINING_CLIENT_REQUIRED, TRAINING_CLIENT_CONDITIONAL)
+    else:
+        field_requirements = {}
+
     return {
         "headers": list(headers),
         "rows": rows,
@@ -124,5 +176,6 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
             "missing": missing,
             "extra": extra,
             "suggestions": suggestions,
+            "field_requirements": field_requirements,
         },
     }

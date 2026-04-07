@@ -15,18 +15,26 @@ export default function MappingPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/jobs/${jobId}/preview`);
-        const data = await res.json();
+        const [previewRes, jobRes] = await Promise.all([
+          fetch(`/api/jobs/${jobId}/preview`),
+          fetch(`/api/jobs/${jobId}`),
+        ]);
+        const data = await previewRes.json();
+        const job = await jobRes.json();
         setPreview(data);
 
-        // Pre-populate with fuzzy match suggestions
-        const initial: Record<string, string> = {};
-        data.column_status.suggestions.forEach(
-          (s: { csv_column: string; suggested_match: string }) => {
-            initial[s.csv_column] = s.suggested_match;
-          }
-        );
-        setMapping(initial);
+        // Restore saved mapping if available; otherwise use suggestions
+        if (job.columnMapping && typeof job.columnMapping === "object" && Object.keys(job.columnMapping).length > 0) {
+          setMapping(job.columnMapping as Record<string, string>);
+        } else {
+          const initial: Record<string, string> = {};
+          data.column_status.suggestions.forEach(
+            (s: { csv_column: string; suggested_match: string }) => {
+              initial[s.csv_column] = s.suggested_match;
+            }
+          );
+          setMapping(initial);
+        }
       } catch {
         // ignore
       } finally {
@@ -63,7 +71,8 @@ export default function MappingPage() {
 
   if (!preview) return null;
 
-  const { missing, extra, suggestions } = preview.column_status;
+  const { matched, missing, suggestions, field_requirements } = preview.column_status;
+  const allFields = [...matched, ...missing];
 
   // Build lookup: expected field name -> { csv_column, score }
   const suggestionByField: Record<string, { csv_column: string; score: number }> = {};
@@ -120,7 +129,7 @@ export default function MappingPage() {
           <thead>
             <tr className="border-b bg-gray-50">
               <th className="text-left px-4 py-3 font-medium">
-                Expected Field (missing)
+                Expected XML Field
               </th>
               <th className="text-left px-4 py-3 font-medium">
                 Map From CSV Column
@@ -128,16 +137,42 @@ export default function MappingPage() {
             </tr>
           </thead>
           <tbody>
-            {missing.map((field) => {
+            {allFields.map((field) => {
+              const isMatched = matched.includes(field);
               const currentCsvCol = Object.entries(mapping).find(
                 ([, v]) => v === field
-              )?.[0] || "";
+              )?.[0] || (isMatched ? field : "");
               const suggestion = suggestionByField[field];
               const isApplied = suggestion && currentCsvCol === suggestion.csv_column;
+              const req = field_requirements?.[field];
 
               return (
-                <tr key={field} className="border-b">
-                  <td className="px-4 py-3 font-mono text-xs">{field}</td>
+                <tr key={field} className={`border-b ${isMatched ? "bg-green-50/30" : ""}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs">{field}</span>
+                      {req === "required" && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">
+                          Required
+                        </span>
+                      )}
+                      {req === "conditional" && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                          Conditional
+                        </span>
+                      )}
+                      {req === "optional" && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                          Optional
+                        </span>
+                      )}
+                      {isMatched && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+                          Auto-matched
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <select
@@ -156,7 +191,7 @@ export default function MappingPage() {
                         }}
                       >
                         <option value="">(not mapped)</option>
-                        {extra.map((col) => (
+                        {preview.headers.map((col) => (
                           <option key={col} value={col}>
                             {col}
                           </option>

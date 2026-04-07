@@ -11,6 +11,7 @@ export interface PreviewResponse {
       suggested_match: string;
       score: number;
     }>;
+    field_requirements: Record<string, "required" | "optional" | "conditional">;
   };
 }
 

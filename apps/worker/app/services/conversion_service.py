@@ -12,6 +12,7 @@ if _SRC_DIR not in sys.path:
 
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
+from src.converters.training_client_converter import TrainingClientConverter
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
@@ -23,11 +24,13 @@ SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file_
 XSD_MAP = {
     "counseling": "SBA_NEXUS_Counseling-2-14.xsd",
     "training": "SBA_NEXUS_Training-2-25-2025.xsd",
+    "training-client": "SBA_NEXUS_Counseling-2-14.xsd",
 }
 
 CONVERTER_MAP = {
     "counseling": CounselingConverter,
     "training": TrainingConverter,
+    "training-client": TrainingClientConverter,
 }
 
 

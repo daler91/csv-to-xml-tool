@@ -95,6 +95,16 @@ function ConvertForm() {
               />
               <span className="text-sm">Training (Form 888)</span>
             </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="type"
+                value="training-client"
+                checked={converterType === "training-client"}
+                onChange={(e) => setConverterType(e.target.value)}
+              />
+              <span className="text-sm">Training Client (Form 641)</span>
+            </label>
           </div>
         </fieldset>
 

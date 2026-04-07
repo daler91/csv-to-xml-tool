@@ -59,6 +59,14 @@ if isinstance(_state_columns, str):
 for col in _state_columns:
     TRAINING_CLEANING_MAP.append((col, data_cleaning.standardize_state_name, "standardize_state"))
 
+# Training client cleaning uses the training client CSV column names (before remapping)
+TRAINING_CLIENT_CLEANING_MAP = [
+    ("Start Date", data_cleaning.format_date, "format_date"),
+    ("Phone", data_cleaning.clean_phone_number, "clean_phone"),
+    ("State", data_cleaning.standardize_state_name, "standardize_state"),
+    ("Gender", data_cleaning.map_gender_to_sex, "map_gender"),
+]
+
 
 def generate_cleaning_diff(
     csv_path: str,
@@ -71,10 +79,12 @@ def generate_cleaning_diff(
 
     Each entry: {row, record_id, field, original, cleaned, cleaning_type}
     """
-    cleaning_map = (
-        COUNSELING_CLEANING_MAP if converter_type == "counseling"
-        else TRAINING_CLEANING_MAP
-    )
+    cleaning_maps = {
+        "counseling": COUNSELING_CLEANING_MAP,
+        "training": TRAINING_CLEANING_MAP,
+        "training-client": TRAINING_CLIENT_CLEANING_MAP,
+    }
+    cleaning_map = cleaning_maps.get(converter_type, COUNSELING_CLEANING_MAP)
 
     # Build a reverse mapping so we can apply column renames
     rename = column_mapping or {}

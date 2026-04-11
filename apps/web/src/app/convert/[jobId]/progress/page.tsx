@@ -15,6 +15,15 @@ function formatElapsed(ms: number): string {
   return `${mins}m ${rem.toString().padStart(2, "0")}s`;
 }
 
+function formatEta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  if (seconds < 10) return "a few seconds";
+  if (seconds < 60) return `about ${Math.round(seconds / 5) * 5} seconds`;
+  const mins = Math.round(seconds / 60);
+  if (mins === 1) return "about a minute";
+  return `about ${mins} minutes`;
+}
+
 export default function ProgressPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
@@ -142,6 +151,20 @@ export default function ProgressPage() {
   else if (isCancelled) heading = "Conversion Cancelled";
   else heading = "Converting...";
 
+  // Rate-based ETA. We start computing it once at least 5% of the
+  // work is done, so the first noisy ticks don't produce wild
+  // estimates. The rate is rows/ms; remaining is total-processed.
+  let etaText = "";
+  if (isConverting && total > 0 && processed > 0 && elapsedMs > 2000) {
+    const fractionDone = processed / total;
+    if (fractionDone >= 0.05 && fractionDone < 1) {
+      const rate = processed / elapsedMs; // rows per ms
+      const remainingRows = total - processed;
+      const remainingMs = remainingRows / rate;
+      etaText = formatEta(remainingMs / 1000);
+    }
+  }
+
   let subtitle: string;
   if (isTimedOut) {
     subtitle =
@@ -149,7 +172,15 @@ export default function ProgressPage() {
   } else if (isCancelled) {
     subtitle = "Taking you back to the dashboard…";
   } else if (isConverting) {
-    subtitle = `Running for ${formatElapsed(elapsedMs)}`;
+    const elapsed = `Running for ${formatElapsed(elapsedMs)}`;
+    if (total > 0) {
+      const rowSummary = `${processed.toLocaleString()} of ${total.toLocaleString()} records`;
+      subtitle = etaText
+        ? `${rowSummary} · ${elapsed} · ${etaText} remaining`
+        : `${rowSummary} · ${elapsed}`;
+    } else {
+      subtitle = elapsed;
+    }
   } else {
     subtitle = status;
   }

@@ -6,8 +6,10 @@ import tempfile
 from fastapi import APIRouter, HTTPException
 
 from ..models.schemas import ConvertRequest, ConvertResponse
-from ..services.cancellation import ConversionCancelledError, registry
+from ..services.cancellation import ConversionCancelledError
+from ..services.cancellation import registry as cancel_registry
 from ..services.conversion_service import run_conversion
+from ..services.progress import registry as progress_registry
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +46,14 @@ async def convert(req: ConvertRequest):
         await asyncio.to_thread(tmp_xml.close)
 
         # Capture job_id for the cancellation callback; run_conversion will
-        # poll registry.is_cancelled between phases and raise if the user
-        # clicked Cancel.
+        # poll cancel_registry.is_cancelled between phases and raise if
+        # the user clicked Cancel. The progress callback writes into
+        # the in-memory progress registry, which a separate route
+        # exposes so the web layer can draw the progress bar.
         job_id = req.job_id
+
+        def _on_progress(processed: int, total: int) -> None:
+            progress_registry.update(job_id, processed, total)
 
         result = await asyncio.to_thread(
             run_conversion,
@@ -54,7 +61,8 @@ async def convert(req: ConvertRequest):
             xml_path=tmp_xml.name,
             converter_type=req.converter_type,
             column_mapping=req.column_mapping,
-            is_cancelled=lambda: registry.is_cancelled(job_id),
+            is_cancelled=lambda: cancel_registry.is_cancelled(job_id),
+            on_progress=_on_progress,
         )
 
         # Read generated XML and include in response
@@ -80,9 +88,11 @@ async def convert(req: ConvertRequest):
         logger.exception("Conversion failed")
         raise HTTPException(status_code=500, detail="Internal conversion error")
     finally:
-        # Drop the cancellation flag so the same job_id can be reused after
-        # a re-upload, and clean up scratch files.
-        registry.clear(req.job_id)
+        # Drop the cancellation flag and progress snapshot so the
+        # same job_id can be reused after a re-upload, and clean up
+        # scratch files.
+        cancel_registry.clear(req.job_id)
+        progress_registry.clear(req.job_id)
         if tmp_csv and os.path.exists(tmp_csv.name):
             os.unlink(tmp_csv.name)
         if tmp_xml and os.path.exists(tmp_xml.name):
@@ -107,5 +117,31 @@ async def cancel_convert(job_id: str):
     so the worker can stop wasting CPU on a cancelled job as quickly as
     the cooperative checkpoints allow.
     """
-    registry.cancel(job_id)
+    cancel_registry.cancel(job_id)
     return {"job_id": job_id, "cancelled": True}
+
+
+@router.get(
+    "/convert/{job_id}/progress",
+    responses={
+        200: {"description": "Current progress snapshot"},
+        404: {"description": "No progress recorded for this job"},
+    },
+)
+async def get_convert_progress(job_id: str):
+    """Return the in-memory progress snapshot for a running job.
+
+    The web layer polls this alongside its DB read in
+    `/api/jobs/[id]` and merges the ``processed`` / ``total`` /
+    ``updated_at`` fields into the response the progress page
+    consumes. Returns 404 if no snapshot is recorded — typically
+    because the job already finished (the registry is cleared in
+    the /convert route's finally block) or because the worker
+    hasn't started yet.
+    """
+    snap = progress_registry.get(job_id)
+    if snap is None:
+        raise HTTPException(
+            status_code=404, detail="No progress recorded for this job"
+        )
+    return snap

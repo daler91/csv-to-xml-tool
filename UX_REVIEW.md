@@ -443,14 +443,21 @@ doesn't know whether to map it or not.
 
 ---
 
-### 3.6 Progress page has no cancel, no ETA, and a dead-end timeout **[P1]** **[PARTIALLY RESOLVED]**
+### 3.6 Progress page has no cancel, no ETA, and a dead-end timeout **[P1]** **[RESOLVED]**
 
-_Cancel button, dead-end timeout recovery, elapsed-time counter, and
-poll-failure banner shipped. True row-level ETA deferred: the worker
-does not currently update ``Job.processedRows`` during a conversion,
-so there is no denominator for a remaining-time estimate. Would need
-either periodic progress writes from inside ``run_conversion`` or an
-SSE/WebSocket channel — both out of scope for Phase 3._
+_Full coverage:_
+- _Cancel button + cooperative worker cancel (Phase 3)._
+- _Dead-end timeout recovery buttons + elapsed-time counter
+  + poll-failure banner (Phase 3)._
+- _Row-level progress: new ``BaseConverter.progress_callback`` is
+  wired into both `CounselingConverter` and `TrainingConverter`
+  row loops; the worker's `run_conversion` installs a callback
+  that writes into an in-memory `ProgressRegistry`; a new
+  `GET /convert/{job_id}/progress` worker route exposes it; the
+  web `/api/jobs/[id]` route polls and merges the snapshot into
+  the response. Progress page now shows "X of Y records · Running
+  for Zm Zs · about N minutes remaining" with a rate-based ETA
+  once at least 5% of the work is done._
 
 
 **Where:** `apps/web/src/app/convert/[jobId]/progress/page.tsx:69-108`

@@ -128,8 +128,15 @@ class TrainingConverter(BaseConverter):
         root = ET.Element('ManagementTrainingReport')
         root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
 
-        for event_id, group_df in event_groups:
+        # Training converter aggregates per event, so "progress" is
+        # measured in event groups rather than CSV rows. Call the
+        # callback every N groups so the web progress bar advances.
+        total_events = len(event_groups)
+        self._report_progress(0, total_events)
+
+        for i, (event_id, group_df) in enumerate(event_groups, 1):
             if group_df.empty:
+                self._maybe_report_progress(i, total_events, every=5)
                 continue
             try:
                 self._build_training_record(root, event_id, group_df)
@@ -138,6 +145,10 @@ class TrainingConverter(BaseConverter):
                 self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
                 self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}")
                 self.validator.record_processed(success=False)
+
+            self._maybe_report_progress(i, total_events, every=5)
+
+        self._report_progress(total_events, total_events)
 
         self._write_xml_output(root, output_path)
 

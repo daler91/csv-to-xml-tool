@@ -21,6 +21,10 @@ from src.xml_validator import validate_against_xsd
 from .cancellation import ConversionCancelledError
 from .diff_service import generate_cleaning_diff
 
+# Type alias mirroring BaseConverter.ProgressCallback so the worker
+# service doesn't need to import from src/converters/.
+ProgressCallback = Callable[[int, int], None]
+
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
 
 XSD_MAP = {
@@ -42,6 +46,7 @@ def run_conversion(
     converter_type: str,
     column_mapping: dict[str, str] | None = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> dict:
     """
     Run a CSV-to-XML conversion using the existing converter logic.
@@ -53,6 +58,11 @@ def run_conversion(
     boundary. When it returns True, ``ConversionCancelledError`` is raised
     and the partial XML output is discarded. See
     ``apps/worker/app/services/cancellation.py`` for design notes.
+
+    If ``on_progress`` is provided, it is installed as the converter's
+    ``progress_callback`` and receives ``(processed, total)`` tuples
+    roughly every 25 rows (counseling) or every 5 event groups
+    (training). See UX_REVIEW.md §3.6.
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")
@@ -97,6 +107,8 @@ def run_conversion(
         # Run conversion
         converter_cls = CONVERTER_MAP[converter_type]
         converter = converter_cls(logger, tracker)
+        if on_progress is not None:
+            converter.progress_callback = on_progress
         converter.convert(actual_csv_path, xml_path)
 
         _checkpoint()

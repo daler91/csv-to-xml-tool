@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { workerFetch } from "@/lib/worker-client";
+
+interface ProgressSnapshot {
+  processed: number;
+  total: number;
+  updated_at: number;
+}
+
+async function fetchWorkerProgress(
+  jobId: string
+): Promise<ProgressSnapshot | null> {
+  try {
+    return await workerFetch<ProgressSnapshot>(
+      `/convert/${encodeURIComponent(jobId)}/progress`,
+      { method: "GET", timeoutMs: 3000 }
+    );
+  } catch {
+    // 404 (no snapshot yet / already cleared) or transient network
+    // error — treat as "no progress yet" so the UI falls back to
+    // its elapsed-time counter.
+    return null;
+  }
+}
 
 export async function GET(
   _req: Request,
@@ -16,6 +39,21 @@ export async function GET(
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // For in-flight conversions, also fetch the worker's in-memory
+    // progress snapshot so the progress page can show row-level
+    // progress instead of a dead 0% bar. UX_REVIEW.md §3.6.
+    if (job.status === "converting") {
+      const progress = await fetchWorkerProgress(jobId);
+      if (progress) {
+        return NextResponse.json({
+          ...job,
+          processedRows: progress.processed,
+          totalRows: progress.total,
+          progressUpdatedAt: progress.updated_at,
+        });
+      }
     }
 
     return NextResponse.json(job);

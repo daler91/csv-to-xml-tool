@@ -177,7 +177,7 @@ The Nav's active-link logic can stay.
 
 ---
 
-### 1.3 No global "Help" or "Docs" entry point **[P2]**
+### 1.3 No global "Help" or "Docs" entry point **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/components/nav.tsx:13-17` — link array
 

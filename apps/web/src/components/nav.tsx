@@ -21,6 +21,7 @@ export function Nav() {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/convert", label: "Convert" },
     { href: "/audit", label: "Audit Trail" },
+    { href: "/help", label: "Help" },
   ];
 
   const isActive = (href: string) =>

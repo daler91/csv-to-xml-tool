@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { StatusIcon, type StatusKind } from "@/components/status-icon";
 
 const PAGE_SIZE = 20;
 
@@ -133,29 +134,80 @@ export default async function DashboardPage({
 }
 
 function XsdStatus({ xsdValid }: Readonly<{ xsdValid: boolean | null }>) {
-  if (xsdValid === null) return <>-</>;
-  if (xsdValid) return <span className="text-green-600">Valid</span>;
-  return <span className="text-red-600">Invalid</span>;
+  if (xsdValid === null) return <span className="text-gray-500">—</span>;
+  if (xsdValid)
+    return (
+      <span className="inline-flex items-center gap-1 text-green-700">
+        <StatusIcon kind="success" />
+        Valid
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-red-700">
+      <StatusIcon kind="error" />
+      Invalid
+    </span>
+  );
 }
 
+interface StatusMeta {
+  label: string;
+  kind: StatusKind;
+  color: string;
+}
+
+const STATUS_META: Record<string, StatusMeta> = {
+  uploaded: {
+    label: "Uploaded",
+    kind: "neutral",
+    color: "bg-gray-100 text-gray-800",
+  },
+  previewed: {
+    label: "Ready to convert",
+    kind: "info",
+    color: "bg-blue-100 text-blue-800",
+  },
+  mapping: {
+    label: "Needs mapping",
+    kind: "warning",
+    color: "bg-yellow-100 text-yellow-800",
+  },
+  converting: {
+    label: "Converting",
+    kind: "info",
+    color: "bg-blue-100 text-blue-800",
+  },
+  complete: {
+    label: "Complete",
+    kind: "success",
+    color: "bg-green-100 text-green-800",
+  },
+  error: {
+    label: "Failed",
+    kind: "error",
+    color: "bg-red-100 text-red-800",
+  },
+  cancelled: {
+    label: "Cancelled",
+    kind: "neutral",
+    color: "bg-gray-100 text-gray-700",
+  },
+};
+
 function StatusBadge({ status }: Readonly<{ status: string }>) {
-  const colors: Record<string, string> = {
-    uploaded: "bg-gray-100 text-gray-700",
-    previewed: "bg-blue-100 text-blue-700",
-    mapping: "bg-yellow-100 text-yellow-700",
-    converting: "bg-blue-100 text-blue-700",
-    complete: "bg-green-100 text-green-700",
-    error: "bg-red-100 text-red-700",
-    cancelled: "bg-gray-100 text-gray-600",
+  const meta = STATUS_META[status] ?? {
+    label: status,
+    kind: "neutral" as StatusKind,
+    color: "bg-gray-100 text-gray-700",
   };
 
   return (
     <span
-      className={`px-2 py-0.5 rounded text-xs font-medium ${
-        colors[status] || "bg-gray-100 text-gray-700"
-      }`}
+      data-status={status}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${meta.color}`}
     >
-      {status}
+      <StatusIcon kind={meta.kind} />
+      {meta.label}
     </span>
   );
 }

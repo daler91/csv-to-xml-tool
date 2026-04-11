@@ -7,6 +7,7 @@ import type { PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 import { Skeleton, SkeletonTable } from "@/components/skeleton";
+import { StatusIcon } from "@/components/status-icon";
 
 export default function PreviewPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -123,18 +124,34 @@ export default function PreviewPage() {
       {/* Column Status */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-green-50 border border-green-200 rounded p-3">
-          <p className="text-sm font-medium text-green-700">
+          <p className="text-sm font-medium text-green-800 inline-flex items-center gap-1.5">
+            <StatusIcon kind="success" />
             Matched: {column_status.matched.length}
           </p>
         </div>
-        <div className={`border rounded p-3 ${hasMissing ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
-          <p className={`text-sm font-medium ${hasMissing ? "text-red-700" : "text-gray-700"}`}>
+        <div
+          className={`border rounded p-3 ${
+            hasMissing
+              ? "bg-red-50 border-red-200"
+              : "bg-gray-50 border-gray-200"
+          }`}
+        >
+          <p
+            className={`text-sm font-medium inline-flex items-center gap-1.5 ${
+              hasMissing ? "text-red-800" : "text-gray-700"
+            }`}
+          >
+            <StatusIcon kind={hasMissing ? "error" : "success"} />
             Missing: {column_status.missing.length}
           </p>
         </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-          <p className="text-sm font-medium text-yellow-700">
+        <div className="bg-gray-50 border border-gray-200 rounded p-3">
+          <p className="text-sm font-medium text-gray-700 inline-flex items-center gap-1.5">
+            <StatusIcon kind="info" />
             Extra: {column_status.extra.length}
+          </p>
+          <p className="text-xs text-gray-600 mt-1">
+            Extra columns are ignored during conversion. This is fine.
           </p>
         </div>
       </div>

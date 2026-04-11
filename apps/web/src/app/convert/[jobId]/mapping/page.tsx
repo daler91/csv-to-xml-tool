@@ -8,12 +8,25 @@ import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 import { Skeleton, SkeletonTable } from "@/components/skeleton";
 
+/**
+ * Stable stringification of the mapping dict, used to detect dirty
+ * state so the Cancel button can confirm before discarding unsaved
+ * edits (UX_REVIEW.md §9.5).
+ */
+function mappingKey(m: Record<string, string>): string {
+  return Object.keys(m)
+    .sort()
+    .map((k) => `${k}=${m[k]}`)
+    .join("|");
+}
+
 export default function MappingPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
   const toast = useToast();
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [initialMappingKey, setInitialMappingKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -37,21 +50,23 @@ export default function MappingPage() {
       setPreview(data);
 
       // Restore saved mapping if available; otherwise use suggestions
+      let nextMapping: Record<string, string>;
       if (
         job.columnMapping &&
         typeof job.columnMapping === "object" &&
         Object.keys(job.columnMapping).length > 0
       ) {
-        setMapping(job.columnMapping as Record<string, string>);
+        nextMapping = job.columnMapping as Record<string, string>;
       } else {
-        const initial: Record<string, string> = {};
+        nextMapping = {};
         data.column_status.suggestions.forEach(
           (s: { csv_column: string; suggested_match: string }) => {
-            initial[s.csv_column] = s.suggested_match;
+            nextMapping[s.csv_column] = s.suggested_match;
           }
         );
-        setMapping(initial);
       }
+      setMapping(nextMapping);
+      setInitialMappingKey(mappingKey(nextMapping));
     } catch (err) {
       setLoadError(
         err instanceof Error ? err.message : "Failed to load mapping"
@@ -304,10 +319,21 @@ export default function MappingPage() {
           {saving ? "Saving..." : "Save Mapping & Continue"}
         </button>
         <button
-          onClick={() => router.push(`/convert/${jobId}/preview`)}
+          onClick={() => {
+            const dirty = mappingKey(mapping) !== initialMappingKey;
+            if (
+              dirty &&
+              !window.confirm(
+                "Discard your mapping changes and go back to preview?"
+              )
+            ) {
+              return;
+            }
+            router.push(`/convert/${jobId}/preview`);
+          }}
           className="px-4 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"
         >
-          Skip
+          Cancel
         </button>
       </div>
     </main>

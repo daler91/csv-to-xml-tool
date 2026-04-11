@@ -376,7 +376,7 @@ the user drops the file.
 
 ---
 
-### 3.4 Preview page gives no guidance on "Extra" columns **[P2]**
+### 3.4 Preview page gives no guidance on "Extra" columns **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/preview/page.tsx:72-88`
 
@@ -802,7 +802,7 @@ load"), use `role="status"` / `aria-live="polite"` instead.
 
 ---
 
-### 6.3 Status and severity conveyed by color alone **[P1]**
+### 6.3 Status and severity conveyed by color alone **[P1]** **[RESOLVED]**
 
 **Where:**
 - `results/page.tsx:124-139` — Successful / Errors / Warnings cards
@@ -1098,7 +1098,7 @@ by 8.1.
 
 ## 9. Content, Microcopy & Terminology
 
-### 9.1 Inconsistent status vocabulary **[P2]**
+### 9.1 Inconsistent status vocabulary **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/dashboard/page.tsx:141-160`
 
@@ -1187,7 +1187,7 @@ converter type metadata).
 
 ---
 
-### 9.5 "Skip" on mapping page is ambiguous **[P3]**
+### 9.5 "Skip" on mapping page is ambiguous **[P3]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/mapping/page.tsx:232-237`
 
@@ -1207,7 +1207,11 @@ changes, confirm before discarding them.
 
 ## 10. Trust, Safety & Data Handling Cues
 
-### 10.1 Upload screen doesn't disclose what happens to the data **[P1]**
+### 10.1 Upload screen doesn't disclose what happens to the data **[P1]** **[RESOLVED]**
+
+_Shipped with "per SBA policy" as the retention placeholder. Replace
+with concrete numbers once the product-owner decision lands._
+
 
 **Where:** `apps/web/src/app/convert/page.tsx:62-161`
 
@@ -1234,7 +1238,7 @@ one; see Open Questions).
 
 ---
 
-### 10.2 No explicit "last job will be replaced" cue on re-upload **[P3]**
+### 10.2 No explicit "last job will be replaced" cue on re-upload **[P3]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/reupload/page.tsx:62-117`
 

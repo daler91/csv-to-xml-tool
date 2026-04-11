@@ -79,9 +79,13 @@ export default function ReuploadPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-2">Re-upload Fixed CSV</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-gray-600 mb-2">
         Upload a corrected version of <strong>{fileName}</strong> to compare
         against the previous conversion.
+      </p>
+      <p className="text-xs text-gray-600 mb-6">
+        Your previous conversion is kept as a separate job. The two are
+        compared side-by-side on the next screen.
       </p>
 
       {error && (

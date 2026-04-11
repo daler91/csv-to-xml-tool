@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { StatusIcon, type StatusKind } from "@/components/status-icon";
 
 interface ValidationIssue {
   record_id: string;
@@ -136,12 +137,19 @@ export default async function ResultsPage({
             label="Successful"
             value={summary.successful}
             color="green"
+            kind="success"
           />
-          <SummaryCard label="Errors" value={summary.errors} color="red" />
+          <SummaryCard
+            label="Errors"
+            value={summary.errors}
+            color="red"
+            kind="error"
+          />
           <SummaryCard
             label="Warnings"
             value={summary.warnings}
             color="yellow"
+            kind="warning"
           />
         </div>
       )}
@@ -174,19 +182,24 @@ export default async function ResultsPage({
       <div className="bg-white border rounded p-4 mb-6">
         <h2 className="font-semibold mb-2">XSD Validation</h2>
         {job.xsdValid === null && (
-          <p className="text-sm text-gray-500">Not validated</p>
+          <p className="text-sm text-gray-600 inline-flex items-center gap-1.5">
+            <StatusIcon kind="neutral" />
+            Not validated
+          </p>
         )}
         {job.xsdValid === true && (
-          <p className="text-sm text-green-600">
+          <p className="text-sm text-green-700 inline-flex items-center gap-1.5">
+            <StatusIcon kind="success" />
             XML is valid against the XSD schema
           </p>
         )}
         {job.xsdValid === false && (
           <div>
-            <p className="text-sm text-red-600 mb-2">
+            <p className="text-sm text-red-700 inline-flex items-center gap-1.5 mb-2">
+              <StatusIcon kind="error" />
               XML failed XSD validation ({xsdErrors.length} errors)
             </p>
-            <ul className="text-xs text-red-500 space-y-1 max-h-40 overflow-y-auto">
+            <ul className="text-xs text-red-700 space-y-1 max-h-40 overflow-y-auto">
               {xsdErrors.map((err) => (
                 <li key={err} className="font-mono">
                   {err}
@@ -259,20 +272,29 @@ function SummaryCard({
   label,
   value,
   color,
+  kind,
 }: Readonly<{
   label: string;
   value: number;
   color?: string;
+  kind?: StatusKind;
 }>) {
   const colors: Record<string, string> = {
-    green: "text-green-600",
-    red: "text-red-600",
-    yellow: "text-yellow-600",
+    green: "text-green-700",
+    red: "text-red-700",
+    yellow: "text-yellow-700",
   };
 
   return (
     <div className="bg-white border rounded p-4">
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm text-gray-600 flex items-center gap-1.5">
+        {kind && (
+          <span className={color ? colors[color] : ""}>
+            <StatusIcon kind={kind} />
+          </span>
+        )}
+        {label}
+      </p>
       <p className={`text-2xl font-bold ${color ? colors[color] : ""}`}>
         {value}
       </p>
@@ -420,13 +442,17 @@ function CleaningDiffView({
                 <td className="px-3 py-2 font-mono">{d.row}</td>
                 <td className="px-3 py-2 font-mono">{d.record_id}</td>
                 <td className="px-3 py-2">{d.field}</td>
-                <td className="px-3 py-2 bg-red-50 text-red-700">
+                <td className="px-3 py-2 bg-red-50 text-red-800 font-mono">
+                  <span aria-hidden="true" className="mr-1 text-red-600">−</span>
+                  <span className="sr-only">Original value: </span>
                   {d.original}
                 </td>
-                <td className="px-3 py-2 bg-green-50 text-green-700">
+                <td className="px-3 py-2 bg-green-50 text-green-800 font-mono">
+                  <span aria-hidden="true" className="mr-1 text-green-600">+</span>
+                  <span className="sr-only">Cleaned value: </span>
                   {d.cleaned}
                 </td>
-                <td className="px-3 py-2 text-gray-500">{d.cleaning_type}</td>
+                <td className="px-3 py-2 text-gray-600">{d.cleaning_type}</td>
               </tr>
             ))}
           </tbody>

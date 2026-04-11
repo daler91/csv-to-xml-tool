@@ -210,6 +210,12 @@ function ConvertForm() {
           {uploading && <Spinner />}
           {uploading ? "Uploading..." : "Upload & Preview"}
         </button>
+
+        <p className="text-xs text-gray-600 leading-relaxed">
+          Your CSV is stored in your account and is visible only to you.
+          Files are retained per SBA policy. Data is processed on SBA
+          infrastructure; nothing is sent to third-party services.
+        </p>
       </form>
     </main>
   );

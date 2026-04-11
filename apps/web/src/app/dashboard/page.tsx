@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { StatusIcon } from "@/components/status-icon";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button-classes";
 
 const PAGE_SIZE = 20;
 

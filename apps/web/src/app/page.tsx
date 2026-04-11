@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
-import { buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button-classes";
 
 /**
  * Homepage for unauthenticated users.

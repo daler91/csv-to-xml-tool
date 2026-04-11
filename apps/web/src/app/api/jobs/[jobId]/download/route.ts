@@ -22,14 +22,22 @@ export async function GET(
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Validate the file path stays within DATA_DIR to prevent path traversal
-    const resolvedPath = await realpath(job.outputFilePath);
-    const resolvedDataDir = await realpath(DATA_DIR);
+    // Validate the file path stays within DATA_DIR to prevent path
+    // traversal. The turbopackIgnore comments tell the bundler's file
+    // tracer not to try to statically resolve these paths — they're
+    // always runtime values from the DB, scoped to DATA_DIR. Without
+    // the comments Turbopack's NFT walker gives up and flags the
+    // whole project, including next.config.ts, as potentially
+    // needed.
+    const resolvedPath = await realpath(
+      /* turbopackIgnore: true */ job.outputFilePath
+    );
+    const resolvedDataDir = await realpath(/* turbopackIgnore: true */ DATA_DIR);
     if (!resolvedPath.startsWith(resolvedDataDir + path.sep)) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const fileBuffer = await readFile(resolvedPath);
+    const fileBuffer = await readFile(/* turbopackIgnore: true */ resolvedPath);
     const fileName = job.inputFileName.replace(".csv", ".xml");
 
     await prisma.auditEntry.create({

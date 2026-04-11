@@ -34,13 +34,25 @@ export async function GET(
       }),
     });
 
-    // Update job with row count
-    await prisma.job.update({
+    // Update job with row count and advance status to "previewed",
+    // but only from non-terminal states. A stale tab fetching the
+    // preview of a cancelled/complete/error job would otherwise
+    // revive it; conditional updateMany closes that loophole.
+    //
+    // We always persist totalRows (even on cancelled jobs) because
+    // the dashboard and audit views want an accurate row count
+    // regardless of status. Splitting into two updateMany calls
+    // keeps the status transition tight.
+    await prisma.job.updateMany({
       where: { id: jobId },
-      data: {
-        totalRows: preview.total_rows,
-        status: "previewed",
+      data: { totalRows: preview.total_rows },
+    });
+    await prisma.job.updateMany({
+      where: {
+        id: jobId,
+        status: { notIn: ["cancelled", "complete", "error", "converting"] },
       },
+      data: { status: "previewed" },
     });
 
     return NextResponse.json(preview);

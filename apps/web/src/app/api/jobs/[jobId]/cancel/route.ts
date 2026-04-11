@@ -9,13 +9,23 @@ import { workerFetch } from "@/lib/worker-client";
  * The database is the authoritative source of state: we flip
  * ``job.status`` to ``"cancelled"`` immediately so the progress page,
  * dashboard, and any future reads see the cancellation even if the
- * worker is still crunching. We then poke the worker to drop the job at
- * its next checkpoint (best-effort — we don't block on the response).
+ * worker is still crunching. We then poke the worker to drop the job
+ * at its next checkpoint (best-effort — we don't block on the
+ * response).
  *
- * The ``start`` route's background handler checks the DB state before
- * writing any terminal status, so a cancelled job will not be
- * overwritten by a late-arriving ``complete`` or ``error`` from the
- * worker.
+ * Only jobs in status ``"converting"`` can be cancelled. The Cancel
+ * button in the UI is only rendered while a job is converting (see
+ * ``convert/[jobId]/progress/page.tsx``), and the /start and /preview
+ * endpoints unconditionally write other statuses — so marking an
+ * ``uploaded`` / ``previewed`` / ``mapping`` job as cancelled would
+ * create a contradictory state that a later start or preview call
+ * could revive. For anything else we return the current status
+ * idempotently so repeat clicks are safe.
+ *
+ * The /start route's background handler uses conditional ``updateMany``
+ * against ``status: "converting"`` so a late-arriving complete or
+ * error from the worker cannot overwrite a cancellation that landed
+ * in the race window.
  */
 export async function POST(
   _req: Request,
@@ -33,19 +43,30 @@ export async function POST(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // Only in-flight jobs can be cancelled. Terminal states (complete,
-    // error, cancelled) are returned as-is so repeat clicks are idempotent.
-    const cancellable = job.status === "converting" || job.status === "uploaded"
-      || job.status === "previewed" || job.status === "mapping";
-
-    if (!cancellable) {
+    if (job.status !== "converting") {
+      // Idempotent no-op for terminal states (complete, error,
+      // cancelled) and pre-converting states (uploaded, previewed,
+      // mapping). Repeat clicks from a stale tab return the current
+      // status without modifying anything.
       return NextResponse.json({ status: job.status }, { status: 200 });
     }
 
-    await prisma.job.update({
-      where: { id: jobId },
+    // Conditional update: only flip to cancelled if the job is still
+    // converting. If the worker's completion PATCH lands in the
+    // narrow race window, updateMany returns count=0 and we report
+    // the post-race status instead of reviving a terminal job.
+    const cancelled = await prisma.job.updateMany({
+      where: { id: jobId, status: "converting" },
       data: { status: "cancelled", completedAt: new Date() },
     });
+
+    if (cancelled.count === 0) {
+      const current = await prisma.job.findUnique({ where: { id: jobId } });
+      return NextResponse.json(
+        { status: current?.status ?? "unknown" },
+        { status: 200 }
+      );
+    }
 
     await prisma.auditEntry.create({
       data: {

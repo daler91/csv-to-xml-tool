@@ -62,6 +62,12 @@ export async function GET(
   }
 }
 
+// A job in any of these states is terminal from the user's
+// perspective: the flow is over, and PATCH requests from stale
+// tabs should not be able to revive it. Matches the set enforced
+// in the /cancel, /start, and /preview routes.
+const TERMINAL_STATUSES = new Set(["cancelled", "complete", "error"]);
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -79,6 +85,16 @@ export async function PATCH(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    if (TERMINAL_STATUSES.has(job.status)) {
+      return NextResponse.json(
+        {
+          error:
+            `This job is ${job.status} and can't be modified. Re-upload if you want to work on it again.`,
+        },
+        { status: 409 }
+      );
+    }
+
     // Whitelist fields that clients are allowed to update
     const allowedFields = ["columnMapping", "status"] as const;
     const sanitizedData: Record<string, unknown> = {};
@@ -92,12 +108,33 @@ export async function PATCH(
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
-    const updated = await prisma.job.update({
-      where: { id: jobId },
+    // Conditional update to close the read-then-write race: if the
+    // user cancels between the findFirst above and this update, the
+    // NOT IN guard ensures the PATCH doesn't revive the cancelled
+    // job. Count is 0 when the race loses; we read back the current
+    // status and report it.
+    const updated = await prisma.job.updateMany({
+      where: {
+        id: jobId,
+        userId: user.id,
+        status: { notIn: Array.from(TERMINAL_STATUSES) },
+      },
       data: sanitizedData,
     });
 
-    return NextResponse.json(updated);
+    if (updated.count === 0) {
+      const current = await prisma.job.findUnique({ where: { id: jobId } });
+      return NextResponse.json(
+        {
+          error:
+            `This job is ${current?.status ?? "in a terminal state"} and can't be modified.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    const fresh = await prisma.job.findUnique({ where: { id: jobId } });
+    return NextResponse.json(fresh);
   } catch {
     return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
   }

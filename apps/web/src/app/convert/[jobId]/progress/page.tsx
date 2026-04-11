@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Spinner } from "@/components/spinner";
 
 const POLL_FAILURE_THRESHOLD = 3;
 
@@ -244,8 +245,9 @@ export default function ProgressPage() {
             onClick={handleCancel}
             disabled={cancelling}
             aria-busy={cancelling}
-            className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
+            {cancelling && <Spinner />}
             {cancelling ? "Cancelling…" : "Cancel conversion"}
           </button>
         )}

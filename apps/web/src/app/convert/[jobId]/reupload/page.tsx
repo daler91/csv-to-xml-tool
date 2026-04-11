@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { converterTypeLabel } from "@/lib/converter-types";
 import { useToast } from "@/components/toast";
 import { uploadErrorMessage } from "@/lib/upload-errors";
+import { Spinner } from "@/components/spinner";
+import { Skeleton } from "@/components/skeleton";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -65,8 +67,11 @@ export default function ReuploadPage() {
 
   if (loading) {
     return (
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        <p className="text-sm text-gray-500">Loading...</p>
+      <main className="max-w-2xl mx-auto px-4 py-8" aria-busy="true">
+        <Skeleton className="h-7 w-56 mb-2" />
+        <Skeleton className="h-4 w-80 mb-6" />
+        <Skeleton className="h-14 w-full mb-4" />
+        <Skeleton className="h-10 w-full mb-4" />
       </main>
     );
   }
@@ -115,8 +120,10 @@ export default function ReuploadPage() {
           <button
             type="submit"
             disabled={!file || uploading}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            aria-busy={uploading}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
+            {uploading && <Spinner />}
             {uploading ? "Uploading..." : "Upload & Compare"}
           </button>
           <button

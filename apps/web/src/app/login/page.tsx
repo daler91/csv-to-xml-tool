@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
+import { Spinner } from "@/components/spinner";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -80,8 +81,10 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            aria-busy={loading}
+            className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
+            {loading && <Spinner />}
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>

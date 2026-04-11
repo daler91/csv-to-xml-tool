@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/toast";
 import { uploadErrorMessage } from "@/lib/upload-errors";
+import { Spinner } from "@/components/spinner";
+import { Skeleton } from "@/components/skeleton";
 
 function ConvertForm() {
   const router = useRouter();
@@ -162,8 +164,10 @@ function ConvertForm() {
         <button
           type="submit"
           disabled={!file || uploading}
-          className="w-full bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          aria-busy={uploading}
+          className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
+          {uploading && <Spinner />}
           {uploading ? "Uploading..." : "Upload & Preview"}
         </button>
       </form>
@@ -175,8 +179,12 @@ export default function ConvertPage() {
   return (
     <Suspense
       fallback={
-        <main className="max-w-2xl mx-auto px-4 py-8">
-          <p className="text-gray-500">Loading...</p>
+        <main className="max-w-2xl mx-auto px-4 py-8" aria-busy="true">
+          <Skeleton className="h-7 w-48 mb-6" />
+          <Skeleton className="h-4 w-24 mb-2" />
+          <Skeleton className="h-8 w-full mb-6" />
+          <Skeleton className="h-32 w-full mb-6" />
+          <Skeleton className="h-10 w-full" />
         </main>
       }
     >

@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
+import { Spinner } from "@/components/spinner";
+import { Skeleton, SkeletonTable } from "@/components/skeleton";
 
 export default function PreviewPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -62,8 +64,15 @@ export default function PreviewPage() {
 
   if (loading) {
     return (
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <p className="text-gray-500">Loading preview...</p>
+      <main className="max-w-6xl mx-auto px-4 py-8" aria-busy="true">
+        <Skeleton className="h-7 w-48 mb-2" />
+        <Skeleton className="h-4 w-32 mb-6" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
+        </div>
+        <SkeletonTable rows={5} columns={5} />
       </main>
     );
   }
@@ -195,8 +204,10 @@ export default function PreviewPage() {
         <button
           onClick={handleConvert}
           disabled={converting}
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          aria-busy={converting}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
+          {converting && <Spinner />}
           {converting ? "Converting..." : "Confirm & Convert"}
         </button>
         <Link

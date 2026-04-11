@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
+import { Spinner } from "@/components/spinner";
+import { Skeleton, SkeletonTable } from "@/components/skeleton";
 
 export default function MappingPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -91,8 +93,10 @@ export default function MappingPage() {
 
   if (loading) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <p className="text-gray-500">Loading columns...</p>
+      <main className="max-w-4xl mx-auto px-4 py-8" aria-busy="true">
+        <Skeleton className="h-7 w-48 mb-2" />
+        <Skeleton className="h-4 w-72 mb-6" />
+        <SkeletonTable rows={8} columns={2} />
       </main>
     );
   }
@@ -293,8 +297,10 @@ export default function MappingPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          aria-busy={saving}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
+          {saving && <Spinner />}
           {saving ? "Saving..." : "Save Mapping & Continue"}
         </button>
         <button

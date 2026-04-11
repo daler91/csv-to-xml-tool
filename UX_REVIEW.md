@@ -686,7 +686,7 @@ notification. None currently do.
 
 ---
 
-### 5.2 Loading states reuse button copy and lose context **[P2]**
+### 5.2 Loading states reuse button copy and lose context **[P2]** **[RESOLVED]**
 
 **Where:** Every submit button in the app — e.g.
 `login/page.tsx:79`, `signup/page.tsx:110`, `convert/page.tsx:158`,
@@ -713,7 +713,7 @@ is easy to miss.
 
 ---
 
-### 5.3 No skeleton loaders on data pages **[P2]**
+### 5.3 No skeleton loaders on data pages **[P2]** **[RESOLVED]**
 
 **Where:** `preview/page.tsx:45-51`, `mapping/page.tsx:64-70`,
 `audit/page.tsx:84-89`

@@ -266,7 +266,7 @@ advanced users.
 
 ---
 
-### 2.4 Signup page does not show password rules **[P2]**
+### 2.4 Signup page does not show password rules **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/signup/page.tsx:91-103`
 
@@ -349,7 +349,7 @@ file) into one module and importing it everywhere.
 
 ---
 
-### 3.3 File upload does not validate before submit **[P2]**
+### 3.3 File upload does not validate before submit **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/page.tsx:118-132`
 
@@ -851,7 +851,7 @@ buttons, inputs, and the dropzone.
 
 ---
 
-### 6.5 Drag-and-drop dropzone uses `role="button"` on a `<div>` **[P2]**
+### 6.5 Drag-and-drop dropzone uses `role="button"` on a `<div>` **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/page.tsx:113-125`
 

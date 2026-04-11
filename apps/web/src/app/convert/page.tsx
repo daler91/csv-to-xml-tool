@@ -8,6 +8,12 @@ import { Spinner } from "@/components/spinner";
 import { Skeleton } from "@/components/skeleton";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 
+const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, mirrors /api/upload
+
+function isCsvFile(f: File): boolean {
+  return f.name.toLowerCase().endsWith(".csv");
+}
+
 function ConvertForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -18,6 +24,24 @@ function ConvertForm() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+
+  function acceptFile(candidate: File | undefined | null) {
+    if (!candidate) return;
+    if (!isCsvFile(candidate)) {
+      toast.error(
+        "That doesn't look like a CSV. We accept .csv files only."
+      );
+      return;
+    }
+    if (candidate.size > MAX_FILE_BYTES) {
+      toast.error(
+        "That file is larger than 50MB. Split it into smaller batches and try again."
+      );
+      return;
+    }
+    setFile(candidate);
+    setError("");
+  }
 
   useEffect(() => {
     if (previousJobId) {
@@ -138,45 +162,43 @@ function ConvertForm() {
         </fieldset>
 
         <div>
-          <label htmlFor="file-input" className="block text-sm font-medium mb-2">CSV File</label>
-          <div
-            role="button"
-            tabIndex={0}
-            className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
+          <span id="file-label" className="block text-sm font-medium mb-1">
+            CSV File
+          </span>
+          <p id="file-help" className="text-xs text-gray-600 mb-2">
+            .csv files only, up to 50MB.
+          </p>
+          <label
+            htmlFor="file-input"
+            aria-labelledby="file-label"
+            aria-describedby="file-help"
+            className="block border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              const dropped = e.dataTransfer.files[0];
-              if (dropped?.name.endsWith(".csv")) setFile(dropped);
+              acceptFile(e.dataTransfer.files[0]);
             }}
-            onClick={() => document.getElementById("file-input")?.click()}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); document.getElementById("file-input")?.click(); } }}
           >
             <input
               id="file-input"
               type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              accept=".csv,text/csv"
+              className="sr-only"
+              onChange={(e) => acceptFile(e.target.files?.[0])}
             />
             {file ? (
               <div>
-                <p className="font-medium">{file.name}</p>
-                <p className="text-sm text-gray-500">
+                <p className="font-medium break-all">{file.name}</p>
+                <p className="text-sm text-gray-600 mt-1">
                   {(file.size / 1024).toFixed(1)} KB
                 </p>
               </div>
             ) : (
-              <div>
-                <p className="text-gray-500">
-                  Drag & drop a CSV file here, or click to browse
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  .csv files only, max 50MB
-                </p>
-              </div>
+              <p className="text-gray-600">
+                Drag &amp; drop a CSV file here, or click to browse
+              </p>
             )}
-          </div>
+          </label>
         </div>
 
         <button

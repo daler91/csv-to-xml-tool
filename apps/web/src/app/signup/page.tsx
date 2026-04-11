@@ -7,11 +7,27 @@ import Link from "next/link";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 
+interface PasswordRule {
+  label: string;
+  test: (pw: string) => boolean;
+}
+
+const PASSWORD_RULES: readonly PasswordRule[] = [
+  { label: "At least 8 characters", test: (pw) => pw.length >= 8 },
+  { label: "One uppercase letter", test: (pw) => /[A-Z]/.test(pw) },
+  { label: "One digit", test: (pw) => /\d/.test(pw) },
+  {
+    label: "One special character",
+    test: (pw) => /[^A-Za-z0-9]/.test(pw),
+  },
+] as const;
+
 export default function SignupPage() {
   const router = useRouter();
   const toast = useToast();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [password, setPassword] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -97,7 +113,7 @@ export default function SignupPage() {
 
           <div>
             <label htmlFor="password" className="block text-sm font-medium mb-1">
-              Password (min 8 characters)
+              Password
             </label>
             <input
               id="password"
@@ -105,8 +121,43 @@ export default function SignupPage() {
               type="password"
               required
               minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-describedby="password-rules"
               className="w-full border rounded px-3 py-2 text-sm"
             />
+            <ul
+              id="password-rules"
+              aria-label="Password requirements"
+              className="mt-2 space-y-1 text-xs"
+            >
+              {PASSWORD_RULES.map((rule) => {
+                const ok = rule.test(password);
+                return (
+                  <li
+                    key={rule.label}
+                    className={`flex items-center gap-2 ${
+                      ok ? "text-green-700" : "text-gray-600"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`flex-shrink-0 w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
+                        ok
+                          ? "border-green-600 bg-green-600 text-white"
+                          : "border-gray-300 text-transparent"
+                      }`}
+                    >
+                      ✓
+                    </span>
+                    <span className="sr-only">
+                      {ok ? "Met: " : "Not met: "}
+                    </span>
+                    {rule.label}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
           <button

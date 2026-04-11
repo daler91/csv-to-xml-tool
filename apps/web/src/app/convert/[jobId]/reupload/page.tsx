@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { converterTypeLabel } from "@/lib/converter-types";
 import { useToast } from "@/components/toast";
+import { uploadErrorMessage } from "@/lib/upload-errors";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -45,12 +46,19 @@ export default function ReuploadPage() {
 
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(uploadErrorMessage(res.status, data.error));
+        setUploading(false);
+        return;
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
       toast.success("Re-upload received — loading preview");
       router.push(`/convert/${data.jobId}/preview`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+    } catch {
+      setError(
+        "Couldn't reach the server. Check your internet connection and try again."
+      );
       setUploading(false);
     }
   };

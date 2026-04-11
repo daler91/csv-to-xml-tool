@@ -542,7 +542,7 @@ sign-in, sign-up. Use the same component for recoverable errors.
 
 ## 4. Error Handling, Recovery & Messaging
 
-### 4.1 Upload errors are generic **[P1]**
+### 4.1 Upload errors are generic **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/page.tsx:47-56`
 
@@ -576,7 +576,7 @@ Add `role="alert"` to the error div (see a11y section 6.2).
 
 ---
 
-### 4.2 Preview/Convert error states are dead ends **[P2]**
+### 4.2 Preview/Convert error states are dead ends **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/preview/page.tsx:53-59`
 
@@ -627,7 +627,7 @@ check `!res.ok` explicitly and show the server's error message.
 
 ---
 
-### 4.4 Error boundary strands the user **[P2]**
+### 4.4 Error boundary strands the user **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/components/error-boundary.tsx:28-46`
 

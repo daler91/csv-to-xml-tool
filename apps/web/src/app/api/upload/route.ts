@@ -46,9 +46,12 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!["counseling", "training"].includes(converterType)) {
+    if (!["counseling", "training", "training-client"].includes(converterType)) {
       return NextResponse.json(
-        { error: "Converter type must be 'counseling' or 'training'" },
+        {
+          error:
+            "Converter type must be 'counseling', 'training', or 'training-client'",
+        },
         { status: 400 }
       );
     }

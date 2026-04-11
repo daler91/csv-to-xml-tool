@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/toast";
+import { uploadErrorMessage } from "@/lib/upload-errors";
 
 function ConvertForm() {
   const router = useRouter();
@@ -47,8 +48,8 @@ function ConvertForm() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Upload failed");
+        const data = await res.json().catch(() => ({}));
+        setError(uploadErrorMessage(res.status, data.error));
         return;
       }
 
@@ -56,7 +57,9 @@ function ConvertForm() {
       toast.success("File uploaded — loading preview");
       router.push(`/convert/${jobId}/preview`);
     } catch {
-      setError("Upload failed. Please try again.");
+      setError(
+        "Couldn't reach the server. Check your internet connection and try again."
+      );
     } finally {
       setUploading(false);
     }

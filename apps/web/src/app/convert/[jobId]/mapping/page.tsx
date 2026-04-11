@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import type { PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
 
@@ -14,38 +15,53 @@ export default function MappingPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [previewRes, jobRes] = await Promise.all([
+        fetch(`/api/jobs/${jobId}/preview`),
+        fetch(`/api/jobs/${jobId}`),
+      ]);
+      if (!previewRes.ok || !jobRes.ok) {
+        throw new Error(
+          "We couldn't load the column mapping for this file. The server may be busy or the file may be malformed."
+        );
+      }
+      const data = await previewRes.json();
+      const job = await jobRes.json();
+      setPreview(data);
+
+      // Restore saved mapping if available; otherwise use suggestions
+      if (
+        job.columnMapping &&
+        typeof job.columnMapping === "object" &&
+        Object.keys(job.columnMapping).length > 0
+      ) {
+        setMapping(job.columnMapping as Record<string, string>);
+      } else {
+        const initial: Record<string, string> = {};
+        data.column_status.suggestions.forEach(
+          (s: { csv_column: string; suggested_match: string }) => {
+            initial[s.csv_column] = s.suggested_match;
+          }
+        );
+        setMapping(initial);
+      }
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to load mapping"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [previewRes, jobRes] = await Promise.all([
-          fetch(`/api/jobs/${jobId}/preview`),
-          fetch(`/api/jobs/${jobId}`),
-        ]);
-        const data = await previewRes.json();
-        const job = await jobRes.json();
-        setPreview(data);
-
-        // Restore saved mapping if available; otherwise use suggestions
-        if (job.columnMapping && typeof job.columnMapping === "object" && Object.keys(job.columnMapping).length > 0) {
-          setMapping(job.columnMapping as Record<string, string>);
-        } else {
-          const initial: Record<string, string> = {};
-          data.column_status.suggestions.forEach(
-            (s: { csv_column: string; suggested_match: string }) => {
-              initial[s.csv_column] = s.suggested_match;
-            }
-          );
-          setMapping(initial);
-        }
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    }
     load();
-  }, [jobId]);
+  }, [load]);
 
   async function handleSave() {
     setSaving(true);
@@ -81,7 +97,38 @@ export default function MappingPage() {
     );
   }
 
-  if (!preview) return null;
+  if (loadError || !preview) {
+    return (
+      <main className="max-w-2xl mx-auto px-4 py-16">
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 rounded-lg p-6"
+        >
+          <h1 className="text-xl font-semibold text-red-900 mb-2">
+            Couldn&apos;t load column mapping
+          </h1>
+          <p className="text-sm text-red-800 mb-4">
+            {loadError || "Failed to load mapping"}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={load}
+              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+            >
+              Try again
+            </button>
+            <Link
+              href={`/convert/${jobId}/preview`}
+              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 text-center"
+            >
+              Back to preview
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   const { matched, missing, suggestions, field_requirements } = preview.column_status;
   const allFields = [...matched, ...missing];

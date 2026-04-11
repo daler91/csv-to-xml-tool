@@ -1,43 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PreviewResponse } from "@/types";
+import { useToast } from "@/components/toast";
 
 export default function PreviewPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
+  const toast = useToast();
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  const loadPreview = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      // Call worker preview via our API proxy
+      const res = await fetch(`/api/jobs/${jobId}/preview`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          data.error ||
+            "We couldn't load a preview for this file. The server may be busy or the file may be malformed."
+        );
+      }
+      const data = await res.json();
+      setPreview(data);
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to load preview"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
 
   useEffect(() => {
-    async function loadPreview() {
-      try {
-        // Call worker preview via our API proxy
-        const res = await fetch(`/api/jobs/${jobId}/preview`);
-        if (!res.ok) throw new Error("Failed to load preview");
-        const data = await res.json();
-        setPreview(data);
-      } catch {
-        setError("Failed to load preview");
-      } finally {
-        setLoading(false);
-      }
-    }
     loadPreview();
-  }, [jobId]);
+  }, [loadPreview]);
 
   async function handleConvert() {
     setConverting(true);
     try {
       const res = await fetch(`/api/jobs/${jobId}/start`, { method: "POST" });
-      if (!res.ok) throw new Error("Conversion failed");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Couldn't start the conversion.");
+      }
       router.push(`/convert/${jobId}/progress`);
-    } catch {
-      setError("Conversion failed");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't start the conversion."
+      );
       setConverting(false);
     }
   }
@@ -50,12 +68,35 @@ export default function PreviewPage() {
     );
   }
 
-  if (error || !preview) {
+  if (loadError || !preview) {
     return (
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <p role="alert" className="text-red-600">
-          {error || "Failed to load preview"}
-        </p>
+      <main className="max-w-2xl mx-auto px-4 py-16">
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 rounded-lg p-6"
+        >
+          <h1 className="text-xl font-semibold text-red-900 mb-2">
+            Couldn&apos;t load preview
+          </h1>
+          <p className="text-sm text-red-800 mb-4">
+            {loadError || "Failed to load preview"}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={loadPreview}
+              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+            >
+              Try again
+            </button>
+            <Link
+              href="/convert"
+              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 text-center"
+            >
+              Back to upload
+            </Link>
+          </div>
+        </div>
       </main>
     );
   }

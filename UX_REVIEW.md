@@ -147,7 +147,13 @@ moving Sign Out and email into an avatar menu to free horizontal space.
 
 ---
 
-### 1.2 "Convert" nav link loses active state after `/convert/[jobId]/…` steps **[P3]**
+### 1.2 "Convert" nav link loses active state after `/convert/[jobId]/…` steps **[P3]** **[RESOLVED]**
+
+_Shipped a StepIndicator component mounted via `convert/layout.tsx`
+so every page in the flow shows a horizontal 5-step strip
+(Upload → Preview → Map → Convert → Results). Past steps are
+linked; current and future steps are not._
+
 
 **Where:** `apps/web/src/components/nav.tsx:27` —
 `pathname === href || pathname.startsWith(href + "/")`

@@ -195,7 +195,7 @@ Until the web app has its own docs, the link can point to a section in
 
 ## 2. Onboarding & First-Run Experience
 
-### 2.1 Landing page doesn't explain what to bring **[P1]**
+### 2.1 Landing page doesn't explain what to bring **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/page.tsx:1-28`
 
@@ -224,7 +224,7 @@ Keep Sign In / Create Account as the primary CTAs but below the fold.
 
 ---
 
-### 2.2 Dashboard empty state is passive **[P2]**
+### 2.2 Dashboard empty state is passive **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/dashboard/page.tsx:44-50`
 
@@ -245,7 +245,7 @@ is prime real estate for onboarding.
 
 ---
 
-### 2.3 README is silent on the web app **[P1]**
+### 2.3 README is silent on the web app **[P1]** **[RESOLVED]**
 
 **Where:** `README.md` (entire file)
 

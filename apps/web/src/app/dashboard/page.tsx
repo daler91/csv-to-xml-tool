@@ -43,11 +43,35 @@ export default async function DashboardPage({
       </div>
 
       {jobs.length === 0 && page === 1 ? (
-        <div className="text-center py-16 text-gray-500">
-          <p className="text-lg mb-2">No conversions yet</p>
-          <p className="text-sm">
-            Upload a CSV file to get started.
+        <div className="text-center py-16 bg-white border rounded-lg">
+          <h2 className="text-xl font-semibold mb-2">No conversions yet</h2>
+          <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
+            Start your first conversion by uploading a CSV export.
+            Not sure what to upload? Grab a sample below.
           </p>
+          <Link
+            href="/convert"
+            className="inline-block px-5 py-2.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 mb-8"
+          >
+            Start a new conversion
+          </Link>
+          <div className="grid gap-3 sm:grid-cols-3 max-w-3xl mx-auto px-4 text-left">
+            <SampleLink
+              href="/samples/counseling-sample.csv"
+              label="Counseling sample"
+              description="Form 641, individual sessions"
+            />
+            <SampleLink
+              href="/samples/training-sample.csv"
+              label="Training sample"
+              description="Form 888, aggregated events"
+            />
+            <SampleLink
+              href="/samples/training-client-sample.csv"
+              label="Training Client sample"
+              description="Form 641, per attendee"
+            />
+          </div>
         </div>
       ) : (
         <>
@@ -130,6 +154,25 @@ export default async function DashboardPage({
         </>
       )}
     </main>
+  );
+}
+
+function SampleLink({
+  href,
+  label,
+  description,
+}: Readonly<{ href: string; label: string; description: string }>) {
+  return (
+    <a
+      href={href}
+      download
+      className="block rounded border border-gray-200 bg-gray-50 p-3 hover:border-blue-400 hover:bg-white"
+    >
+      <p className="text-sm font-medium text-blue-700 underline mb-1">
+        {label}
+      </p>
+      <p className="text-xs text-gray-600">{description}</p>
+    </a>
   );
 }
 

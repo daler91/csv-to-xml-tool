@@ -71,7 +71,7 @@ export default function PreviewPage() {
       </p>
 
       {/* Column Status */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-green-50 border border-green-200 rounded p-3">
           <p className="text-sm font-medium text-green-700">
             Matched: {column_status.matched.length}
@@ -112,14 +112,14 @@ export default function PreviewPage() {
       {/* Data Table */}
       <div className="bg-white border rounded overflow-x-auto mb-6">
         <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b bg-gray-50">
-              <th scope="col" className="px-3 py-2 text-left font-medium text-gray-500">#</th>
+          <thead className="sticky top-0 bg-gray-50">
+            <tr className="border-b">
+              <th scope="col" className="px-3 py-2 text-left font-medium text-gray-500 bg-gray-50">#</th>
               {preview.headers.map((h) => (
                 <th
                   key={h}
                   scope="col"
-                  className="px-3 py-2 text-left font-medium whitespace-nowrap"
+                  className="px-3 py-2 text-left font-medium whitespace-nowrap bg-gray-50"
                 >
                   {h}
                 </th>

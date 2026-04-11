@@ -123,7 +123,7 @@ Each finding uses this template:
 
 ## 1. Information Architecture & Navigation
 
-### 1.1 Nav bar does not collapse on mobile **[P1]**
+### 1.1 Nav bar does not collapse on mobile **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/components/nav.tsx:19-54`
 
@@ -321,7 +321,7 @@ against their source data.
 
 ---
 
-### 3.2 Re-upload page hardcodes two converter types **[P0 — bug]**
+### 3.2 Re-upload page hardcodes two converter types **[P0 — bug]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/reupload/page.tsx:81-86`
 
@@ -461,7 +461,7 @@ only option, and the worker keeps running.
 
 ---
 
-### 3.7 Results page summary uses 4-column grid that breaks on mobile **[P1]**
+### 3.7 Results page summary uses 4-column grid that breaks on mobile **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/results/page.tsx:124-140`
 
@@ -592,7 +592,7 @@ Apply the same pattern to `mapping/page.tsx` and the top-level catch in
 
 ---
 
-### 4.3 Mapping save failure is swallowed **[P1]**
+### 4.3 Mapping save failure is swallowed **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/mapping/page.tsx:47-62`
 
@@ -726,7 +726,7 @@ table with 5 empty rows. Tailwind `animate-pulse` on placeholder
 
 ---
 
-### 5.4 Real-time counters don't announce changes **[P1 a11y]**
+### 5.4 Real-time counters don't announce changes **[P1 a11y]** **[RESOLVED]**
 
 **Where:** `progress/page.tsx:94-108`
 
@@ -748,7 +748,7 @@ The app scores low against WCAG 2.1 AA. The issues below are the ones
 visible from code inspection; a Lighthouse run and a screen-reader pass
 are both recommended as a follow-up.
 
-### 6.1 Progress bar lacks ARIA role and values **[P0]**
+### 6.1 Progress bar lacks ARIA role and values **[P0]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/progress/page.tsx:85-92`
 
@@ -776,7 +776,7 @@ alternative. WCAG 4.1.2 (Name, Role, Value) violation.
 
 ---
 
-### 6.2 Error alerts lack `role="alert"` / `aria-live` **[P0]**
+### 6.2 Error alerts lack `role="alert"` / `aria-live` **[P0]** **[RESOLVED]**
 
 **Where:** `convert/page.tsx:67-71`, `login/page.tsx:42-46`,
 `signup/page.tsx:60-64`, `reupload/page.tsx:70-74`, `preview/page.tsx:53-58`
@@ -820,7 +820,7 @@ the contrast of the two cells is not the only signal.
 
 ---
 
-### 6.4 No visible focus-visible styles on interactive elements **[P1]**
+### 6.4 No visible focus-visible styles on interactive elements **[P1]** **[RESOLVED]**
 
 **Where:** All inputs and buttons across the app. `globals.css:1` is a
 single `@import "tailwindcss";` line with no custom focus styles, and
@@ -866,7 +866,7 @@ Enter/Space). Add `aria-label="Upload CSV file"` and
 
 ---
 
-### 6.6 Table headers are plain `<th>` without scope **[P3]**
+### 6.6 Table headers are plain `<th>` without scope **[P3]** **[RESOLVED]**
 
 **Where:** All tables — `dashboard/page.tsx`, `audit/page.tsx`,
 `preview/page.tsx`, `mapping/page.tsx`, `results/page.tsx`.
@@ -894,7 +894,7 @@ the hook screen readers use to switch voices. No action needed yet.
 
 ## 7. Responsive & Mobile Experience
 
-### 7.1 Fixed `grid-cols-4` summary cards on results page **[P1]**
+### 7.1 Fixed `grid-cols-4` summary cards on results page **[P1]** **[RESOLVED]**
 
 **Where:** `results/page.tsx:126` — `grid grid-cols-4 gap-4 mb-6`
 
@@ -902,7 +902,7 @@ Noted in 3.7. Needs `grid-cols-2 md:grid-cols-4`.
 
 ---
 
-### 7.2 Fixed `grid-cols-3` comparison cards **[P1]**
+### 7.2 Fixed `grid-cols-3` comparison cards **[P1]** **[RESOLVED]**
 
 **Where:** `results/page.tsx:144` — re-upload comparison grid
 
@@ -910,7 +910,7 @@ Same fix pattern: `grid-cols-1 sm:grid-cols-3`.
 
 ---
 
-### 7.3 Fixed `grid-cols-3` column-status cards on preview **[P1]**
+### 7.3 Fixed `grid-cols-3` column-status cards on preview **[P1]** **[RESOLVED]**
 
 **Where:** `preview/page.tsx:72` — Matched / Missing / Extra cards
 
@@ -918,7 +918,7 @@ Same fix: `grid-cols-1 sm:grid-cols-3`.
 
 ---
 
-### 7.4 Dashboard table shatters on mobile **[P1]**
+### 7.4 Dashboard table shatters on mobile **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/dashboard/page.tsx:53-102`
 
@@ -938,7 +938,7 @@ the smallest screens.
 
 ---
 
-### 7.5 Audit table shatters on mobile **[P1]**
+### 7.5 Audit table shatters on mobile **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/audit/page.tsx:72-123`
 
@@ -954,7 +954,7 @@ hiding Details on small screens.
 
 ---
 
-### 7.6 Mapping page two-column layout wraps badly **[P2]**
+### 7.6 Mapping page two-column layout wraps badly **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/mapping/page.tsx:127-221`
 
@@ -971,7 +971,7 @@ suggestion pill vertically. Use `flex-col sm:flex-row` on the
 
 ---
 
-### 7.7 Data preview table has no column sticky header **[P2]**
+### 7.7 Data preview table has no column sticky header **[P2]** **[RESOLVED]**
 
 **Where:** `preview/page.tsx:111-136`
 
@@ -1052,7 +1052,7 @@ scale.
 
 ---
 
-### 8.4 Gray-400 / gray-500 text fails contrast on white **[P2]**
+### 8.4 Gray-400 / gray-500 text fails contrast on white **[P2]** **[RESOLVED]**
 
 **Where:** Multiple — e.g. `convert/page.tsx:145` ("`.csv` files only,
 max 50MB" in `text-gray-400`), `dashboard/page.tsx:86`

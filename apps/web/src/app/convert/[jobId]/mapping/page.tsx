@@ -192,7 +192,7 @@ export default function MappingPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <select
                         className="flex-1 border rounded px-2 py-1 text-sm"
                         value={currentCsvCol}

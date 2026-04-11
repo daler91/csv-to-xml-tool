@@ -145,7 +145,7 @@ function ConvertForm() {
                 <p className="text-gray-500">
                   Drag & drop a CSV file here, or click to browse
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   .csv files only, max 50MB
                 </p>
               </div>

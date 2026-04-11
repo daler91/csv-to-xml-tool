@@ -123,7 +123,7 @@ export default async function ResultsPage({
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <SummaryCard label="Total Records" value={summary.total} />
           <SummaryCard
             label="Successful"
@@ -141,7 +141,7 @@ export default async function ResultsPage({
 
       {/* Comparison Summary */}
       {comparison && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-green-50 border border-green-200 rounded p-4">
             <p className="text-sm text-green-700">Resolved</p>
             <p className="text-2xl font-bold text-green-600">

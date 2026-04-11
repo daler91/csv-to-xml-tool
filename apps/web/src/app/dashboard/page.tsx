@@ -50,7 +50,7 @@ export default async function DashboardPage({
         </div>
       ) : (
         <>
-          <div className="bg-white rounded border">
+          <div className="bg-white rounded border overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">

@@ -69,7 +69,7 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <div className="bg-white border rounded">
+      <div className="bg-white border rounded overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-gray-50">

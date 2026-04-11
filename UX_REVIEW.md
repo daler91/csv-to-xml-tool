@@ -400,7 +400,14 @@ tooltip or collapsible section.
 
 ---
 
-### 3.5 Mapping page exposes raw XML field names with no descriptions **[P1]**
+### 3.5 Mapping page exposes raw XML field names with no descriptions **[P1]** **[RESOLVED]**
+
+_Descriptions shipped for all required and conditional fields across
+the three converters (32 counseling fields, 1 training, 10 training
+client). Optional fields without descriptions fall back to showing
+just the field name. Additional optional descriptions can be added
+over time to `apps/worker/app/services/preview_service.py`._
+
 
 **Where:** `apps/web/src/app/convert/[jobId]/mapping/page.tsx:127-221`
 

@@ -149,7 +149,8 @@ export default function MappingPage() {
     );
   }
 
-  const { matched, missing, suggestions, field_requirements } = preview.column_status;
+  const { matched, missing, suggestions, field_requirements, field_descriptions } =
+    preview.column_status;
   const allFields = [...matched, ...missing];
 
   // Build lookup: expected field name -> { csv_column, score }
@@ -183,9 +184,14 @@ export default function MappingPage() {
   return (
     <main className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-2">Column Mapping</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Map your CSV columns to the expected field names. Only map columns that
-        need renaming.
+      <p className="text-sm text-gray-600 mb-1">
+        Map your CSV columns to the expected XML field names. Only map
+        columns that need renaming — auto-matched columns stay put.
+      </p>
+      <p className="text-xs text-gray-500 mb-6">
+        Required fields must be mapped or present in your CSV. Conditional
+        fields are only needed when their rule triggers — hover the badge
+        or read the rule below each field.
       </p>
 
       {suggestions.length > 0 && (
@@ -232,10 +238,12 @@ export default function MappingPage() {
               const suggestion = suggestionByField[field];
               const isApplied = suggestion && currentCsvCol === suggestion.csv_column;
               const req = field_requirements?.[field];
+              const meta = field_descriptions?.[field];
+              const conditionalTitle = meta?.conditional_rule;
 
               return (
                 <tr key={field} className={`border-b ${isMatched ? "bg-green-50/30" : ""}`}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 align-top">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs">{field}</span>
                       {req === "required" && (
@@ -244,7 +252,10 @@ export default function MappingPage() {
                         </span>
                       )}
                       {req === "conditional" && (
-                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                        <span
+                          title={conditionalTitle}
+                          className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 cursor-help"
+                        >
                           Conditional
                         </span>
                       )}
@@ -259,6 +270,17 @@ export default function MappingPage() {
                         </span>
                       )}
                     </div>
+                    {meta?.description && (
+                      <p className="mt-1 text-xs text-gray-600 leading-snug">
+                        {meta.description}
+                      </p>
+                    )}
+                    {req === "conditional" && meta?.conditional_rule && (
+                      <p className="mt-1 text-xs text-amber-700 leading-snug">
+                        <span className="font-medium">When required:</span>{" "}
+                        {meta.conditional_rule}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2">

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Spinner } from "@/components/spinner";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 const POLL_FAILURE_THRESHOLD = 3;
 
@@ -162,30 +163,27 @@ export default function ProgressPage() {
 
       {/* Poll-failure banner (§4.5): show after consecutive failures */}
       {showPollFailureBanner && (
-        <div
-          role="status"
-          className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded p-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-        >
-          <span>
-            We&apos;re having trouble checking the conversion status. Your
-            file may still be processing in the background.
-          </span>
-          <div className="flex gap-2 flex-shrink-0">
-            <button
-              type="button"
-              onClick={retryPolling}
-              className="px-3 py-1 bg-yellow-600 text-white rounded text-xs font-medium hover:bg-yellow-700"
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="px-3 py-1 border border-yellow-300 text-yellow-800 rounded text-xs font-medium hover:bg-yellow-100"
-            >
-              Go to dashboard
-            </button>
-          </div>
+        <div className="mb-6">
+          <Alert variant="warning">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <span>
+                We&apos;re having trouble checking the conversion status.
+                Your file may still be processing in the background.
+              </span>
+              <div className="flex gap-2 flex-shrink-0">
+                <Button size="sm" onClick={retryPolling}>
+                  Retry
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => router.push("/dashboard")}
+                >
+                  Go to dashboard
+                </Button>
+              </div>
+            </div>
+          </Alert>
         </div>
       )}
 
@@ -229,44 +227,33 @@ export default function ProgressPage() {
       </div>
 
       {cancelError && (
-        <div
-          role="alert"
-          className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4"
-        >
-          {cancelError}
+        <div className="mb-4">
+          <Alert variant="error">{cancelError}</Alert>
         </div>
       )}
 
       {/* Action buttons */}
       <div className="flex justify-center gap-3">
         {isConverting && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={handleCancel}
-            disabled={cancelling}
-            aria-busy={cancelling}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            isLoading={cancelling}
           >
-            {cancelling && <Spinner />}
             {cancelling ? "Cancelling…" : "Cancel conversion"}
-          </button>
+          </Button>
         )}
         {isTimedOut && (
           <>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-            >
+            <Button onClick={() => window.location.reload()}>
               Check status again
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => router.push("/dashboard")}
-              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50"
             >
               Go to dashboard
-            </button>
+            </Button>
           </>
         )}
       </div>

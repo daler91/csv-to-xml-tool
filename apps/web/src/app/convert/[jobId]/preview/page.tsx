@@ -5,9 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
-import { Spinner } from "@/components/spinner";
 import { Skeleton, SkeletonTable } from "@/components/skeleton";
 import { StatusIcon } from "@/components/status-icon";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 export default function PreviewPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -81,32 +82,18 @@ export default function PreviewPage() {
   if (loadError || !preview) {
     return (
       <main className="max-w-2xl mx-auto px-4 py-16">
-        <div
-          role="alert"
-          className="bg-red-50 border border-red-200 rounded-lg p-6"
-        >
-          <h1 className="text-xl font-semibold text-red-900 mb-2">
-            Couldn&apos;t load preview
-          </h1>
-          <p className="text-sm text-red-800 mb-4">
-            {loadError || "Failed to load preview"}
-          </p>
+        <Alert variant="error" title="Couldn't load preview">
+          <p className="mb-4">{loadError || "Failed to load preview"}</p>
           <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              onClick={loadPreview}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-            >
-              Try again
-            </button>
+            <Button onClick={loadPreview}>Try again</Button>
             <Link
               href="/convert"
-              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 text-center"
+              className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 text-center"
             >
               Back to upload
             </Link>
           </div>
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -218,15 +205,9 @@ export default function PreviewPage() {
             Map Columns
           </Link>
         )}
-        <button
-          onClick={handleConvert}
-          disabled={converting}
-          aria-busy={converting}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
-          {converting && <Spinner />}
+        <Button onClick={handleConvert} isLoading={converting}>
           {converting ? "Converting..." : "Confirm & Convert"}
-        </button>
+        </Button>
         <Link
           href="/convert"
           className="px-4 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"

@@ -1017,7 +1017,15 @@ Already filed as 1.1.
 
 ## 8. Visual Design & Consistency
 
-### 8.1 No design tokens; utility classes repeat everywhere **[P2]**
+### 8.1 No design tokens; utility classes repeat everywhere **[P2]** **[PARTIALLY RESOLVED]**
+
+_Extracted `components/ui/{button,alert,card,status-badge}.tsx` and
+refactored login, signup, convert, preview, mapping, reupload,
+progress, dashboard, and error-boundary to consume them. Some
+utility-class repetition still exists in less common sites (dense
+tables, bespoke landing-page layouts). A lint rule to prevent
+regression is deferred._
+
 
 **Where:** Every page uses raw Tailwind utility strings. For example,
 the primary button pattern
@@ -1041,7 +1049,7 @@ of the current utility-class duplication.
 
 ---
 
-### 8.2 `StatusBadge` color map duplicated in dashboard only **[P3]**
+### 8.2 `StatusBadge` color map duplicated in dashboard only **[P3]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/dashboard/page.tsx:141-160`
 
@@ -1093,7 +1101,7 @@ adjust the gray scale accordingly.
 
 ---
 
-### 8.5 Inconsistent alert styling across pages **[P3]**
+### 8.5 Inconsistent alert styling across pages **[P3]** **[RESOLVED]**
 
 **Where:**
 - `convert/page.tsx:67-71` → `bg-red-50 text-red-600 p-3 rounded text-sm`

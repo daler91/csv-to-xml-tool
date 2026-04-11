@@ -2,6 +2,7 @@
 
 import { Component } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   children: React.ReactNode;
@@ -70,17 +71,11 @@ export class ErrorBoundary extends Component<Props, State> {
             the dashboard.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center mb-6">
-            <button
-              type="button"
-              onClick={this.reset}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-            >
-              Try again
-            </button>
+            <Button onClick={this.reset}>Try again</Button>
             <Link
               href="/dashboard"
               onClick={this.reset}
-              className="px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50"
+              className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50"
             >
               Go to dashboard
             </Link>

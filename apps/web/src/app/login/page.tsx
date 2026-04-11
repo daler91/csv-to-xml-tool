@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/toast";
-import { Spinner } from "@/components/spinner";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,14 +44,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div
-              role="alert"
-              className="bg-red-50 text-red-600 p-3 rounded text-sm"
-            >
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="error">{error}</Alert>}
 
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-1">
@@ -78,15 +72,9 @@ export default function LoginPage() {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            aria-busy={loading}
-            className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading && <Spinner />}
+          <Button type="submit" isLoading={loading} fullWidth>
             {loading ? "Signing in..." : "Sign In"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-gray-500">

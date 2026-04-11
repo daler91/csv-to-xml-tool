@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { converterTypeLabel } from "@/lib/converter-types";
 import { useToast } from "@/components/toast";
 import { uploadErrorMessage } from "@/lib/upload-errors";
-import { Spinner } from "@/components/spinner";
 import { Skeleton } from "@/components/skeleton";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -89,11 +90,8 @@ export default function ReuploadPage() {
       </p>
 
       {error && (
-        <div
-          role="alert"
-          className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4"
-        >
-          {error}
+        <div className="mb-4">
+          <Alert variant="error">{error}</Alert>
         </div>
       )}
 
@@ -121,22 +119,20 @@ export default function ReuploadPage() {
         </div>
 
         <div className="flex gap-2">
-          <button
+          <Button
             type="submit"
-            disabled={!file || uploading}
-            aria-busy={uploading}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            disabled={!file}
+            isLoading={uploading}
           >
-            {uploading && <Spinner />}
             {uploading ? "Uploading..." : "Upload & Compare"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => router.push(`/convert/${jobId}/results`)}
-            className="px-4 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </main>

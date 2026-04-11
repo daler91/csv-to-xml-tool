@@ -4,9 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/toast";
 import { uploadErrorMessage } from "@/lib/upload-errors";
-import { Spinner } from "@/components/spinner";
 import { Skeleton } from "@/components/skeleton";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, mirrors /api/upload
 
@@ -97,14 +98,7 @@ function ConvertForm() {
       <h1 className="text-2xl font-bold mb-6">New Conversion</h1>
 
       <form onSubmit={handleUpload} className="space-y-6">
-        {error && (
-          <div
-            role="alert"
-            className="bg-red-50 text-red-600 p-3 rounded text-sm"
-          >
-            {error}
-          </div>
-        )}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <fieldset>
           <legend className="block text-sm font-medium mb-2">
@@ -201,15 +195,14 @@ function ConvertForm() {
           </label>
         </div>
 
-        <button
+        <Button
           type="submit"
-          disabled={!file || uploading}
-          aria-busy={uploading}
-          className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          disabled={!file}
+          isLoading={uploading}
+          fullWidth
         >
-          {uploading && <Spinner />}
           {uploading ? "Uploading..." : "Upload & Preview"}
-        </button>
+        </Button>
 
         <p className="text-xs text-gray-600 leading-relaxed">
           Your CSV is stored in your account and is visible only to you.

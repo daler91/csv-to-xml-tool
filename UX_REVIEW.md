@@ -290,7 +290,7 @@ to discover them.
 
 ## 3. Conversion Flow
 
-### 3.1 Converter types overlap and aren't explained **[P1]**
+### 3.1 Converter types overlap and aren't explained **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/page.tsx:78-107`
 
@@ -1163,7 +1163,12 @@ to 8.4.
 
 ---
 
-### 9.4 Converter-type labels don't match what users know **[P2]**
+### 9.4 Converter-type labels don't match what users know **[P2]** **[RESOLVED]**
+
+_Sharing a single module (`apps/web/src/lib/converter-types.ts`)
+means any future rename lands in one place. Labels themselves are
+unchanged — a product decision on canonical names is still pending._
+
 
 **Where:** `apps/web/src/app/convert/page.tsx:86,96,106`
 

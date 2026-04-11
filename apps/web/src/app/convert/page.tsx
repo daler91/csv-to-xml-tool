@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast";
 import { uploadErrorMessage } from "@/lib/upload-errors";
 import { Spinner } from "@/components/spinner";
 import { Skeleton } from "@/components/skeleton";
+import { CONVERTER_TYPES } from "@/lib/converter-types";
 
 function ConvertForm() {
   const router = useRouter();
@@ -85,37 +86,54 @@ function ConvertForm() {
           <legend className="block text-sm font-medium mb-2">
             Converter Type
           </legend>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="type"
-                value="counseling"
-                checked={converterType === "counseling"}
-                onChange={(e) => setConverterType(e.target.value)}
-              />
-              <span className="text-sm">Counseling (Form 641)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="type"
-                value="training"
-                checked={converterType === "training"}
-                onChange={(e) => setConverterType(e.target.value)}
-              />
-              <span className="text-sm">Training (Form 888)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="type"
-                value="training-client"
-                checked={converterType === "training-client"}
-                onChange={(e) => setConverterType(e.target.value)}
-              />
-              <span className="text-sm">Training Client (Form 641)</span>
-            </label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {CONVERTER_TYPES.map(({ value, label, description, sample }) => {
+              const isSelected = converterType === value;
+              return (
+                <label
+                  key={value}
+                  className={`cursor-pointer rounded-lg border p-3 flex items-start gap-3 transition-colors ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="type"
+                    value={value}
+                    checked={isSelected}
+                    onChange={(e) => setConverterType(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      isSelected
+                        ? "border-blue-600 bg-blue-600"
+                        : "border-gray-400 bg-white"
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="block w-1.5 h-1.5 rounded-full bg-white" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-snug">{label}</p>
+                    <p className="text-xs text-gray-600 mt-1 leading-snug">
+                      {description}
+                    </p>
+                    <a
+                      href={sample}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-block mt-2 text-xs text-blue-700 underline"
+                    >
+                      See sample
+                    </a>
+                  </div>
+                </label>
+              );
+            })}
           </div>
         </fieldset>
 

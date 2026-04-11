@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { PreviewResponse } from "@/types";
+import { useToast } from "@/components/toast";
 
 export default function MappingPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
+  const toast = useToast();
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -61,6 +63,7 @@ export default function MappingPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to save mapping");
       }
+      toast.success("Mapping saved");
       router.push(`/convert/${jobId}/preview`);
     } catch (err) {
       setError(

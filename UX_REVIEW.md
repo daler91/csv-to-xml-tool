@@ -513,7 +513,7 @@ Even a collapsible `<details>` under each card would be a big win.
 
 ---
 
-### 3.9 No success confirmation anywhere in the flow **[P1]**
+### 3.9 No success confirmation anywhere in the flow **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/page.tsx:54` (redirect after
 upload); `apps/web/src/app/convert/[jobId]/mapping/page.tsx:58`
@@ -674,7 +674,7 @@ safety net.
 
 ## 5. Feedback & System Status
 
-### 5.1 No toast or notification system **[P1]**
+### 5.1 No toast or notification system **[P1]** **[RESOLVED]**
 
 Already noted in 3.9. Cross-references: every successful form submission
 (`login/page.tsx:29`, `signup/page.tsx:47`, `convert/page.tsx:54`,

@@ -4,9 +4,11 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { useToast } from "@/components/toast";
 
 export default function SignupPage() {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -44,6 +46,7 @@ export default function SignupPage() {
       setError("Account created but sign-in failed. Please log in.");
       setLoading(false);
     } else {
+      toast.success("Account created");
       router.push("/dashboard");
     }
   }

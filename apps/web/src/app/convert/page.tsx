@@ -2,10 +2,12 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 function ConvertForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   const previousJobId = searchParams.get("previousJobId");
 
   const [converterType, setConverterType] = useState("counseling");
@@ -51,6 +53,7 @@ function ConvertForm() {
       }
 
       const { jobId } = await res.json();
+      toast.success("File uploaded — loading preview");
       router.push(`/convert/${jobId}/preview`);
     } catch {
       setError("Upload failed. Please try again.");

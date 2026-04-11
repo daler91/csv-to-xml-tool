@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { converterTypeLabel } from "@/lib/converter-types";
+import { useToast } from "@/components/toast";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
+  const toast = useToast();
 
   const [converterType, setConverterType] = useState("");
   const [fileName, setFileName] = useState("");
@@ -45,6 +47,7 @@ export default function ReuploadPage() {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
+      toast.success("Re-upload received — loading preview");
       router.push(`/convert/${data.jobId}/preview`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");

@@ -430,7 +430,12 @@ doesn't know whether to map it or not.
 
 ---
 
-### 3.6 Progress page has no cancel, no ETA, and a dead-end timeout **[P1]**
+### 3.6 Progress page has no cancel, no ETA, and a dead-end timeout **[P1]** **[PARTIALLY RESOLVED]**
+
+_Cancel button and dead-end timeout recovery shipped (see
+`UX_IMPLEMENTATION_PLAN.md` Phase 3 notes). ETA estimate and
+poll-failure banner still pending._
+
 
 **Where:** `apps/web/src/app/convert/[jobId]/progress/page.tsx:69-108`
 

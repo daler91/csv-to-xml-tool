@@ -43,6 +43,13 @@ export default async function ResultsPage({
     redirect(`/convert/${jobId}/progress`);
   }
 
+  // Cancelled jobs have no results to show. Send the user back to the
+  // dashboard where the cancelled status badge makes it obvious what
+  // happened.
+  if (job.status === "cancelled") {
+    redirect("/dashboard");
+  }
+
   const summary = job.summary as unknown as Record<string, number> | null;
   const issues = (job.issues as unknown as ValidationIssue[]) || [];
   const xsdErrors = (job.xsdErrors as unknown as string[]) || [];

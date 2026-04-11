@@ -62,8 +62,12 @@ export async function POST(
           await writeFile(outputFilePath, result.xml_content, "utf-8");
         }
 
-        await prisma.job.update({
-          where: { id: jobId },
+        // Conditional update: only write "complete" if the job is still
+        // converting. If the user cancelled between the worker finishing
+        // and this update firing, updateMany returns count=0 and we
+        // discard the result — the file on disk is orphaned but harmless.
+        const updated = await prisma.job.updateMany({
+          where: { id: jobId, status: "converting" },
           data: {
             status: "complete",
             outputFilePath,
@@ -77,6 +81,12 @@ export async function POST(
           },
         });
 
+        if (updated.count === 0) {
+          // Job was cancelled (or otherwise terminal) before we could
+          // write the result. Don't create a completion audit entry.
+          return;
+        }
+
         await prisma.auditEntry.create({
           data: {
             userId: user.id,
@@ -87,10 +97,17 @@ export async function POST(
         });
       })
       .catch(async (workerError) => {
-        await prisma.job.update({
-          where: { id: jobId },
+        // If the failure is because the worker honoured a cancel request
+        // or the user cancelled out-of-band, leave the job in its
+        // "cancelled" state — only transition converting → error here.
+        const updated = await prisma.job.updateMany({
+          where: { id: jobId, status: "converting" },
           data: { status: "error" },
         });
+
+        if (updated.count === 0) {
+          return;
+        }
 
         await prisma.auditEntry.create({
           data: {

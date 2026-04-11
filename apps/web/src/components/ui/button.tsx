@@ -27,7 +27,7 @@ import { forwardRef } from "react";
 import { Spinner } from "@/components/spinner";
 
 type ButtonVariant = "primary" | "secondary" | "destructive";
-type ButtonSize = "sm" | "md";
+type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
@@ -50,7 +50,36 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 const SIZE_CLASSES: Record<ButtonSize, string> = {
   sm: "px-3 py-1.5 text-xs",
   md: "px-4 py-2 text-sm",
+  lg: "px-6 py-3 text-base",
 };
+
+/**
+ * Class-string builder for <Link>-as-button sites.
+ *
+ * Next.js <Link> renders an <a>, not a <button>, so it can't just
+ * accept our <Button> component. This helper lets Link sites
+ * share the same variant/size source of truth as Button without
+ * hand-rolling utility classes — the regression guard in
+ * scripts/check-ui-classes.mjs only exempts components/ui/, so any
+ * page that hand-rolls these classes still fails the check.
+ */
+export function buttonClasses(
+  opts: {
+    variant?: ButtonVariant;
+    size?: ButtonSize;
+    fullWidth?: boolean;
+  } = {}
+): string {
+  const { variant = "primary", size = "md", fullWidth = false } = opts;
+  return [
+    "inline-flex items-center justify-center gap-2 rounded font-medium transition-colors",
+    VARIANT_CLASSES[variant],
+    SIZE_CLASSES[size],
+    fullWidth ? "w-full" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(

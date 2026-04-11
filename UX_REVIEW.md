@@ -1017,14 +1017,17 @@ Already filed as 1.1.
 
 ## 8. Visual Design & Consistency
 
-### 8.1 No design tokens; utility classes repeat everywhere **[P2]** **[PARTIALLY RESOLVED]**
+### 8.1 No design tokens; utility classes repeat everywhere **[P2]** **[RESOLVED]**
 
 _Extracted `components/ui/{button,alert,card,status-badge}.tsx` and
 refactored login, signup, convert, preview, mapping, reupload,
-progress, dashboard, and error-boundary to consume them. Some
-utility-class repetition still exists in less common sites (dense
-tables, bespoke landing-page layouts). A lint rule to prevent
-regression is deferred._
+progress, dashboard, and error-boundary to consume them. A
+`buttonClasses()` helper is exported for `<Link>`-as-button sites.
+Regression guard ships as `apps/web/scripts/check-ui-classes.mjs`
+and runs from `npm run lint` alongside tsc — any raw primary button
+or error alert utility-class combo added outside
+`components/ui/` (plus a short allowlist of intentional sites) fails
+the build._
 
 
 **Where:** Every page uses raw Tailwind utility strings. For example,

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { StatusIcon } from "@/components/status-icon";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { buttonClasses } from "@/components/ui/button";
 
 const PAGE_SIZE = 20;
 
@@ -35,10 +36,7 @@ export default async function DashboardPage({
     <main className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Link
-          href="/convert"
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-        >
+        <Link href="/convert" className={buttonClasses()}>
           New Conversion
         </Link>
       </div>
@@ -52,7 +50,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/convert"
-            className="inline-block px-5 py-2.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 mb-8"
+            className={`${buttonClasses()} mb-8`}
           >
             Start a new conversion
           </Link>

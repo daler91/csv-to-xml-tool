@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
+import { buttonClasses } from "@/components/ui/button";
 
 /**
  * Homepage for unauthenticated users.
@@ -25,15 +26,12 @@ export default function Home() {
           XSD-compliant XML ready for SBA submission.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/login"
-            className="px-6 py-3 bg-blue-600 text-white rounded text-base font-medium hover:bg-blue-700"
-          >
+          <Link href="/login" className={buttonClasses({ size: "lg" })}>
             Sign In
           </Link>
           <Link
             href="/signup"
-            className="px-6 py-3 border border-gray-300 rounded text-base font-medium hover:bg-gray-50"
+            className={buttonClasses({ variant: "secondary", size: "lg" })}
           >
             Create Account
           </Link>

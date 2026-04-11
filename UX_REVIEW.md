@@ -1045,7 +1045,7 @@ be useful).
 
 ---
 
-### 8.3 Homepage typography is unbalanced **[P3]**
+### 8.3 Homepage typography is unbalanced **[P3]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/page.tsx:6-25`
 

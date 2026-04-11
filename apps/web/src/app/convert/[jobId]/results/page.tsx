@@ -21,18 +21,38 @@ interface CleaningDiffEntry {
   cleaning_type: string;
 }
 
+type ComparisonView = "resolved" | "new" | "persistent";
+
+const COMPARISON_VIEWS: readonly ComparisonView[] = [
+  "resolved",
+  "new",
+  "persistent",
+] as const;
+
+function isComparisonView(v: string | undefined): v is ComparisonView {
+  return (COMPARISON_VIEWS as readonly string[]).includes(v ?? "");
+}
+
 export default async function ResultsPage({
   params,
   searchParams,
 }: Readonly<{
   params: Promise<{ jobId: string }>;
-  searchParams: Promise<{ tab?: string; filter?: string; showAll?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    filter?: string;
+    showAll?: string;
+    compare?: string;
+  }>;
 }>) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
   const { jobId } = await params;
-  const { tab, filter, showAll } = await searchParams;
+  const { tab, filter, showAll, compare } = await searchParams;
+  const compareView: ComparisonView = isComparisonView(compare)
+    ? compare
+    : "new";
 
   const job = await prisma.job.findFirst({
     where: { id: jobId, userId: session.user.id },
@@ -154,28 +174,14 @@ export default async function ResultsPage({
         </div>
       )}
 
-      {/* Comparison Summary */}
+      {/* Comparison drilldown */}
       {comparison && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-green-50 border border-green-200 rounded p-4">
-            <p className="text-sm text-green-700">Resolved</p>
-            <p className="text-2xl font-bold text-green-600">
-              {comparison.resolved.length}
-            </p>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded p-4">
-            <p className="text-sm text-red-700">New Issues</p>
-            <p className="text-2xl font-bold text-red-600">
-              {comparison.newIssues.length}
-            </p>
-          </div>
-          <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
-            <p className="text-sm text-yellow-700">Persistent</p>
-            <p className="text-2xl font-bold text-yellow-600">
-              {comparison.persistent.length}
-            </p>
-          </div>
-        </div>
+        <ComparisonDrilldown
+          comparison={comparison}
+          active={compareView}
+          jobId={jobId}
+          showAll={showAll === "true"}
+        />
       )}
 
       {/* XSD Validation */}
@@ -266,6 +272,113 @@ function computeComparison(
     newIssues: currIssues.filter((i) => !prevSet.has(key(i))),
     persistent: currIssues.filter((i) => prevSet.has(key(i))),
   };
+}
+
+function ComparisonDrilldown({
+  comparison,
+  active,
+  jobId,
+  showAll,
+}: Readonly<{
+  comparison: {
+    resolved: ValidationIssue[];
+    newIssues: ValidationIssue[];
+    persistent: ValidationIssue[];
+  };
+  active: ComparisonView;
+  jobId: string;
+  showAll: boolean;
+}>) {
+  const tabs: ReadonlyArray<{
+    view: ComparisonView;
+    label: string;
+    count: number;
+    kind: StatusKind;
+    color: string;
+    emptyMessage: string;
+  }> = [
+    {
+      view: "resolved",
+      label: "Resolved",
+      count: comparison.resolved.length,
+      kind: "success",
+      color: "text-green-700",
+      emptyMessage: "No issues were resolved by this re-upload.",
+    },
+    {
+      view: "new",
+      label: "New",
+      count: comparison.newIssues.length,
+      kind: "error",
+      color: "text-red-700",
+      emptyMessage: "No new issues were introduced — nice.",
+    },
+    {
+      view: "persistent",
+      label: "Persistent",
+      count: comparison.persistent.length,
+      kind: "warning",
+      color: "text-yellow-700",
+      emptyMessage: "No issues carried over from the previous upload.",
+    },
+  ];
+
+  const activeIssues =
+    active === "resolved"
+      ? comparison.resolved
+      : active === "new"
+        ? comparison.newIssues
+        : comparison.persistent;
+
+  return (
+    <section aria-labelledby="compare-heading" className="mb-6">
+      <h2 id="compare-heading" className="sr-only">
+        Re-upload comparison
+      </h2>
+      <div
+        role="tablist"
+        aria-label="Re-upload comparison"
+        className="flex flex-col sm:flex-row gap-2 mb-4"
+      >
+        {tabs.map(({ view, label, count, kind, color }) => {
+          const isActive = active === view;
+          return (
+            <Link
+              key={view}
+              href={`/convert/${jobId}/results?compare=${view}`}
+              role="tab"
+              aria-selected={isActive}
+              className={`flex-1 rounded border p-4 transition-colors ${
+                isActive
+                  ? "border-blue-500 bg-white"
+                  : "border-gray-200 bg-gray-50 hover:bg-white"
+              }`}
+            >
+              <p
+                className={`text-sm font-medium inline-flex items-center gap-1.5 ${color}`}
+              >
+                <StatusIcon kind={kind} />
+                {label}
+              </p>
+              <p className={`text-2xl font-bold ${color}`}>{count}</p>
+            </Link>
+          );
+        })}
+      </div>
+
+      {activeIssues.length > 0 ? (
+        <IssueTable
+          issues={activeIssues}
+          showAll={showAll}
+          jobId={jobId}
+        />
+      ) : (
+        <p className="text-sm text-gray-600 bg-gray-50 border rounded p-4">
+          {tabs.find((t) => t.view === active)?.emptyMessage}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function SummaryCard({

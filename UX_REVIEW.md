@@ -496,7 +496,7 @@ Apply the same fix to the comparison grid at L143-164 (`grid-cols-3`
 
 ---
 
-### 3.8 Re-upload comparison is counts-only; there is no actual diff **[P1]**
+### 3.8 Re-upload comparison is counts-only; there is no actual diff **[P1]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/results/page.tsx:142-164`,
 `computeComparison` at L234-249
@@ -1133,7 +1133,7 @@ Translate the raw database value in a helper, not by changing schemas.
 
 ---
 
-### 9.2 Audit "Details" column dumps raw JSON **[P2]**
+### 9.2 Audit "Details" column dumps raw JSON **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/audit/page.tsx:115-117`
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { StatusIcon, type StatusKind } from "@/components/status-icon";
 
 interface ValidationIssue {
   record_id: string;
@@ -20,18 +21,38 @@ interface CleaningDiffEntry {
   cleaning_type: string;
 }
 
+type ComparisonView = "resolved" | "new" | "persistent";
+
+const COMPARISON_VIEWS: readonly ComparisonView[] = [
+  "resolved",
+  "new",
+  "persistent",
+] as const;
+
+function isComparisonView(v: string | undefined): v is ComparisonView {
+  return (COMPARISON_VIEWS as readonly string[]).includes(v ?? "");
+}
+
 export default async function ResultsPage({
   params,
   searchParams,
 }: Readonly<{
   params: Promise<{ jobId: string }>;
-  searchParams: Promise<{ tab?: string; filter?: string; showAll?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    filter?: string;
+    showAll?: string;
+    compare?: string;
+  }>;
 }>) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
   const { jobId } = await params;
-  const { tab, filter, showAll } = await searchParams;
+  const { tab, filter, showAll, compare } = await searchParams;
+  const compareView: ComparisonView = isComparisonView(compare)
+    ? compare
+    : "new";
 
   const job = await prisma.job.findFirst({
     where: { id: jobId, userId: session.user.id },
@@ -41,6 +62,13 @@ export default async function ResultsPage({
 
   if (job.status === "converting") {
     redirect(`/convert/${jobId}/progress`);
+  }
+
+  // Cancelled jobs have no results to show. Send the user back to the
+  // dashboard where the cancelled status badge makes it obvious what
+  // happened.
+  if (job.status === "cancelled") {
+    redirect("/dashboard");
   }
 
   const summary = job.summary as unknown as Record<string, number> | null;
@@ -123,63 +151,61 @@ export default async function ResultsPage({
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <SummaryCard label="Total Records" value={summary.total} />
           <SummaryCard
             label="Successful"
             value={summary.successful}
             color="green"
+            kind="success"
           />
-          <SummaryCard label="Errors" value={summary.errors} color="red" />
+          <SummaryCard
+            label="Errors"
+            value={summary.errors}
+            color="red"
+            kind="error"
+          />
           <SummaryCard
             label="Warnings"
             value={summary.warnings}
             color="yellow"
+            kind="warning"
           />
         </div>
       )}
 
-      {/* Comparison Summary */}
+      {/* Comparison drilldown */}
       {comparison && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-green-50 border border-green-200 rounded p-4">
-            <p className="text-sm text-green-700">Resolved</p>
-            <p className="text-2xl font-bold text-green-600">
-              {comparison.resolved.length}
-            </p>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded p-4">
-            <p className="text-sm text-red-700">New Issues</p>
-            <p className="text-2xl font-bold text-red-600">
-              {comparison.newIssues.length}
-            </p>
-          </div>
-          <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
-            <p className="text-sm text-yellow-700">Persistent</p>
-            <p className="text-2xl font-bold text-yellow-600">
-              {comparison.persistent.length}
-            </p>
-          </div>
-        </div>
+        <ComparisonDrilldown
+          comparison={comparison}
+          active={compareView}
+          jobId={jobId}
+          showAll={showAll === "true"}
+        />
       )}
 
       {/* XSD Validation */}
       <div className="bg-white border rounded p-4 mb-6">
         <h2 className="font-semibold mb-2">XSD Validation</h2>
         {job.xsdValid === null && (
-          <p className="text-sm text-gray-500">Not validated</p>
+          <p className="text-sm text-gray-600 inline-flex items-center gap-1.5">
+            <StatusIcon kind="neutral" />
+            Not validated
+          </p>
         )}
         {job.xsdValid === true && (
-          <p className="text-sm text-green-600">
+          <p className="text-sm text-green-700 inline-flex items-center gap-1.5">
+            <StatusIcon kind="success" />
             XML is valid against the XSD schema
           </p>
         )}
         {job.xsdValid === false && (
           <div>
-            <p className="text-sm text-red-600 mb-2">
+            <p className="text-sm text-red-700 inline-flex items-center gap-1.5 mb-2">
+              <StatusIcon kind="error" />
               XML failed XSD validation ({xsdErrors.length} errors)
             </p>
-            <ul className="text-xs text-red-500 space-y-1 max-h-40 overflow-y-auto">
+            <ul className="text-xs text-red-700 space-y-1 max-h-40 overflow-y-auto">
               {xsdErrors.map((err) => (
                 <li key={err} className="font-mono">
                   {err}
@@ -248,24 +274,140 @@ function computeComparison(
   };
 }
 
+function ComparisonDrilldown({
+  comparison,
+  active,
+  jobId,
+  showAll,
+}: Readonly<{
+  comparison: {
+    resolved: ValidationIssue[];
+    newIssues: ValidationIssue[];
+    persistent: ValidationIssue[];
+  };
+  active: ComparisonView;
+  jobId: string;
+  showAll: boolean;
+}>) {
+  const tabs: ReadonlyArray<{
+    view: ComparisonView;
+    label: string;
+    count: number;
+    kind: StatusKind;
+    color: string;
+    emptyMessage: string;
+  }> = [
+    {
+      view: "resolved",
+      label: "Resolved",
+      count: comparison.resolved.length,
+      kind: "success",
+      color: "text-green-700",
+      emptyMessage: "No issues were resolved by this re-upload.",
+    },
+    {
+      view: "new",
+      label: "New",
+      count: comparison.newIssues.length,
+      kind: "error",
+      color: "text-red-700",
+      emptyMessage: "No new issues were introduced — nice.",
+    },
+    {
+      view: "persistent",
+      label: "Persistent",
+      count: comparison.persistent.length,
+      kind: "warning",
+      color: "text-yellow-700",
+      emptyMessage: "No issues carried over from the previous upload.",
+    },
+  ];
+
+  const activeIssues =
+    active === "resolved"
+      ? comparison.resolved
+      : active === "new"
+        ? comparison.newIssues
+        : comparison.persistent;
+
+  return (
+    <section aria-labelledby="compare-heading" className="mb-6">
+      <h2 id="compare-heading" className="sr-only">
+        Re-upload comparison
+      </h2>
+      <div
+        role="tablist"
+        aria-label="Re-upload comparison"
+        className="flex flex-col sm:flex-row gap-2 mb-4"
+      >
+        {tabs.map(({ view, label, count, kind, color }) => {
+          const isActive = active === view;
+          return (
+            <Link
+              key={view}
+              href={`/convert/${jobId}/results?compare=${view}`}
+              role="tab"
+              aria-selected={isActive}
+              className={`flex-1 rounded border p-4 transition-colors ${
+                isActive
+                  ? "border-blue-500 bg-white"
+                  : "border-gray-200 bg-gray-50 hover:bg-white"
+              }`}
+            >
+              <p
+                className={`text-sm font-medium inline-flex items-center gap-1.5 ${color}`}
+              >
+                <StatusIcon kind={kind} />
+                {label}
+              </p>
+              <p className={`text-2xl font-bold ${color}`}>{count}</p>
+            </Link>
+          );
+        })}
+      </div>
+
+      {activeIssues.length > 0 ? (
+        <IssueTable
+          issues={activeIssues}
+          showAll={showAll}
+          jobId={jobId}
+        />
+      ) : (
+        <p className="text-sm text-gray-600 bg-gray-50 border rounded p-4">
+          {tabs.find((t) => t.view === active)?.emptyMessage}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function SummaryCard({
   label,
   value,
   color,
+  kind,
 }: Readonly<{
   label: string;
   value: number;
   color?: string;
+  kind?: StatusKind;
 }>) {
   const colors: Record<string, string> = {
-    green: "text-green-600",
-    red: "text-red-600",
-    yellow: "text-yellow-600",
+    green: "text-green-700",
+    red: "text-red-700",
+    yellow: "text-yellow-700",
   };
 
   return (
     <div className="bg-white border rounded p-4">
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm text-gray-600 flex items-center gap-1.5">
+        {kind && (
+          <span className={color ? colors[color] : ""}>
+            <StatusIcon kind={kind} />
+          </span>
+        )}
+        {label}
+      </p>
       <p className={`text-2xl font-bold ${color ? colors[color] : ""}`}>
         {value}
       </p>
@@ -290,10 +432,10 @@ function IssueTable({
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b bg-gray-50">
-            <th className="text-left px-3 py-2 font-medium">Record</th>
-            <th className="text-left px-3 py-2 font-medium">Category</th>
-            <th className="text-left px-3 py-2 font-medium">Field</th>
-            <th className="text-left px-3 py-2 font-medium">Message</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Record</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Category</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Field</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Message</th>
           </tr>
         </thead>
         <tbody>
@@ -399,12 +541,12 @@ function CleaningDiffView({
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="text-left px-3 py-2 font-medium">Row</th>
-              <th className="text-left px-3 py-2 font-medium">Record ID</th>
-              <th className="text-left px-3 py-2 font-medium">Field</th>
-              <th className="text-left px-3 py-2 font-medium">Original</th>
-              <th className="text-left px-3 py-2 font-medium">Cleaned</th>
-              <th className="text-left px-3 py-2 font-medium">Type</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Row</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Record ID</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Field</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Original</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Cleaned</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Type</th>
             </tr>
           </thead>
           <tbody>
@@ -413,13 +555,17 @@ function CleaningDiffView({
                 <td className="px-3 py-2 font-mono">{d.row}</td>
                 <td className="px-3 py-2 font-mono">{d.record_id}</td>
                 <td className="px-3 py-2">{d.field}</td>
-                <td className="px-3 py-2 bg-red-50 text-red-700">
+                <td className="px-3 py-2 bg-red-50 text-red-800 font-mono">
+                  <span aria-hidden="true" className="mr-1 text-red-600">−</span>
+                  <span className="sr-only">Original value: </span>
                   {d.original}
                 </td>
-                <td className="px-3 py-2 bg-green-50 text-green-700">
+                <td className="px-3 py-2 bg-green-50 text-green-800 font-mono">
+                  <span aria-hidden="true" className="mr-1 text-green-600">+</span>
+                  <span className="sr-only">Cleaned value: </span>
                   {d.cleaned}
                 </td>
-                <td className="px-3 py-2 text-gray-500">{d.cleaning_type}</td>
+                <td className="px-3 py-2 text-gray-600">{d.cleaning_type}</td>
               </tr>
             ))}
           </tbody>

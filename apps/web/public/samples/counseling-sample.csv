@@ -1,0 +1,4 @@
+Contact ID,Last Name,First Name,Email,Mailing State/Province,Race,Ethnicity:,Gender,Disability,Veteran Status,Currently In Business?,Type of Session,Language(s) Used,Date,Name of Counselor,Duration (hours)
+003XX000004TMM1,Doe,Jane,jane.doe@example.com,IA,White,Not Hispanic or Latino,Female,No,No,Yes,Face to Face,English,2025-01-14,Pat Smith,1.5
+003XX000004TMM2,Nguyen,Linh,linh.n@example.com,CA,Asian,Not Hispanic or Latino,Female,No,No,No,Telephone,English,2025-01-15,Pat Smith,0.75
+003XX000004TMM3,Garcia,Luis,luis.g@example.com,TX,White,Hispanic or Latino,Male,No,Veteran,Yes,Video,Spanish,2025-01-16,Maria Lopez,2.0

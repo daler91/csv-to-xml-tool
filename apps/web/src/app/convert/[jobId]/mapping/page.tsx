@@ -1,53 +1,91 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import type { PreviewResponse } from "@/types";
+import { useToast } from "@/components/toast";
+import { Skeleton, SkeletonTable } from "@/components/skeleton";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+
+/**
+ * Stable stringification of the mapping dict, used to detect dirty
+ * state so the Cancel button can confirm before discarding unsaved
+ * edits (UX_REVIEW.md §9.5).
+ */
+function mappingKey(m: Record<string, string>): string {
+  return Object.keys(m)
+    .sort()
+    .map((k) => `${k}=${m[k]}`)
+    .join("|");
+}
 
 export default function MappingPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
+  const toast = useToast();
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [initialMappingKey, setInitialMappingKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [previewRes, jobRes] = await Promise.all([
+        fetch(`/api/jobs/${jobId}/preview`),
+        fetch(`/api/jobs/${jobId}`),
+      ]);
+      if (!previewRes.ok || !jobRes.ok) {
+        throw new Error(
+          "We couldn't load the column mapping for this file. The server may be busy or the file may be malformed."
+        );
+      }
+      const data = await previewRes.json();
+      const job = await jobRes.json();
+      setPreview(data);
+
+      // Restore saved mapping if available; otherwise use suggestions
+      let nextMapping: Record<string, string>;
+      if (
+        job.columnMapping &&
+        typeof job.columnMapping === "object" &&
+        Object.keys(job.columnMapping).length > 0
+      ) {
+        nextMapping = job.columnMapping as Record<string, string>;
+      } else {
+        nextMapping = {};
+        data.column_status.suggestions.forEach(
+          (s: { csv_column: string; suggested_match: string }) => {
+            nextMapping[s.csv_column] = s.suggested_match;
+          }
+        );
+      }
+      setMapping(nextMapping);
+      setInitialMappingKey(mappingKey(nextMapping));
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to load mapping"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [previewRes, jobRes] = await Promise.all([
-          fetch(`/api/jobs/${jobId}/preview`),
-          fetch(`/api/jobs/${jobId}`),
-        ]);
-        const data = await previewRes.json();
-        const job = await jobRes.json();
-        setPreview(data);
-
-        // Restore saved mapping if available; otherwise use suggestions
-        if (job.columnMapping && typeof job.columnMapping === "object" && Object.keys(job.columnMapping).length > 0) {
-          setMapping(job.columnMapping as Record<string, string>);
-        } else {
-          const initial: Record<string, string> = {};
-          data.column_status.suggestions.forEach(
-            (s: { csv_column: string; suggested_match: string }) => {
-              initial[s.csv_column] = s.suggested_match;
-            }
-          );
-          setMapping(initial);
-        }
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    }
     load();
-  }, [jobId]);
+  }, [load]);
 
   async function handleSave() {
     setSaving(true);
+    setError("");
     try {
-      await fetch(`/api/jobs/${jobId}`, {
+      const res = await fetch(`/api/jobs/${jobId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -55,23 +93,53 @@ export default function MappingPage() {
           status: "mapping",
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save mapping");
+      }
+      toast.success("Mapping saved");
       router.push(`/convert/${jobId}/preview`);
-    } catch {
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save mapping"
+      );
       setSaving(false);
     }
   }
 
   if (loading) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <p className="text-gray-500">Loading columns...</p>
+      <main className="max-w-4xl mx-auto px-4 py-8" aria-busy="true">
+        <Skeleton className="h-7 w-48 mb-2" />
+        <Skeleton className="h-4 w-72 mb-6" />
+        <SkeletonTable rows={8} columns={2} />
       </main>
     );
   }
 
-  if (!preview) return null;
+  if (loadError || !preview) {
+    return (
+      <main className="max-w-2xl mx-auto px-4 py-16">
+        <Alert variant="error" title="Couldn't load column mapping">
+          <p className="mb-4">
+            {loadError || "Failed to load mapping"}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={load}>Try again</Button>
+            <Link
+              href={`/convert/${jobId}/preview`}
+              className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 text-center"
+            >
+              Back to preview
+            </Link>
+          </div>
+        </Alert>
+      </main>
+    );
+  }
 
-  const { matched, missing, suggestions, field_requirements } = preview.column_status;
+  const { matched, missing, suggestions, field_requirements, field_descriptions } =
+    preview.column_status;
   const allFields = [...matched, ...missing];
 
   // Build lookup: expected field name -> { csv_column, score }
@@ -105,22 +173,30 @@ export default function MappingPage() {
   return (
     <main className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-2">Column Mapping</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Map your CSV columns to the expected field names. Only map columns that
-        need renaming.
+      <p className="text-sm text-gray-600 mb-1">
+        Map your CSV columns to the expected XML field names. Only map
+        columns that need renaming — auto-matched columns stay put.
+      </p>
+      <p className="text-xs text-gray-500 mb-6">
+        Required fields must be mapped or present in your CSV. Conditional
+        fields are only needed when their rule triggers — hover the badge
+        or read the rule below each field.
       </p>
 
       {suggestions.length > 0 && (
         <div className="flex items-center gap-3 mb-4">
-          <button
-            onClick={applyAllSuggestions}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-          >
+          <Button onClick={applyAllSuggestions} size="sm">
             Apply All Suggestions ({suggestions.length})
-          </button>
+          </Button>
           <span className="text-xs text-gray-500">
             Click to map all suggested matches at once
           </span>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4">
+          <Alert variant="error">{error}</Alert>
         </div>
       )}
 
@@ -128,10 +204,10 @@ export default function MappingPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium">
+              <th scope="col" className="text-left px-4 py-3 font-medium">
                 Expected XML Field
               </th>
-              <th className="text-left px-4 py-3 font-medium">
+              <th scope="col" className="text-left px-4 py-3 font-medium">
                 Map From CSV Column
               </th>
             </tr>
@@ -145,10 +221,12 @@ export default function MappingPage() {
               const suggestion = suggestionByField[field];
               const isApplied = suggestion && currentCsvCol === suggestion.csv_column;
               const req = field_requirements?.[field];
+              const meta = field_descriptions?.[field];
+              const conditionalTitle = meta?.conditional_rule;
 
               return (
                 <tr key={field} className={`border-b ${isMatched ? "bg-green-50/30" : ""}`}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 align-top">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs">{field}</span>
                       {req === "required" && (
@@ -157,7 +235,10 @@ export default function MappingPage() {
                         </span>
                       )}
                       {req === "conditional" && (
-                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                        <span
+                          title={conditionalTitle}
+                          className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 cursor-help"
+                        >
                           Conditional
                         </span>
                       )}
@@ -172,9 +253,20 @@ export default function MappingPage() {
                         </span>
                       )}
                     </div>
+                    {meta?.description && (
+                      <p className="mt-1 text-xs text-gray-600 leading-snug">
+                        {meta.description}
+                      </p>
+                    )}
+                    {req === "conditional" && meta?.conditional_rule && (
+                      <p className="mt-1 text-xs text-amber-700 leading-snug">
+                        <span className="font-medium">When required:</span>{" "}
+                        {meta.conditional_rule}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <select
                         className="flex-1 border rounded px-2 py-1 text-sm"
                         value={currentCsvCol}
@@ -222,19 +314,26 @@ export default function MappingPage() {
       </div>
 
       <div className="flex gap-4 mt-6">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
+        <Button onClick={handleSave} isLoading={saving}>
           {saving ? "Saving..." : "Save Mapping & Continue"}
-        </button>
-        <button
-          onClick={() => router.push(`/convert/${jobId}/preview`)}
-          className="px-4 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            const dirty = mappingKey(mapping) !== initialMappingKey;
+            if (
+              dirty &&
+              !window.confirm(
+                "Discard your mapping changes and go back to preview?"
+              )
+            ) {
+              return;
+            }
+            router.push(`/convert/${jobId}/preview`);
+          }}
         >
-          Skip
-        </button>
+          Cancel
+        </Button>
       </div>
     </main>
   );

@@ -13,6 +13,168 @@ from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
 
 from ..core.security import DATA_DIR
 
+# Plain-language field metadata shown on the web mapping page.
+# Added for UX_REVIEW.md §3.5 — the mapping page previously exposed
+# raw XML field names like "BranchOfService" with no explanation of
+# what they mean or when conditional rules apply.
+#
+# Keys are the expected field names (same keys used in the
+# ``field_requirements`` map). Each value is a dict with:
+#   - description: plain-language explanation of the field
+#   - conditional_rule: present only when field_requirements is
+#     "conditional" — describes the rule in words.
+#
+# Fields not listed here fall back to no description in the UI.
+# Required and conditional fields should always have descriptions;
+# optional fields are best-effort.
+
+COUNSELING_FIELD_METADATA: dict[str, dict[str, str]] = {
+    "Contact ID": {
+        "description": "Salesforce Contact ID for the individual being counseled. Must be unique per client.",
+    },
+    "Last Name": {
+        "description": "Client last (family) name.",
+    },
+    "First Name": {
+        "description": "Client first (given) name.",
+    },
+    "Email": {
+        "description": "Client email address. Used for optional impact-survey contact.",
+    },
+    "Contact: Phone": {
+        "description": "Primary contact phone number. Non-digits are stripped during cleaning.",
+    },
+    "Mailing State/Province": {
+        "description": "Client mailing state or province. Two-letter codes (e.g. IA) are expanded to full names during cleaning.",
+    },
+    "Mailing Country": {
+        "description": "Client mailing country. Standardized to the SBA schema enumeration during cleaning.",
+    },
+    "Race": {
+        "description": "Client race. Salesforce multi-value lists are split and mapped to schema codes.",
+    },
+    "Ethnicity:": {
+        "description": "Client ethnicity (Hispanic/Latino status).",
+    },
+    "Gender": {
+        "description": "Client gender.",
+    },
+    "Disability": {
+        "description": "Whether the client has a self-reported disability.",
+    },
+    "Veteran Status": {
+        "description": "Client military veteran status. Controls the BranchOfService conditional requirement.",
+    },
+    "Branch Of Service": {
+        "description": "Branch of the U.S. armed forces the client served in.",
+        "conditional_rule": "Required when Veteran Status indicates military service (Active, Veteran, Service-Disabled Veteran, etc.).",
+    },
+    "What Prompted you to contact us?": {
+        "description": "How the client found out about SBA services. Controls the Internet conditional requirements.",
+    },
+    "Internet (specify)": {
+        "description": "Specific internet source that prompted the client to contact SBA.",
+        "conditional_rule": "Required when 'What Prompted you to contact us?' is set to an Internet option.",
+    },
+    "InternetUsage": {
+        "description": "Type of internet usage the client reported.",
+        "conditional_rule": "Required when 'What Prompted you to contact us?' is set to an Internet option.",
+    },
+    "Currently In Business?": {
+        "description": "Whether the client currently operates a business. Drives several conditional business-detail requirements.",
+    },
+    "Legal Entity of Business": {
+        "description": "Legal structure of the client's business (LLC, S-Corp, etc.).",
+        "conditional_rule": "Required when Currently In Business? is Yes.",
+    },
+    "Other legal entity (specify)": {
+        "description": "Free-text description of a non-standard legal entity.",
+        "conditional_rule": "Required when Legal Entity of Business is Other.",
+    },
+    "Rural_vs_Urban": {
+        "description": "Rural or urban classification for the client's business location.",
+    },
+    "FIPS_Code": {
+        "description": "Federal Information Processing Standards county code.",
+        "conditional_rule": "Required when Rural_vs_Urban is populated.",
+    },
+    "Nature of the Counseling Seeking?": {
+        "description": "Primary reason the client sought counseling.",
+        "conditional_rule": "Required when Currently In Business? is Yes.",
+    },
+    "Nature of the Counseling Seeking - Other Detail": {
+        "description": "Free-text description when the nature of counseling is 'Other'.",
+        "conditional_rule": "Required when Nature of the Counseling Seeking? is Other.",
+    },
+    "Services Provided": {
+        "description": "Salesforce multi-value list of counseling services rendered during the session.",
+    },
+    "Other Counseling Provided": {
+        "description": "Free-text description of counseling provided when 'Other' is in Services Provided.",
+        "conditional_rule": "Required when Services Provided includes Other.",
+    },
+    "Type of Session": {
+        "description": "How the counseling was delivered (Face to Face, Telephone, Video, etc.).",
+    },
+    "Language(s) Used": {
+        "description": "Language(s) the counseling was conducted in.",
+    },
+    "Date": {
+        "description": "Date of the counseling session. Accepts common formats; normalized to YYYY-MM-DD.",
+    },
+    "Name of Counselor": {
+        "description": "Name of the SBA counselor who conducted the session.",
+    },
+    "Duration (hours)": {
+        "description": "Length of the counseling session in hours. Decimals allowed (e.g. 1.5).",
+    },
+    "Prep Hours": {
+        "description": "Counselor preparation time in hours.",
+    },
+    "Travel Hours": {
+        "description": "Counselor travel time in hours.",
+    },
+}
+
+TRAINING_FIELD_METADATA: dict[str, dict[str, str]] = {
+    "Class/Event ID": {
+        "description": "Unique identifier for the training event. Rows with the same Class/Event ID are aggregated into one XML record.",
+    },
+}
+
+TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
+    "Class/Event ID": {
+        "description": "Identifier for the training event the attendee participated in.",
+    },
+    "Contact ID": {
+        "description": "Salesforce Contact ID for the individual attendee. Must be unique within the event.",
+    },
+    "Training Topic": {
+        "description": "Topic area of the training (Business Start-up, Marketing, etc.).",
+    },
+    "Class/Event Type": {
+        "description": "Delivery format of the training (In-Person, Online, Hybrid).",
+    },
+    "Start Date": {
+        "description": "Date the training session started. Accepts common formats; normalized to YYYY-MM-DD.",
+    },
+    "Ethnicity": {
+        "description": "Attendee ethnicity (Hispanic/Latino status).",
+    },
+    "Race": {
+        "description": "Attendee race. Salesforce multi-value lists are split and mapped to schema codes.",
+    },
+    "Gender": {
+        "description": "Attendee gender.",
+    },
+    "Military Status": {
+        "description": "Attendee military status.",
+    },
+    "Currently in Business?": {
+        "description": "Whether the attendee currently operates a business.",
+    },
+}
+
 # Field requirement levels: "required", "conditional", or "optional"
 COUNSELING_REQUIRED = {
     "Contact ID", "Race", "Ethnicity:", "Gender", "Disability", "Veteran Status",
@@ -160,12 +322,25 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
     # Determine requirement level for each expected field
     if converter_type == "counseling":
         field_requirements = _build_field_requirements(expected, COUNSELING_REQUIRED, COUNSELING_CONDITIONAL)
+        field_metadata = COUNSELING_FIELD_METADATA
     elif converter_type == "training":
         field_requirements = _build_field_requirements(expected, TRAINING_REQUIRED, TRAINING_CONDITIONAL)
+        field_metadata = TRAINING_FIELD_METADATA
     elif converter_type == "training-client":
         field_requirements = _build_field_requirements(expected, TRAINING_CLIENT_REQUIRED, TRAINING_CLIENT_CONDITIONAL)
+        field_metadata = TRAINING_CLIENT_FIELD_METADATA
     else:
         field_requirements = {}
+        field_metadata = {}
+
+    # Only emit metadata for fields we actually expect, so the payload
+    # stays tight. Missing entries are silently omitted; the UI falls
+    # back to rendering just the raw field name.
+    field_descriptions: dict[str, dict[str, str]] = {
+        field: field_metadata[field]
+        for field in expected
+        if field in field_metadata
+    }
 
     return {
         "headers": list(headers),
@@ -177,5 +352,6 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
             "extra": extra,
             "suggestions": suggestions,
             "field_requirements": field_requirements,
+            "field_descriptions": field_descriptions,
         },
     }

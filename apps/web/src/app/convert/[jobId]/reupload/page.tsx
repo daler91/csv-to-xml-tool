@@ -2,10 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { converterTypeLabel } from "@/lib/converter-types";
+import { useToast } from "@/components/toast";
+import { uploadErrorMessage } from "@/lib/upload-errors";
+import { Skeleton } from "@/components/skeleton";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
+  const toast = useToast();
 
   const [converterType, setConverterType] = useState("");
   const [fileName, setFileName] = useState("");
@@ -42,19 +49,30 @@ export default function ReuploadPage() {
 
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(uploadErrorMessage(res.status, data.error));
+        setUploading(false);
+        return;
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      toast.success("Re-upload received — loading preview");
       router.push(`/convert/${data.jobId}/preview`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+    } catch {
+      setError(
+        "Couldn't reach the server. Check your internet connection and try again."
+      );
       setUploading(false);
     }
   };
 
   if (loading) {
     return (
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        <p className="text-sm text-gray-500">Loading...</p>
+      <main className="max-w-2xl mx-auto px-4 py-8" aria-busy="true">
+        <Skeleton className="h-7 w-56 mb-2" />
+        <Skeleton className="h-4 w-80 mb-6" />
+        <Skeleton className="h-14 w-full mb-4" />
+        <Skeleton className="h-10 w-full mb-4" />
       </main>
     );
   }
@@ -62,14 +80,18 @@ export default function ReuploadPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-2">Re-upload Fixed CSV</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-gray-600 mb-2">
         Upload a corrected version of <strong>{fileName}</strong> to compare
         against the previous conversion.
       </p>
+      <p className="text-xs text-gray-600 mb-6">
+        Your previous conversion is kept as a separate job. The two are
+        compared side-by-side on the next screen.
+      </p>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">
-          {error}
+        <div className="mb-4">
+          <Alert variant="error">{error}</Alert>
         </div>
       )}
 
@@ -79,9 +101,7 @@ export default function ReuploadPage() {
             Converter Type
           </span>
           <p className="text-sm text-gray-600 bg-gray-50 border rounded px-3 py-2">
-            {converterType === "counseling"
-              ? "Counseling (Form 641)"
-              : "Training (Form 888)"}
+            {converterTypeLabel(converterType)}
           </p>
         </div>
 
@@ -99,20 +119,20 @@ export default function ReuploadPage() {
         </div>
 
         <div className="flex gap-2">
-          <button
+          <Button
             type="submit"
-            disabled={!file || uploading}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            disabled={!file}
+            isLoading={uploading}
           >
             {uploading ? "Uploading..." : "Upload & Compare"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => router.push(`/convert/${jobId}/results`)}
-            className="px-4 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </main>

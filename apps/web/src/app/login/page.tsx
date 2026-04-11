@@ -4,9 +4,13 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { useToast } from "@/components/toast";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,6 +30,7 @@ export default function LoginPage() {
       setError("Invalid email or password");
       setLoading(false);
     } else {
+      toast.success("Signed in");
       router.push("/dashboard");
     }
   }
@@ -39,11 +44,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="error">{error}</Alert>}
 
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-1">
@@ -71,13 +72,9 @@ export default function LoginPage() {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
+          <Button type="submit" isLoading={loading} fullWidth>
             {loading ? "Signing in..." : "Sign In"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-gray-500">

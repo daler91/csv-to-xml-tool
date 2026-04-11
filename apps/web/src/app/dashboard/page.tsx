@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { StatusIcon } from "@/components/status-icon";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { buttonClasses } from "@/components/ui/button-classes";
 
 const PAGE_SIZE = 20;
 
@@ -33,34 +36,55 @@ export default async function DashboardPage({
     <main className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Link
-          href="/convert"
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-        >
+        <Link href="/convert" className={buttonClasses()}>
           New Conversion
         </Link>
       </div>
 
       {jobs.length === 0 && page === 1 ? (
-        <div className="text-center py-16 text-gray-500">
-          <p className="text-lg mb-2">No conversions yet</p>
-          <p className="text-sm">
-            Upload a CSV file to get started.
+        <div className="text-center py-16 bg-white border rounded-lg">
+          <h2 className="text-xl font-semibold mb-2">No conversions yet</h2>
+          <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
+            Start your first conversion by uploading a CSV export.
+            Not sure what to upload? Grab a sample below.
           </p>
+          <Link
+            href="/convert"
+            className={`${buttonClasses()} mb-8`}
+          >
+            Start a new conversion
+          </Link>
+          <div className="grid gap-3 sm:grid-cols-3 max-w-3xl mx-auto px-4 text-left">
+            <SampleLink
+              href="/samples/counseling-sample.csv"
+              label="Counseling sample"
+              description="Form 641, individual sessions"
+            />
+            <SampleLink
+              href="/samples/training-sample.csv"
+              label="Training sample"
+              description="Form 888, aggregated events"
+            />
+            <SampleLink
+              href="/samples/training-client-sample.csv"
+              label="Training Client sample"
+              description="Form 641, per attendee"
+            />
+          </div>
         </div>
       ) : (
         <>
-          <div className="bg-white rounded border">
+          <div className="bg-white rounded border overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium">File</th>
-                  <th className="text-left px-4 py-3 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 font-medium">Records</th>
-                  <th className="text-left px-4 py-3 font-medium">XSD</th>
-                  <th className="text-left px-4 py-3 font-medium">Date</th>
-                  <th className="text-left px-4 py-3 font-medium">Actions</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">File</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Type</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Status</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Records</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">XSD</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Date</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,29 +156,39 @@ export default async function DashboardPage({
   );
 }
 
-function XsdStatus({ xsdValid }: Readonly<{ xsdValid: boolean | null }>) {
-  if (xsdValid === null) return <>-</>;
-  if (xsdValid) return <span className="text-green-600">Valid</span>;
-  return <span className="text-red-600">Invalid</span>;
+function SampleLink({
+  href,
+  label,
+  description,
+}: Readonly<{ href: string; label: string; description: string }>) {
+  return (
+    <a
+      href={href}
+      download
+      className="block rounded border border-gray-200 bg-gray-50 p-3 hover:border-blue-400 hover:bg-white"
+    >
+      <p className="text-sm font-medium text-blue-700 underline mb-1">
+        {label}
+      </p>
+      <p className="text-xs text-gray-600">{description}</p>
+    </a>
+  );
 }
 
-function StatusBadge({ status }: Readonly<{ status: string }>) {
-  const colors: Record<string, string> = {
-    uploaded: "bg-gray-100 text-gray-700",
-    previewed: "bg-blue-100 text-blue-700",
-    mapping: "bg-yellow-100 text-yellow-700",
-    converting: "bg-blue-100 text-blue-700",
-    complete: "bg-green-100 text-green-700",
-    error: "bg-red-100 text-red-700",
-  };
-
+function XsdStatus({ xsdValid }: Readonly<{ xsdValid: boolean | null }>) {
+  if (xsdValid === null) return <span className="text-gray-500">—</span>;
+  if (xsdValid)
+    return (
+      <span className="inline-flex items-center gap-1 text-green-700">
+        <StatusIcon kind="success" />
+        Valid
+      </span>
+    );
   return (
-    <span
-      className={`px-2 py-0.5 rounded text-xs font-medium ${
-        colors[status] || "bg-gray-100 text-gray-700"
-      }`}
-    >
-      {status}
+    <span className="inline-flex items-center gap-1 text-red-700">
+      <StatusIcon kind="error" />
+      Invalid
     </span>
   );
 }
+

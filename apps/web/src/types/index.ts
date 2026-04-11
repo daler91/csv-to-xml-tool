@@ -1,3 +1,8 @@
+export interface FieldDescription {
+  description: string;
+  conditional_rule?: string;
+}
+
 export interface PreviewResponse {
   headers: string[];
   rows: Record<string, string>[];
@@ -12,6 +17,7 @@ export interface PreviewResponse {
       score: number;
     }>;
     field_requirements: Record<string, "required" | "optional" | "conditional">;
+    field_descriptions?: Record<string, FieldDescription>;
   };
 }
 

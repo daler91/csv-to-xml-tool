@@ -5,6 +5,8 @@ logs/
 reports/
 *.log
 *.csv
+# Keep sample CSVs that the web app serves to users
+!apps/web/public/samples/*.csv
 
 # Keep XSD files in schemas/ but ignore sample XMLs
 *.xml

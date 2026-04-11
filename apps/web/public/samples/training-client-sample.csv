@@ -1,0 +1,4 @@
+Class/Event ID,Contact ID,First Name,Last Name,Member Type,Member Status,Company,Phone,Email,Currently in Business?,Ethnicity,Race,Gender,Military Status,Training Topic,Class/Event Type,Funding Source,Start Date,Class/Event Name
+EVT-001,003XX000004TMM1,Jane,Doe,Attendee,Registered,Acme LLC,555-0101,jane.doe@example.com,Yes,Not Hispanic or Latino,White,Female,Not Veteran,Business Start-up/Preplanning,In-Person,Federal,2025-02-03,Intro to Business Planning
+EVT-001,003XX000004TMM2,Linh,Nguyen,Attendee,Registered,Nguyen Consulting,555-0102,linh.n@example.com,No,Not Hispanic or Latino,Asian,Female,Not Veteran,Business Start-up/Preplanning,In-Person,Federal,2025-02-03,Intro to Business Planning
+EVT-001,003XX000004TMM3,Luis,Garcia,Attendee,Registered,Garcia Services,555-0103,luis.g@example.com,Yes,Hispanic or Latino,White,Male,Veteran,Business Start-up/Preplanning,In-Person,Federal,2025-02-03,Intro to Business Planning

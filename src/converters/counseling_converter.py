@@ -44,6 +44,11 @@ class CounselingConverter(BaseConverter):
         root = ET.Element('CounselingInformation')
         processed_records = 0
         skipped_records = 0
+        total_rows = len(rows)
+
+        # Emit an initial "0 of N" tick so the progress bar anchors at
+        # zero rather than an empty state while the first row runs.
+        self._report_progress(0, total_rows)
 
         for row_index, row in enumerate(rows, 1):
             row = self._preprocess_row(row)
@@ -52,6 +57,7 @@ class CounselingConverter(BaseConverter):
             if not data_validation.validate_counseling_record(row, row_index, self.validator):
                 self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
                 skipped_records += 1
+                self._maybe_report_progress(row_index, total_rows)
                 continue
 
             try:
@@ -72,6 +78,11 @@ class CounselingConverter(BaseConverter):
                 self.logger.error(f"Error processing record {record_id}: {str(e)}", exc_info=True)
                 self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing record: {str(e)}")
                 self.validator.record_processed(success=False)
+
+            self._maybe_report_progress(row_index, total_rows)
+
+        # Final tick so the bar ends at 100% regardless of batch size.
+        self._report_progress(total_rows, total_rows)
 
         try:
             tree = ET.ElementTree(root)

@@ -8,6 +8,12 @@ import type { ConvertResponse } from "@/types";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
+// Statuses a job can transition *out of* into "converting".
+// A cancelled/complete/error job can't be started — the user should
+// re-upload instead. A job already in status=converting can't be
+// started a second time.
+const STARTABLE_STATUSES = ["uploaded", "previewed", "mapping"] as const;
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -24,11 +30,39 @@ export async function POST(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // Update status to converting
-    await prisma.job.update({
-      where: { id: jobId },
+    if (!STARTABLE_STATUSES.includes(job.status as typeof STARTABLE_STATUSES[number])) {
+      return NextResponse.json(
+        {
+          error:
+            `This job is ${job.status} and can't be started. Upload the file again if you want to re-convert.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Conditional transition to "converting". Using updateMany with a
+    // status guard closes the read-then-write race: if the user
+    // cancels (or the job otherwise transitions) between the findFirst
+    // above and this update, updateMany returns count=0 and we bail
+    // instead of reviving a terminal job.
+    const started = await prisma.job.updateMany({
+      where: {
+        id: jobId,
+        userId: user.id,
+        status: { in: [...STARTABLE_STATUSES] },
+      },
       data: { status: "converting" },
     });
+
+    if (started.count === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This job's status changed before we could start it. Refresh the page and try again.",
+        },
+        { status: 409 }
+      );
+    }
 
     await prisma.auditEntry.create({
       data: {
@@ -62,8 +96,12 @@ export async function POST(
           await writeFile(outputFilePath, result.xml_content, "utf-8");
         }
 
-        await prisma.job.update({
-          where: { id: jobId },
+        // Conditional update: only write "complete" if the job is still
+        // converting. If the user cancelled between the worker finishing
+        // and this update firing, updateMany returns count=0 and we
+        // discard the result — the file on disk is orphaned but harmless.
+        const updated = await prisma.job.updateMany({
+          where: { id: jobId, status: "converting" },
           data: {
             status: "complete",
             outputFilePath,
@@ -77,6 +115,12 @@ export async function POST(
           },
         });
 
+        if (updated.count === 0) {
+          // Job was cancelled (or otherwise terminal) before we could
+          // write the result. Don't create a completion audit entry.
+          return;
+        }
+
         await prisma.auditEntry.create({
           data: {
             userId: user.id,
@@ -87,10 +131,17 @@ export async function POST(
         });
       })
       .catch(async (workerError) => {
-        await prisma.job.update({
-          where: { id: jobId },
+        // If the failure is because the worker honoured a cancel request
+        // or the user cancelled out-of-band, leave the job in its
+        // "cancelled" state — only transition converting → error here.
+        const updated = await prisma.job.updateMany({
+          where: { id: jobId, status: "converting" },
           data: { status: "error" },
         });
+
+        if (updated.count === 0) {
+          return;
+        }
 
         await prisma.auditEntry.create({
           data: {

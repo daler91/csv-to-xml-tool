@@ -2,6 +2,55 @@
 
 Converts SBA counseling and training CSV data into XSD-compliant XML files.
 
+The tool ships in two forms:
+
+- A **web application** (`apps/web`, `apps/worker`) — recommended for
+  most users. Handles authentication, uploads, preview/mapping,
+  validation reports, job history, and downloads via a browser.
+- A **Python CLI** (`run.py`, `src/`) — the original interactive
+  launcher, useful for power users and for scripting.
+
+-----
+
+## Web App (recommended)
+
+The web app is a Next.js frontend backed by a FastAPI worker, Postgres,
+and Redis — all wired up in `docker-compose.yml`.
+
+### Run it locally
+
+```bash
+cp .env.example .env
+# Edit .env to set DATABASE_URL, NEXTAUTH_SECRET, etc.
+docker compose up
+```
+
+Then open <http://localhost:3000>, create an account, and upload a CSV.
+
+### Download sample CSVs
+
+Sample CSVs for each converter type live under
+`apps/web/public/samples/` and are also linked from the landing page
+and the dashboard empty state inside the app:
+
+- `counseling-sample.csv` — individual counseling sessions (Form 641)
+- `training-sample.csv` — aggregated training events (Form 888)
+- `training-client-sample.csv` — per-attendee rows (Form 641)
+
+### UX documentation
+
+- [`UX_REVIEW.md`](./UX_REVIEW.md) — severity-ranked audit of the
+  web app's user-facing surfaces.
+- [`UX_IMPLEMENTATION_PLAN.md`](./UX_IMPLEMENTATION_PLAN.md) — the
+  phased roadmap that sequences the UX review findings into
+  executable slices.
+- [`TECHNICAL_DEBT.md`](./TECHNICAL_DEBT.md) — code/security debt
+  register, separate from UX concerns.
+
+-----
+
+## Python CLI
+
 -----
 
 ## Quick Start (3 steps)

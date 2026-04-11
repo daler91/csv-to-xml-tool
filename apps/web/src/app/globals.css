@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+/*
+ * Global focus ring. Keyboard users get a visible blue outline on any
+ * focused interactive element; mouse users do not (thanks to
+ * :focus-visible). Added in UX Phase 2 — see UX_IMPLEMENTATION_PLAN.md §6.4.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #3b82f6; /* blue-500 */
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+

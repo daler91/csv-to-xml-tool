@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+from typing import Callable, Optional
 import pandas as pd
 
 # Add the repo root's src/ to the Python path so we can import existing code
@@ -17,7 +18,12 @@ from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
 
+from .cancellation import ConversionCancelledError
 from .diff_service import generate_cleaning_diff
+
+# Type alias mirroring BaseConverter.ProgressCallback so the worker
+# service doesn't need to import from src/converters/.
+ProgressCallback = Callable[[int, int], None]
 
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
 
@@ -39,15 +45,34 @@ def run_conversion(
     xml_path: str,
     converter_type: str,
     column_mapping: dict[str, str] | None = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> dict:
     """
     Run a CSV-to-XML conversion using the existing converter logic.
 
     All paths must be constructed and validated by the calling route.
     Returns a dict with stats, issues, xsd_valid, xsd_errors.
+
+    If ``is_cancelled`` is provided, it is polled at each major phase
+    boundary. When it returns True, ``ConversionCancelledError`` is raised
+    and the partial XML output is discarded. See
+    ``apps/worker/app/services/cancellation.py`` for design notes.
+
+    If ``on_progress`` is provided, it is installed as the converter's
+    ``progress_callback`` and receives ``(processed, total)`` tuples
+    roughly every 25 rows (counseling) or every 5 event groups
+    (training). See UX_REVIEW.md §3.6.
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")
+
+    def _checkpoint() -> None:
+        if is_cancelled is not None and is_cancelled():
+            raise ConversionCancelledError()
+
+    # Early-exit before any work if the user cancelled before we got here.
+    _checkpoint()
 
     # Apply column mapping if provided (rename CSV columns before conversion)
     actual_csv_path = csv_path
@@ -61,11 +86,15 @@ def run_conversion(
         df.to_csv(tmp_mapped.name, index=False)
         actual_csv_path = tmp_mapped.name
 
+    _checkpoint()
+
     # Generate cleaning diff before conversion
     try:
         diffs = generate_cleaning_diff(actual_csv_path, converter_type)
     except Exception:
         diffs = []
+
+    _checkpoint()
 
     try:
         # Set up logger and tracker
@@ -78,7 +107,11 @@ def run_conversion(
         # Run conversion
         converter_cls = CONVERTER_MAP[converter_type]
         converter = converter_cls(logger, tracker)
+        if on_progress is not None:
+            converter.progress_callback = on_progress
         converter.convert(actual_csv_path, xml_path)
+
+        _checkpoint()
 
         # Validate against XSD
         xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP[converter_type])
@@ -88,6 +121,8 @@ def run_conversion(
             result = validate_against_xsd(xml_path, xsd_file)
             xsd_valid = result.get("is_valid", False)
             xsd_errors = result.get("errors", [])
+
+        _checkpoint()
 
         tracker_data = tracker.to_dict()
         summary = tracker_data["summary"]

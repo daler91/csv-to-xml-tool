@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+
+const POLL_FAILURE_THRESHOLD = 3;
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  return `${mins}m ${rem.toString().padStart(2, "0")}s`;
+}
 
 export default function ProgressPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -13,6 +23,19 @@ export default function ProgressPage() {
   const [warnings, setWarnings] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [pollRetryNonce, setPollRetryNonce] = useState(0);
+  const startedAtRef = useRef<number>(Date.now());
+
+  // Elapsed-time ticker. Independent of polling so it keeps counting
+  // even when the network is flaky.
+  useEffect(() => {
+    const t = setInterval(() => {
+      setElapsedMs(Date.now() - startedAtRef.current);
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     let pollInterval = 1000;
@@ -25,11 +48,13 @@ export default function ProgressPage() {
       if (cancelled) return;
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
+        if (!res.ok) throw new Error(`status ${res.status}`);
         const job = await res.json();
 
         setStatus(job.status);
         setProcessed(job.processedRows || 0);
         setTotal(job.totalRows || 0);
+        setConsecutiveFailures(0);
 
         if (job.summary) {
           const s = job.summary as Record<string, number>;
@@ -54,7 +79,10 @@ export default function ProgressPage() {
           return;
         }
       } catch {
-        // ignore transient poll errors
+        // Track consecutive poll failures so we can show a banner after
+        // a few in a row (§4.5). Transient single failures are still
+        // silently retried.
+        setConsecutiveFailures((n) => n + 1);
       }
 
       // Gradually back off: 1s -> 2s -> 5s
@@ -71,7 +99,12 @@ export default function ProgressPage() {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [jobId, router]);
+  }, [jobId, router, pollRetryNonce]);
+
+  function retryPolling() {
+    setConsecutiveFailures(0);
+    setPollRetryNonce((n) => n + 1);
+  }
 
   async function handleCancel() {
     if (cancelling) return;
@@ -99,6 +132,8 @@ export default function ProgressPage() {
   const isConverting = status === "converting";
   const isCancelled = status === "cancelled";
   const isTimedOut = status === "timeout";
+  const showPollFailureBanner =
+    isConverting && consecutiveFailures >= POLL_FAILURE_THRESHOLD;
 
   let heading: string;
   if (isTimedOut) heading = "Conversion Timed Out";
@@ -112,9 +147,7 @@ export default function ProgressPage() {
   } else if (isCancelled) {
     subtitle = "Taking you back to the dashboard…";
   } else if (isConverting) {
-    subtitle = total > 0
-      ? `Processing row ${processed} of ${total}`
-      : "Preparing your file…";
+    subtitle = `Running for ${formatElapsed(elapsedMs)}`;
   } else {
     subtitle = status;
   }
@@ -125,6 +158,35 @@ export default function ProgressPage() {
         <h1 className="text-2xl font-bold mb-2">{heading}</h1>
         <p className="text-sm text-gray-600">{subtitle}</p>
       </div>
+
+      {/* Poll-failure banner (§4.5): show after consecutive failures */}
+      {showPollFailureBanner && (
+        <div
+          role="status"
+          className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded p-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+        >
+          <span>
+            We&apos;re having trouble checking the conversion status. Your
+            file may still be processing in the background.
+          </span>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={retryPolling}
+              className="px-3 py-1 bg-yellow-600 text-white rounded text-xs font-medium hover:bg-yellow-700"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="px-3 py-1 border border-yellow-300 text-yellow-800 rounded text-xs font-medium hover:bg-yellow-100"
+            >
+              Go to dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div

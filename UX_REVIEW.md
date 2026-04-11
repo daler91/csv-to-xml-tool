@@ -432,9 +432,12 @@ doesn't know whether to map it or not.
 
 ### 3.6 Progress page has no cancel, no ETA, and a dead-end timeout **[P1]** **[PARTIALLY RESOLVED]**
 
-_Cancel button and dead-end timeout recovery shipped (see
-`UX_IMPLEMENTATION_PLAN.md` Phase 3 notes). ETA estimate and
-poll-failure banner still pending._
+_Cancel button, dead-end timeout recovery, elapsed-time counter, and
+poll-failure banner shipped. True row-level ETA deferred: the worker
+does not currently update ``Job.processedRows`` during a conversion,
+so there is no denominator for a remaining-time estimate. Would need
+either periodic progress writes from inside ``run_conversion`` or an
+SSE/WebSocket channel — both out of scope for Phase 3._
 
 
 **Where:** `apps/web/src/app/convert/[jobId]/progress/page.tsx:69-108`
@@ -652,7 +655,7 @@ that calls `setState({ hasError: false })`.
 
 ---
 
-### 4.5 Progress page silently swallows poll errors **[P2]**
+### 4.5 Progress page silently swallows poll errors **[P2]** **[RESOLVED]**
 
 **Where:** `apps/web/src/app/convert/[jobId]/progress/page.tsx:47-49`
 

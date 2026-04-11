@@ -65,7 +65,10 @@ function ConvertForm() {
 
       <form onSubmit={handleUpload} className="space-y-6">
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
+          <div
+            role="alert"
+            className="bg-red-50 text-red-600 p-3 rounded text-sm"
+          >
             {error}
           </div>
         )}

@@ -53,7 +53,9 @@ export default function PreviewPage() {
   if (error || !preview) {
     return (
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <p className="text-red-600">{error || "Failed to load preview"}</p>
+        <p role="alert" className="text-red-600">
+          {error || "Failed to load preview"}
+        </p>
       </main>
     );
   }
@@ -112,9 +114,13 @@ export default function PreviewPage() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="px-3 py-2 text-left font-medium text-gray-500">#</th>
+              <th scope="col" className="px-3 py-2 text-left font-medium text-gray-500">#</th>
               {preview.headers.map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">
+                <th
+                  key={h}
+                  scope="col"
+                  className="px-3 py-2 text-left font-medium whitespace-nowrap"
+                >
                   {h}
                 </th>
               ))}

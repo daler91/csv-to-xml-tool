@@ -290,10 +290,10 @@ function IssueTable({
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b bg-gray-50">
-            <th className="text-left px-3 py-2 font-medium">Record</th>
-            <th className="text-left px-3 py-2 font-medium">Category</th>
-            <th className="text-left px-3 py-2 font-medium">Field</th>
-            <th className="text-left px-3 py-2 font-medium">Message</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Record</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Category</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Field</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Message</th>
           </tr>
         </thead>
         <tbody>
@@ -399,12 +399,12 @@ function CleaningDiffView({
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="text-left px-3 py-2 font-medium">Row</th>
-              <th className="text-left px-3 py-2 font-medium">Record ID</th>
-              <th className="text-left px-3 py-2 font-medium">Field</th>
-              <th className="text-left px-3 py-2 font-medium">Original</th>
-              <th className="text-left px-3 py-2 font-medium">Cleaned</th>
-              <th className="text-left px-3 py-2 font-medium">Type</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Row</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Record ID</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Field</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Original</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Cleaned</th>
+              <th scope="col" className="text-left px-3 py-2 font-medium">Type</th>
             </tr>
           </thead>
           <tbody>

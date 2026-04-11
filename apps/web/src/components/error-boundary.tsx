@@ -29,7 +29,10 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <div
+            role="alert"
+            className="max-w-2xl mx-auto px-4 py-16 text-center"
+          >
             <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
             <p className="text-gray-600 mb-4">
               An unexpected error occurred. Please try refreshing the page.

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { converterTypeLabel } from "@/lib/converter-types";
 
 export default function ReuploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -68,7 +69,10 @@ export default function ReuploadPage() {
       </p>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4"
+        >
           {error}
         </div>
       )}
@@ -79,9 +83,7 @@ export default function ReuploadPage() {
             Converter Type
           </span>
           <p className="text-sm text-gray-600 bg-gray-50 border rounded px-3 py-2">
-            {converterType === "counseling"
-              ? "Counseling (Form 641)"
-              : "Training (Form 888)"}
+            {converterTypeLabel(converterType)}
           </p>
         </div>
 

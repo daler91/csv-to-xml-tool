@@ -82,7 +82,14 @@ export default function ProgressPage() {
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full bg-gray-200 rounded-full h-4 mb-6 overflow-hidden">
+      <div
+        role="progressbar"
+        aria-valuenow={percentage}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Conversion progress: ${percentage}%`}
+        className="w-full bg-gray-200 rounded-full h-4 mb-6 overflow-hidden"
+      >
         <div
           className="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
@@ -92,7 +99,11 @@ export default function ProgressPage() {
       <div className="text-center text-lg font-semibold mb-8">{percentage}%</div>
 
       {/* Live Counters */}
-      <div className="grid grid-cols-3 gap-4">
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="grid grid-cols-3 gap-4"
+      >
         <div className="text-center">
           <p className="text-sm text-gray-500">Processed</p>
           <p className="text-xl font-bold">{processed}</p>

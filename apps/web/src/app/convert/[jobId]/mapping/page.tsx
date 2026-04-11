@@ -11,6 +11,7 @@ export default function MappingPage() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -46,8 +47,9 @@ export default function MappingPage() {
 
   async function handleSave() {
     setSaving(true);
+    setError("");
     try {
-      await fetch(`/api/jobs/${jobId}`, {
+      const res = await fetch(`/api/jobs/${jobId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -55,8 +57,15 @@ export default function MappingPage() {
           status: "mapping",
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save mapping");
+      }
       router.push(`/convert/${jobId}/preview`);
-    } catch {
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save mapping"
+      );
       setSaving(false);
     }
   }
@@ -124,14 +133,23 @@ export default function MappingPage() {
         </div>
       )}
 
+      {error && (
+        <div
+          role="alert"
+          className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4"
+        >
+          {error}
+        </div>
+      )}
+
       <div className="bg-white border rounded">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium">
+              <th scope="col" className="text-left px-4 py-3 font-medium">
                 Expected XML Field
               </th>
-              <th className="text-left px-4 py-3 font-medium">
+              <th scope="col" className="text-left px-4 py-3 font-medium">
                 Map From CSV Column
               </th>
             </tr>

@@ -73,11 +73,11 @@ export default function AuditPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium">Date</th>
-              <th className="text-left px-4 py-3 font-medium">Action</th>
-              <th className="text-left px-4 py-3 font-medium">File</th>
-              <th className="text-left px-4 py-3 font-medium">Type</th>
-              <th className="text-left px-4 py-3 font-medium">Details</th>
+              <th scope="col" className="text-left px-4 py-3 font-medium">Date</th>
+              <th scope="col" className="text-left px-4 py-3 font-medium">Action</th>
+              <th scope="col" className="text-left px-4 py-3 font-medium">File</th>
+              <th scope="col" className="text-left px-4 py-3 font-medium">Type</th>
+              <th scope="col" className="text-left px-4 py-3 font-medium">Details</th>
             </tr>
           </thead>
           <tbody>

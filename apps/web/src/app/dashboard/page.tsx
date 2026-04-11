@@ -54,13 +54,13 @@ export default async function DashboardPage({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium">File</th>
-                  <th className="text-left px-4 py-3 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 font-medium">Records</th>
-                  <th className="text-left px-4 py-3 font-medium">XSD</th>
-                  <th className="text-left px-4 py-3 font-medium">Date</th>
-                  <th className="text-left px-4 py-3 font-medium">Actions</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">File</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Type</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Status</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Records</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">XSD</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Date</th>
+                  <th scope="col" className="text-left px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>

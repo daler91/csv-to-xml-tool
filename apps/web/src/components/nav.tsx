@@ -33,7 +33,7 @@ export function Nav() {
         {/* Desktop layout */}
         <div className="hidden md:flex items-center gap-6">
           <Link href="/dashboard" className="font-semibold text-lg">
-            SBA Converter
+            CSV to XML Converter
           </Link>
           {links.map(({ href, label }) => (
             <Link
@@ -66,7 +66,7 @@ export function Nav() {
           href="/dashboard"
           className="md:hidden font-semibold text-lg"
         >
-          SBA Converter
+          CSV to XML Converter
         </Link>
         <button
           type="button"

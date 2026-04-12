@@ -17,7 +17,7 @@ export default function HelpPage() {
     <main className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold mb-2">Help</h1>
       <p className="text-sm text-gray-600 mb-8">
-        How to use the SBA CSV to XML converter, common errors, and
+        How to use the CSV to XML converter, common errors, and
         who to contact if something goes wrong.
       </p>
 
@@ -36,7 +36,7 @@ export default function HelpPage() {
 
       <Section id="overview" title="What this tool does">
         <p>
-          The SBA CSV to XML converter takes a counseling or training
+          This tool takes a counseling or training
           CSV export from Salesforce and produces an XSD-compliant XML
           file ready for submission to the SBA. Along the way it:
         </p>

@@ -18,7 +18,7 @@ export default function Home() {
       {/* Hero */}
       <section className="text-center mb-16">
         <h1 className="text-3xl sm:text-4xl font-bold mb-4">
-          SBA CSV to XML Converter
+          CSV to XML Converter
         </h1>
         <p className="text-base sm:text-lg text-gray-700 mb-8 max-w-2xl mx-auto leading-relaxed">
           Upload counseling or training CSV exports from Salesforce,
@@ -120,7 +120,7 @@ export default function Home() {
 
       {/* Footer note */}
       <p className="text-xs text-gray-500 text-center">
-        Your data stays on SBA infrastructure. Nothing is sent to
+        Your data is processed internally. Nothing is sent to
         third-party services.
       </p>
     </main>

@@ -206,8 +206,8 @@ function ConvertForm() {
 
         <p className="text-xs text-gray-600 leading-relaxed">
           Your CSV is stored in your account and is visible only to you.
-          Files are retained per SBA policy. Data is processed on SBA
-          infrastructure; nothing is sent to third-party services.
+          Files are retained per our data-retention policy. Data is processed
+          internally; nothing is sent to third-party services.
         </p>
       </form>
     </main>

@@ -74,7 +74,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Create Account</h1>
-          <p className="text-gray-500 mt-1">SBA CSV to XML Converter</p>
+          <p className="text-gray-500 mt-1">CSV to XML Converter</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

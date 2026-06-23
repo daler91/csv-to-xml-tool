@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
@@ -59,6 +59,21 @@ export async function POST(req: Request) {
     // Sanitize filename to prevent path traversal
     const sanitizedFileName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
 
+    // SEC-2: validate previousJobId ownership before linking, to prevent an
+    // IDOR where a user attaches their new job to another user's job id.
+    if (previousJobId) {
+      const previousJob = await prisma.job.findFirst({
+        where: { id: previousJobId, userId: user.id },
+        select: { id: true },
+      });
+      if (!previousJob) {
+        return NextResponse.json(
+          { error: "Invalid previousJobId" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Create job first to get ID
     const job = await prisma.job.create({
       data: {
@@ -72,16 +87,26 @@ export async function POST(req: Request) {
 
     // Save file to volume
     const uploadDir = path.join(DATA_DIR, "uploads", job.id);
-    await mkdir(uploadDir, { recursive: true });
-    const filePath = path.join(uploadDir, sanitizedFileName);
-    const bytes = await file.arrayBuffer();
-    await writeFile(filePath, Buffer.from(bytes));
+    try {
+      await mkdir(uploadDir, { recursive: true });
+      const filePath = path.join(uploadDir, sanitizedFileName);
+      const bytes = await file.arrayBuffer();
+      await writeFile(filePath, Buffer.from(bytes));
 
-    // Update job with file path
-    await prisma.job.update({
-      where: { id: job.id },
-      data: { inputFilePath: filePath },
-    });
+      // Update job with file path
+      await prisma.job.update({
+        where: { id: job.id },
+        data: { inputFilePath: filePath },
+      });
+    } catch (saveError) {
+      // DATA-1: compensating cleanup so a failed save can't leave an orphaned
+      // job row (with an empty inputFilePath) behind. No child AuditEntry exists
+      // yet here — it is created only after a successful update — so deleting
+      // the job is safe.
+      await prisma.job.delete({ where: { id: job.id } }).catch(() => {});
+      await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
+      throw saveError;
+    }
 
     // Create audit entry
     await prisma.auditEntry.create({

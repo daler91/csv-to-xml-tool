@@ -4,6 +4,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
+import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -38,8 +39,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
         { error: "File size exceeds 50MB limit" },
         { status: 413 }

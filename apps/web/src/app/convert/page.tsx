@@ -8,8 +8,7 @@ import { Skeleton } from "@/components/skeleton";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, mirrors /api/upload
+import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 
 function isCsvFile(f: File): boolean {
   return f.name.toLowerCase().endsWith(".csv");
@@ -34,7 +33,7 @@ function ConvertForm() {
       );
       return;
     }
-    if (candidate.size > MAX_FILE_BYTES) {
+    if (candidate.size > MAX_UPLOAD_BYTES) {
       toast.error(
         "That file is larger than 50MB. Split it into smaller batches and try again."
       );

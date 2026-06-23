@@ -1,4 +1,5 @@
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:8000";
+const WORKER_AUTH_TOKEN = process.env.WORKER_AUTH_TOKEN || "";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 export async function workerFetch<T>(
@@ -15,6 +16,10 @@ export async function workerFetch<T>(
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        // SEC-1: authenticate every worker call with the shared bearer token.
+        ...(WORKER_AUTH_TOKEN
+          ? { Authorization: `Bearer ${WORKER_AUTH_TOKEN}` }
+          : {}),
         ...fetchOptions?.headers,
       },
     });

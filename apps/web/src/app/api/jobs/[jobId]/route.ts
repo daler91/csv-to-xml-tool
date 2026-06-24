@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
+import { reapStuckConvertingJobs } from "@/lib/job-reaper";
 
 interface ProgressSnapshot {
   processed: number;
@@ -32,6 +33,10 @@ export async function GET(
   try {
     const user = await getRequiredUser();
     const { jobId } = await params;
+
+    // ARCH-1: reconcile stuck "converting" jobs before reading, so a job whose
+    // process died is shown as "error" instead of a perpetual converting state.
+    await reapStuckConvertingJobs(user.id);
 
     const job = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },

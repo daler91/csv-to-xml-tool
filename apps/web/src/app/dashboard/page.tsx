@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { StatusIcon } from "@/components/status-icon";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { buttonClasses } from "@/components/ui/button-classes";
+import { reapStuckConvertingJobs } from "@/lib/job-reaper";
 
 const PAGE_SIZE = 20;
 
@@ -19,6 +20,9 @@ export default async function DashboardPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
   const skip = (page - 1) * PAGE_SIZE;
+
+  // ARCH-1: reconcile stuck "converting" jobs before listing.
+  await reapStuckConvertingJobs(session.user.id);
 
   const [jobs, totalCount] = await Promise.all([
     prisma.job.findMany({

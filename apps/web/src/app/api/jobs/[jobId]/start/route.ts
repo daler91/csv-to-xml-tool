@@ -15,6 +15,13 @@ const DATA_DIR = process.env.DATA_DIR || "/data";
 // started a second time.
 const STARTABLE_STATUSES = ["uploaded", "previewed", "mapping"] as const;
 
+// Per-conversion worker timeout (ARCH-1). The global worker-client default is
+// 5 min, which wrongly aborts long-but-valid conversions; raise it for /convert
+// specifically. The stuck-job reaper (lib/job-reaper.ts) catches jobs whose
+// process dies before this fires, and its deadline must exceed this value.
+const CONVERSION_TIMEOUT_MS =
+  Number(process.env.CONVERSION_TIMEOUT_MS) || 30 * 60 * 1000;
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -98,6 +105,7 @@ export async function POST(
         column_mapping: job.columnMapping,
         file_content: fileContent,
       }),
+      timeoutMs: CONVERSION_TIMEOUT_MS,
     })
       .then(async (result) => {
         // Save XML content locally for download
@@ -149,7 +157,7 @@ export async function POST(
         // "cancelled" state — only transition converting → error here.
         const updated = await prisma.job.updateMany({
           where: { id: jobId, status: "converting" },
-          data: { status: "error" },
+          data: { status: "error", completedAt: new Date() },
         });
 
         if (updated.count === 0) {

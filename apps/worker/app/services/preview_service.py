@@ -12,6 +12,14 @@ if _SRC_DIR not in sys.path:
 from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
 
 from ..core.security import DATA_DIR
+from .column_requirements import (
+    COUNSELING_REQUIRED,
+    COUNSELING_CONDITIONAL,
+    TRAINING_REQUIRED,
+    TRAINING_CONDITIONAL,
+    TRAINING_CLIENT_REQUIRED,
+    TRAINING_CLIENT_CONDITIONAL,
+)
 
 # Plain-language field metadata shown on the web mapping page.
 # Added for UX_REVIEW.md §3.5 — the mapping page previously exposed
@@ -175,29 +183,8 @@ TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
     },
 }
 
-# Field requirement levels: "required", "conditional", or "optional"
-COUNSELING_REQUIRED = {
-    "Contact ID", "Race", "Ethnicity:", "Gender", "Disability", "Veteran Status",
-    "Currently In Business?", "Type of Session", "Language(s) Used",
-    "Date", "Name of Counselor", "Duration (hours)",
-}
-COUNSELING_CONDITIONAL = {
-    "Branch Of Service",              # required if military status
-    "Internet (specify)",             # required if media=Internet
-    "InternetUsage",                  # required if media=Internet
-    "Legal Entity of Business",       # required if in business
-    "Other legal entity (specify)",   # required if legal entity=Other
-    "FIPS_Code",                      # required if Rural/Urban
-    "Nature of the Counseling Seeking?",           # required if in business
-    "Nature of the Counseling Seeking - Other Detail",  # required if seeking=Other
-    "Other Counseling Provided",      # required if provided=Other
-}
-
-TRAINING_REQUIRED = {"Class/Event ID"}
-TRAINING_CONDITIONAL: set[str] = set()
-
-TRAINING_CLIENT_REQUIRED = {"Class/Event ID", "Contact ID"}
-TRAINING_CLIENT_CONDITIONAL: set[str] = set()
+# Field requirement levels (required / conditional / optional) live in
+# column_requirements.py and are imported above, so preview and conversion agree.
 
 
 def _build_field_requirements(

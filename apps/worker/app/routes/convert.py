@@ -9,6 +9,7 @@ from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
 from ..services.conversion_service import run_conversion
+from ..services.column_requirements import RequiredColumnsMissingError
 from ..services.progress import registry as progress_registry
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ async def convert(req: ConvertRequest):
     except ConversionCancelledError:
         logger.info("Conversion cancelled for job %s", req.job_id)
         raise HTTPException(status_code=409, detail="Conversion cancelled")
+    except RequiredColumnsMissingError as e:
+        # CONV-1: surface exactly which required columns are missing instead of a
+        # generic 400, so the web layer can record/show what the user must fix.
+        raise HTTPException(status_code=422, detail=str(e))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found")
     except ValueError:

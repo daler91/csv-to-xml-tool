@@ -17,9 +17,15 @@ from src.converters.training_client_converter import TrainingClientConverter
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
+from src.config import ValidationCategory
 
 from .cancellation import ConversionCancelledError
 from .diff_service import generate_cleaning_diff
+from .column_requirements import (
+    classify_columns,
+    read_header_row,
+    RequiredColumnsMissingError,
+)
 
 # Type alias mirroring BaseConverter.ProgressCallback so the worker
 # service doesn't need to import from src/converters/.
@@ -103,6 +109,25 @@ def run_conversion(
             log_to_file=False,
         )
         tracker = ValidationTracker()
+
+        # CONV-1: validate the (post-mapping) header set before converting. A missing
+        # required column hard-fails the job; missing conditional / fabrication-risk
+        # columns become warnings so absent source data is never silently defaulted
+        # into the federal XML.
+        classification = classify_columns(read_header_row(actual_csv_path), converter_type)
+        if classification["missing_required"]:
+            raise RequiredColumnsMissingError(
+                converter_type, classification["missing_required"]
+            )
+        for col in classification["missing_warn"]:
+            tracker.add_issue(
+                "file",
+                "warning",
+                ValidationCategory.MISSING_FIELD,
+                col,
+                f"Column '{col}' is absent; dependent values are left blank or "
+                f"defaulted rather than taken from the source data.",
+            )
 
         # Run conversion
         converter_cls = CONVERTER_MAP[converter_type]

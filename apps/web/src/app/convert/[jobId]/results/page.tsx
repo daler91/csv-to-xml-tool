@@ -60,7 +60,7 @@ export default async function ResultsPage({
 
   if (!job) redirect("/dashboard");
 
-  if (job.status === "converting") {
+  if (job.status === "converting" || job.status === "queued") {
     redirect(`/convert/${jobId}/progress`);
   }
 

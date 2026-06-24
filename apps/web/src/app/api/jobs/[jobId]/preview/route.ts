@@ -60,7 +60,7 @@ export async function GET(
     await prisma.job.updateMany({
       where: {
         id: jobId,
-        status: { notIn: ["cancelled", "complete", "error", "converting"] },
+        status: { notIn: ["cancelled", "complete", "error", "converting", "queued"] },
       },
       data: { status: "previewed" },
     });

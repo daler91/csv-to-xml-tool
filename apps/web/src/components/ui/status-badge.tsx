@@ -41,6 +41,11 @@ const STATUS_META: Record<string, StatusMeta> = {
     kind: "warning",
     color: "bg-yellow-100 text-yellow-800",
   },
+  queued: {
+    label: "Queued",
+    kind: "info",
+    color: "bg-blue-100 text-blue-800",
+  },
   converting: {
     label: "Converting",
     kind: "info",

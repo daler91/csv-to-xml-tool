@@ -23,14 +23,13 @@ export interface PreviewResponse {
 
 export interface ConvertRequest {
   job_id: string;
-  csv_path: string;
+  file_name: string;
   converter_type: string;
   column_mapping?: Record<string, string>;
 }
 
 export interface ConvertResponse {
   xml_path: string;
-  xml_content?: string;
   stats: {
     total: number;
     successful: number;

@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import os
-import tempfile
 
 from fastapi import APIRouter, HTTPException
 
+from ..core.security import resolve_input_csv, resolve_output_xml
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
@@ -28,8 +28,6 @@ router = APIRouter()
     },
 )
 async def convert(req: ConvertRequest):
-    tmp_csv = None
-    tmp_xml = None
     try:
         # Clear any stale progress snapshot left by a previous attempt at this
         # job_id. ARCH-1 can re-queue the same job_id on a transient failure
@@ -41,26 +39,24 @@ async def convert(req: ConvertRequest):
         # it could wipe a cancel that landed in the gap before the worker started.
         await asyncio.to_thread(progress_registry.clear, req.job_id)
 
-        # Write streamed CSV content to a temp file
-        tmp_csv = await asyncio.to_thread(
-            tempfile.NamedTemporaryFile,
-            suffix=".csv", delete=False, mode="w", encoding="utf-8",
+        # ARCH-4: read the input straight off the shared volume and write the
+        # output back to it, instead of streaming the file in/out as JSON. Both
+        # paths are derived from the job id (+ file name) and confined to
+        # DATA_DIR; an invalid path raises ValueError -> 400, a missing input
+        # FileNotFoundError -> 404 via the handlers below.
+        csv_path = await asyncio.to_thread(
+            resolve_input_csv, req.job_id, req.file_name
         )
-        await asyncio.to_thread(tmp_csv.write, req.file_content)
-        await asyncio.to_thread(tmp_csv.close)
-
-        # Create a temp file for XML output
-        tmp_xml = await asyncio.to_thread(
-            tempfile.NamedTemporaryFile,
-            suffix=".xml", delete=False,
+        xml_path = await asyncio.to_thread(resolve_output_xml, req.job_id)
+        await asyncio.to_thread(
+            os.makedirs, os.path.dirname(xml_path), exist_ok=True
         )
-        await asyncio.to_thread(tmp_xml.close)
 
         # Capture job_id for the cancellation callback; run_conversion will
         # poll cancel_registry.is_cancelled between phases and raise if
         # the user clicked Cancel. The progress callback writes into
-        # the in-memory progress registry, which a separate route
-        # exposes so the web layer can draw the progress bar.
+        # the progress registry, which a separate route exposes so the
+        # web layer can draw the progress bar.
         job_id = req.job_id
 
         def _on_progress(processed: int, total: int) -> None:
@@ -68,23 +64,16 @@ async def convert(req: ConvertRequest):
 
         result = await asyncio.to_thread(
             run_conversion,
-            csv_path=tmp_csv.name,
-            xml_path=tmp_xml.name,
+            csv_path=csv_path,
+            xml_path=xml_path,
             converter_type=req.converter_type,
             column_mapping=req.column_mapping,
             is_cancelled=lambda: cancel_registry.is_cancelled(job_id),
             on_progress=_on_progress,
         )
 
-        # Read generated XML and include in response
-        xml_content = None
-        if await asyncio.to_thread(os.path.exists, tmp_xml.name):
-            def _read_xml():
-                with open(tmp_xml.name, "r", encoding="utf-8") as f:
-                    return f.read()
-            xml_content = await asyncio.to_thread(_read_xml)
-
-        result["xml_content"] = xml_content
+        # run_conversion already set result["xml_path"] = xml_path; the XML now
+        # lives on the shared volume for the web to serve. No content over HTTP.
         return result
     except ConversionCancelledError:
         logger.info("Conversion cancelled for job %s", req.job_id)
@@ -103,16 +92,12 @@ async def convert(req: ConvertRequest):
         logger.exception("Conversion failed")
         raise HTTPException(status_code=500, detail="Internal conversion error")
     finally:
-        # Drop the cancellation flag and progress snapshot so the
-        # same job_id can be reused after a re-upload, and clean up
-        # scratch files. Offloaded to a thread so the Redis round-trips
-        # don't block the event loop.
+        # Drop the cancellation flag and progress snapshot so the same job_id
+        # can be reused after a re-upload. Offloaded to a thread so the Redis
+        # round-trips don't block the event loop. (No scratch files to clean up
+        # anymore — ARCH-4 reads/writes the shared volume directly.)
         await asyncio.to_thread(cancel_registry.clear, req.job_id)
         await asyncio.to_thread(progress_registry.clear, req.job_id)
-        if tmp_csv and os.path.exists(tmp_csv.name):
-            os.unlink(tmp_csv.name)
-        if tmp_xml and os.path.exists(tmp_xml.name):
-            os.unlink(tmp_xml.name)
 
 
 @router.post(

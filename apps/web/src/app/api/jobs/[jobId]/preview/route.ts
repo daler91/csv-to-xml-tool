@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
+import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import type { PreviewResponse } from "@/types";
 
 export async function GET(
@@ -19,6 +20,15 @@ export async function GET(
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // SEC-1: enforce the upload size cap server-side before streaming to the worker.
+    const { size: inputSize } = await stat(job.inputFilePath);
+    if (inputSize > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: "File size exceeds 50MB limit" },
+        { status: 413 }
+      );
     }
 
     // Read file content and stream to worker

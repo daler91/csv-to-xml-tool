@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
+import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import type { ConvertResponse } from "@/types";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -37,6 +38,18 @@ export async function POST(
             `This job is ${job.status} and can't be started. Upload the file again if you want to re-convert.`,
         },
         { status: 409 }
+      );
+    }
+
+    // SEC-1: re-enforce the upload size cap server-side before streaming the
+    // file to the worker. The browser-facing upload route checks file.size,
+    // but the worker must never be handed an oversized payload regardless of
+    // how the file reached disk.
+    const { size: inputSize } = await stat(job.inputFilePath);
+    if (inputSize > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: "File size exceeds 50MB limit" },
+        { status: 413 }
       );
     }
 

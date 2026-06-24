@@ -1,0 +1,7 @@
+# Test-only dependencies for the worker. Install with:
+#   pip install -r apps/worker/requirements-dev.txt
+-r requirements.txt
+
+# Hermetic in-memory Redis so the registry tests need no live server.
+fakeredis
+pytest

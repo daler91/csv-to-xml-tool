@@ -1,26 +1,14 @@
 import { NextResponse } from "next/server";
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
-import path from "node:path";
+import { stat } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
-import { workerFetch } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
-import type { ConvertResponse } from "@/types";
+import { enqueueJob } from "@/lib/job-queue";
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
-
-// Statuses a job can transition *out of* into "converting".
-// A cancelled/complete/error job can't be started — the user should
-// re-upload instead. A job already in status=converting can't be
-// started a second time.
+// Statuses a job can transition *out of* into the queue.
+// A cancelled/complete/error job can't be started — the user should re-upload
+// instead. A job already queued/converting can't be started a second time.
 const STARTABLE_STATUSES = ["uploaded", "previewed", "mapping"] as const;
-
-// Per-conversion worker timeout (ARCH-1). The global worker-client default is
-// 5 min, which wrongly aborts long-but-valid conversions; raise it for /convert
-// specifically. The stuck-job reaper (lib/job-reaper.ts) catches jobs whose
-// process dies before this fires, and its deadline must exceed this value.
-const CONVERSION_TIMEOUT_MS =
-  Number(process.env.CONVERSION_TIMEOUT_MS) || 30 * 60 * 1000;
 
 export async function POST(
   _req: Request,
@@ -48,10 +36,9 @@ export async function POST(
       );
     }
 
-    // SEC-1: re-enforce the upload size cap server-side before streaming the
-    // file to the worker. The browser-facing upload route checks file.size,
-    // but the worker must never be handed an oversized payload regardless of
-    // how the file reached disk.
+    // SEC-1: re-enforce the upload size cap server-side. The conversion itself
+    // now happens later in the queue consumer, but the cap is cheap to check
+    // here before we commit the job to the queue.
     const { size: inputSize } = await stat(job.inputFilePath);
     if (inputSize > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
@@ -60,18 +47,19 @@ export async function POST(
       );
     }
 
-    // Conditional transition to "converting". Using updateMany with a
-    // status guard closes the read-then-write race: if the user
-    // cancels (or the job otherwise transitions) between the findFirst
-    // above and this update, updateMany returns count=0 and we bail
-    // instead of reviving a terminal job.
+    // ARCH-1: durable, web-owned queue. Guarded transition to "queued" closes the
+    // read-then-write race (if the job is cancelled / otherwise transitions
+    // between the findFirst above and here, updateMany returns count=0 and we
+    // bail). The background consumer (src/lib/job-consumer.ts) then claims the
+    // job, flips it to "converting", runs the conversion and persists the result,
+    // re-claiming on restart — so a web crash/redeploy no longer strands the job.
     const started = await prisma.job.updateMany({
       where: {
         id: jobId,
         userId: user.id,
         status: { in: [...STARTABLE_STATUSES] },
       },
-      data: { status: "converting" },
+      data: { status: "queued" },
     });
 
     if (started.count === 0) {
@@ -84,102 +72,12 @@ export async function POST(
       );
     }
 
-    await prisma.auditEntry.create({
-      data: {
-        userId: user.id,
-        jobId,
-        action: "conversion_started",
-      },
-    });
+    // The job is durably "queued" in the DB; enqueue it for the consumer. If this
+    // push fails (Redis down), the job stays "queued" and the reaper fails it
+    // after the deadline rather than leaving it stranded.
+    await enqueueJob(jobId);
 
-    // Read file content to stream to worker
-    const fileContent = await readFile(job.inputFilePath, "utf-8");
-
-    // Fire-and-forget: start conversion in background, return immediately
-    workerFetch<ConvertResponse & { xml_content?: string }>("/convert", {
-      method: "POST",
-      body: JSON.stringify({
-        job_id: jobId,
-        file_name: job.inputFileName,
-        converter_type: job.converterType,
-        column_mapping: job.columnMapping,
-        file_content: fileContent,
-      }),
-      timeoutMs: CONVERSION_TIMEOUT_MS,
-    })
-      .then(async (result) => {
-        // Save XML content locally for download
-        let outputFilePath = "";
-        if (result.xml_content) {
-          const outputDir = path.join(DATA_DIR, "output", jobId);
-          await mkdir(outputDir, { recursive: true });
-          outputFilePath = path.join(outputDir, `${jobId}.xml`);
-          await writeFile(outputFilePath, result.xml_content, "utf-8");
-        }
-
-        // Conditional update: only write "complete" if the job is still
-        // converting. If the user cancelled between the worker finishing
-        // and this update firing, updateMany returns count=0 and we
-        // discard the result — the file on disk is orphaned but harmless.
-        const updated = await prisma.job.updateMany({
-          where: { id: jobId, status: "converting" },
-          data: {
-            status: "complete",
-            outputFilePath,
-            totalRows: result.stats.total,
-            summary: result.stats as object,
-            issues: result.issues as object[],
-            cleaningDiffs: result.cleaning_diff as object[],
-            xsdValid: result.xsd_valid,
-            xsdErrors: result.xsd_errors,
-            completedAt: new Date(),
-          },
-        });
-
-        if (updated.count === 0) {
-          // Job was cancelled (or otherwise terminal) before we could
-          // write the result. Don't create a completion audit entry.
-          return;
-        }
-
-        await prisma.auditEntry.create({
-          data: {
-            userId: user.id,
-            jobId,
-            action: "conversion_complete",
-            metadata: result.stats,
-          },
-        });
-      })
-      .catch(async (workerError) => {
-        // If the failure is because the worker honoured a cancel request
-        // or the user cancelled out-of-band, leave the job in its
-        // "cancelled" state — only transition converting → error here.
-        const updated = await prisma.job.updateMany({
-          where: { id: jobId, status: "converting" },
-          data: { status: "error", completedAt: new Date() },
-        });
-
-        if (updated.count === 0) {
-          return;
-        }
-
-        await prisma.auditEntry.create({
-          data: {
-            userId: user.id,
-            jobId,
-            action: "conversion_failed",
-            metadata: {
-              error:
-                workerError instanceof Error
-                  ? workerError.message
-                  : "Unknown error",
-            },
-          },
-        });
-      });
-
-    return NextResponse.json({ status: "converting" }, { status: 202 });
+    return NextResponse.json({ status: "queued" }, { status: 202 });
   } catch {
     return NextResponse.json(
       { error: "Failed to start conversion" },

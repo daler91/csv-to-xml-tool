@@ -4,28 +4,24 @@ import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
 
 /**
- * Cancel an in-flight conversion.
+ * Cancel a queued or in-flight conversion.
  *
- * The database is the authoritative source of state: we flip
- * ``job.status`` to ``"cancelled"`` immediately so the progress page,
- * dashboard, and any future reads see the cancellation even if the
- * worker is still crunching. We then poke the worker to drop the job
- * at its next checkpoint (best-effort — we don't block on the
- * response).
+ * The database is the authoritative source of state: we flip ``job.status`` to
+ * ``"cancelled"`` immediately so the progress page, dashboard, and any future
+ * reads see the cancellation even if the worker is still crunching. We then poke
+ * the worker to drop the job at its next checkpoint (best-effort — we don't block
+ * on the response).
  *
- * Only jobs in status ``"converting"`` can be cancelled. The Cancel
- * button in the UI is only rendered while a job is converting (see
- * ``convert/[jobId]/progress/page.tsx``), and the /start and /preview
- * endpoints unconditionally write other statuses — so marking an
- * ``uploaded`` / ``previewed`` / ``mapping`` job as cancelled would
- * create a contradictory state that a later start or preview call
- * could revive. For anything else we return the current status
- * idempotently so repeat clicks are safe.
+ * Only jobs that are ``"queued"`` or ``"converting"`` can be cancelled. Marking
+ * an ``uploaded`` / ``previewed`` / ``mapping`` job as cancelled would create a
+ * contradictory state that a later start or preview call could revive; for those
+ * (and terminal states) we return the current status idempotently so repeat
+ * clicks are safe.
  *
- * The /start route's background handler uses conditional ``updateMany``
- * against ``status: "converting"`` so a late-arriving complete or
- * error from the worker cannot overwrite a cancellation that landed
- * in the race window.
+ * Race safety: the guarded ``updateMany`` against ``status in {queued,converting}``
+ * means a late-arriving complete/error from the queue consumer cannot overwrite a
+ * cancellation that landed in the race window — and the consumer's own guarded
+ * update no-ops a job we cancelled while it was still queued, so it is never run.
  */
 export async function POST(
   _req: Request,
@@ -43,20 +39,19 @@ export async function POST(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    if (job.status !== "converting") {
-      // Idempotent no-op for terminal states (complete, error,
-      // cancelled) and pre-converting states (uploaded, previewed,
-      // mapping). Repeat clicks from a stale tab return the current
-      // status without modifying anything.
+    if (job.status !== "queued" && job.status !== "converting") {
+      // Idempotent no-op for terminal states (complete, error, cancelled) and
+      // pre-start states (uploaded, previewed, mapping). Repeat clicks from a
+      // stale tab return the current status without modifying anything.
       return NextResponse.json({ status: job.status }, { status: 200 });
     }
 
-    // Conditional update: only flip to cancelled if the job is still
-    // converting. If the worker's completion PATCH lands in the
-    // narrow race window, updateMany returns count=0 and we report
-    // the post-race status instead of reviving a terminal job.
+    // Conditional update: only flip to cancelled if the job is still queued or
+    // converting. If a completion lands in the narrow race window, updateMany
+    // returns count=0 and we report the post-race status instead of reviving a
+    // terminal job.
     const cancelled = await prisma.job.updateMany({
-      where: { id: jobId, status: "converting" },
+      where: { id: jobId, status: { in: ["queued", "converting"] } },
       data: { status: "cancelled", completedAt: new Date() },
     });
 
@@ -76,10 +71,10 @@ export async function POST(
       },
     });
 
-    // Tell the worker to drop the job at its next checkpoint.
-    // Fire-and-forget: if the worker never receives this, the database
-    // state is still correct and the orphaned result will be discarded
-    // by the start route's background handler.
+    // Tell the worker to drop the job at its next checkpoint. Fire-and-forget:
+    // if the worker never receives it (or the job was still queued and never
+    // reached the worker), the database state is still correct and the queue
+    // consumer will discard any orphaned result.
     workerFetch(`/convert/${encodeURIComponent(jobId)}/cancel`, {
       method: "POST",
       body: "{}",

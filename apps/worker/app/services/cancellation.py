@@ -13,14 +13,27 @@ synchronous converter code has no yield points. The checkpoints in
 (cleaning diff, convert, XSD validation). For typical SBA uploads that is
 well under a minute.
 
-The registry is thread-safe so it can be polled from the thread that
-``asyncio.to_thread`` schedules the conversion on while the FastAPI event
-loop writes to it.
+The cancellation flag lives in Redis (ARCH-2/ARCH-3) under
+``csvxml:cancel:{job_id}`` so the cancel signal reaches the conversion no
+matter which worker process received the cancel request. The public API
+(``registry.cancel/is_cancelled/clear``) is unchanged from the previous
+in-memory implementation.
+
+Fail-soft semantics: if Redis is unavailable, ``is_cancelled`` returns
+**False** so a transient Redis blip can never abort a legitimate in-flight
+conversion. That is safe because the web database — not this signal — is
+authoritative: the job is already marked ``cancelled`` there, and the queue
+consumer discards any result the worker produces for a cancelled job. A
+missed signal only costs wasted CPU until the cooperative checkpoints finish.
 """
 
 from __future__ import annotations
 
-import threading
+import logging
+
+from .redis_client import TTL_SECONDS, cancel_key, get_client
+
+logger = logging.getLogger(__name__)
 
 
 class ConversionCancelledError(Exception):
@@ -28,25 +41,36 @@ class ConversionCancelledError(Exception):
 
 
 class CancellationRegistry:
-    """Thread-safe set of job IDs that should be cancelled on next check."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._cancelled: set[str] = set()
+    """Redis-backed set of job IDs that should be cancelled on next check."""
 
     def cancel(self, job_id: str) -> None:
-        with self._lock:
-            self._cancelled.add(job_id)
+        try:
+            get_client().set(cancel_key(job_id), "1", ex=TTL_SECONDS)
+        except Exception:
+            # Best-effort: the DB already holds the authoritative cancelled
+            # state, so a lost signal only means the worker keeps crunching
+            # until it finishes. Surface it so the degradation is observable.
+            logger.warning("cancellation.cancel failed for job %s", job_id, exc_info=True)
 
     def is_cancelled(self, job_id: str) -> bool:
-        with self._lock:
-            return job_id in self._cancelled
+        try:
+            return bool(get_client().exists(cancel_key(job_id)))
+        except Exception:
+            # Fail-soft: never cancel a valid conversion because Redis hiccuped.
+            logger.warning(
+                "cancellation.is_cancelled failed for job %s; treating as not cancelled",
+                job_id,
+                exc_info=True,
+            )
+            return False
 
     def clear(self, job_id: str) -> None:
-        with self._lock:
-            self._cancelled.discard(job_id)
+        try:
+            get_client().delete(cancel_key(job_id))
+        except Exception:
+            logger.warning("cancellation.clear failed for job %s", job_id, exc_info=True)
 
 
-# Module-level singleton. The FastAPI app is a single process, so sharing
-# state in-process is fine. A multi-worker deployment would need Redis here.
+# Module-level singleton. State is in Redis, so this is just a stateless
+# façade shared by every worker process.
 registry = CancellationRegistry()

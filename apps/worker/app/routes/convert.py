@@ -31,6 +31,16 @@ async def convert(req: ConvertRequest):
     tmp_csv = None
     tmp_xml = None
     try:
+        # Clear any stale progress snapshot left by a previous attempt at this
+        # job_id. ARCH-1 can re-queue the same job_id on a transient failure
+        # (attempts run sequentially), so resetting on entry stops a poll from
+        # reading the dead attempt's snapshot — the new attempt then writes
+        # fresh progress. We deliberately do NOT clear the cancel flag here: it
+        # is only ever set after the web has authoritatively marked the job
+        # cancelled, so it never applies to a fresh legitimate run, and clearing
+        # it could wipe a cancel that landed in the gap before the worker started.
+        await asyncio.to_thread(progress_registry.clear, req.job_id)
+
         # Write streamed CSV content to a temp file
         tmp_csv = await asyncio.to_thread(
             tempfile.NamedTemporaryFile,
@@ -95,9 +105,10 @@ async def convert(req: ConvertRequest):
     finally:
         # Drop the cancellation flag and progress snapshot so the
         # same job_id can be reused after a re-upload, and clean up
-        # scratch files.
-        cancel_registry.clear(req.job_id)
-        progress_registry.clear(req.job_id)
+        # scratch files. Offloaded to a thread so the Redis round-trips
+        # don't block the event loop.
+        await asyncio.to_thread(cancel_registry.clear, req.job_id)
+        await asyncio.to_thread(progress_registry.clear, req.job_id)
         if tmp_csv and os.path.exists(tmp_csv.name):
             os.unlink(tmp_csv.name)
         if tmp_xml and os.path.exists(tmp_xml.name):
@@ -122,7 +133,7 @@ async def cancel_convert(job_id: str):
     so the worker can stop wasting CPU on a cancelled job as quickly as
     the cooperative checkpoints allow.
     """
-    cancel_registry.cancel(job_id)
+    await asyncio.to_thread(cancel_registry.cancel, job_id)
     return {"job_id": job_id, "cancelled": True}
 
 
@@ -144,7 +155,7 @@ async def get_convert_progress(job_id: str):
     the /convert route's finally block) or because the worker
     hasn't started yet.
     """
-    snap = progress_registry.get(job_id)
+    snap = await asyncio.to_thread(progress_registry.get, job_id)
     if snap is None:
         raise HTTPException(
             status_code=404, detail="No progress recorded for this job"

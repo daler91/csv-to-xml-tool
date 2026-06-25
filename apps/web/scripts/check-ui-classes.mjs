@@ -161,7 +161,9 @@ async function main() {
   report(violations, files.length);
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   console.error("check-ui-classes failed:", err);
   process.exit(2);
-});
+}

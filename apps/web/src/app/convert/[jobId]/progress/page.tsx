@@ -241,21 +241,16 @@ export default function ProgressPage() {
       )}
 
       {/* Progress Bar */}
-      <div
-        role="progressbar"
-        aria-valuenow={percentage}
-        aria-valuemin={0}
-        aria-valuemax={100}
+      <progress
+        value={percentage}
+        max={100}
         aria-label={`Conversion progress: ${percentage}%`}
-        className="w-full bg-gray-200 rounded-full h-4 mb-6 overflow-hidden"
-      >
-        <div
-          className={`h-4 rounded-full transition-all duration-500 ease-out ${
-            isCancelled ? "bg-gray-400" : "bg-blue-600"
-          }`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+        className={`block w-full h-4 mb-6 appearance-none overflow-hidden rounded-full bg-gray-200 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-gray-200 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:transition-all [&::-webkit-progress-value]:duration-500 [&::-webkit-progress-value]:ease-out [&::-moz-progress-bar]:rounded-full ${
+          isCancelled
+            ? "[&::-webkit-progress-value]:bg-gray-400 [&::-moz-progress-bar]:bg-gray-400"
+            : "[&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"
+        }`}
+      />
 
       <div className="text-center text-lg font-semibold mb-8">{percentage}%</div>
 

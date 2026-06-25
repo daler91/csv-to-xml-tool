@@ -23,12 +23,16 @@ export function SkeletonText({
   lines = 1,
   className = "",
 }: Readonly<{ lines?: number; className?: string }>) {
+  const rows = Array.from({ length: lines }, (_, i) => ({
+    key: `line-${i}`,
+    isLast: i === lines - 1,
+  }));
   return (
     <div className={`space-y-2 ${className}`} aria-hidden="true">
-      {Array.from({ length: lines }).map((_, i) => (
+      {rows.map(({ key, isLast }) => (
         <Skeleton
-          key={i}
-          className={`h-4 ${i === lines - 1 ? "w-2/3" : "w-full"}`}
+          key={key}
+          className={`h-4 ${isLast ? "w-2/3" : "w-full"}`}
         />
       ))}
     </div>
@@ -39,25 +43,29 @@ export function SkeletonTable({
   rows = 5,
   columns = 4,
 }: Readonly<{ rows?: number; columns?: number }>) {
+  const columnKeys = Array.from({ length: columns }, (_, i) => `col-${i}`);
+  const rowKeys = Array.from({ length: rows }, (_, i) => `row-${i}`);
   return (
-    <div
-      aria-hidden="true"
-      role="status"
+    <output
       aria-label="Loading"
-      className="bg-white border rounded overflow-hidden"
+      className="block bg-white border rounded overflow-hidden"
     >
-      <div className="border-b bg-gray-50 flex gap-3 px-4 py-3">
-        {Array.from({ length: columns }).map((_, i) => (
-          <Skeleton key={i} className="h-4 flex-1" />
+      <div aria-hidden="true" className="border-b bg-gray-50 flex gap-3 px-4 py-3">
+        {columnKeys.map((colKey) => (
+          <Skeleton key={colKey} className="h-4 flex-1" />
         ))}
       </div>
-      {Array.from({ length: rows }).map((_, r) => (
-        <div key={r} className="border-b flex gap-3 px-4 py-3 last:border-b-0">
-          {Array.from({ length: columns }).map((_, c) => (
-            <Skeleton key={c} className="h-4 flex-1" />
+      {rowKeys.map((rowKey) => (
+        <div
+          key={rowKey}
+          aria-hidden="true"
+          className="border-b flex gap-3 px-4 py-3 last:border-b-0"
+        >
+          {columnKeys.map((colKey) => (
+            <Skeleton key={`${rowKey}-${colKey}`} className="h-4 flex-1" />
           ))}
         </div>
       ))}
-    </div>
+    </output>
   );
 }

@@ -190,29 +190,33 @@ class ValidationTracker:
         if not categories:
             return ""
 
-        html_content = f"""
+        # Accumulate into a list and join once: `str += ` in a loop is O(n^2)
+        # because each concat copies the whole growing string (QUAL-4).
+        parts = [f"""
     <h2>{title}</h2>
     <table>
         <tr>
             <th>Category</th>
             <th>Count</th>
         </tr>
-"""
+"""]
         for category, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
-            html_content += f"""        <tr>
+            parts.append(f"""        <tr>
             <td>{category}</td>
             <td>{count}</td>
         </tr>
-"""
-        html_content += "    </table>\n"
-        return html_content
+""")
+        parts.append("    </table>\n")
+        return "".join(parts)
 
     def _generate_issues_table(self) -> str:
         """Generate the detailed issues table."""
         if not self.issues:
             return ""
 
-        html_content = """
+        # Accumulate into a list and join once: `str += ` in a loop is O(n^2),
+        # and self.issues can be thousands of rows on a large run (QUAL-4).
+        parts = ["""
     <h2>Detailed Issues</h2>
     <table>
         <tr>
@@ -222,24 +226,24 @@ class ValidationTracker:
             <th>Field</th>
             <th>Message</th>
         </tr>
-"""
+"""]
 
         # Sort issues by severity (errors first) and then by record ID
         sorted_issues = sorted(self.issues, key=lambda x: (0 if x['severity'] == 'error' else 1, x['record_id']))
 
         for issue in sorted_issues:
             severity_class = "error" if issue['severity'] == 'error' else "warning"
-            html_content += f"""        <tr>
+            parts.append(f"""        <tr>
             <td>{issue['record_id']}</td>
             <td class="{severity_class}">{issue['severity'].upper()}</td>
             <td>{issue['category']}</td>
             <td>{issue['field_name']}</td>
             <td>{issue['message']}</td>
         </tr>
-"""
+""")
 
-        html_content += "    </table>\n"
-        return html_content
+        parts.append("    </table>\n")
+        return "".join(parts)
 
     def generate_html_report(self, output_dir: str = ".") -> str:
         """

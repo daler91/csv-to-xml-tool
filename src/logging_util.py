@@ -6,6 +6,7 @@ This module provides configurable logging functionality for the conversion proce
 """
 
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 from datetime import datetime
 
@@ -18,6 +19,8 @@ class ConversionLogger:
                  log_to_file=True,
                  log_dir="logs",
                  log_file_path=None,
+                 max_bytes=10 * 1024 * 1024,
+                 backup_count=5,
                  console_format='%(levelname)s: %(message)s',
                  file_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') -> None:
         """
@@ -29,6 +32,8 @@ class ConversionLogger:
             log_to_file: Whether to save logs to a file.
             log_dir: Directory to store log files if log_file_path is not specified.
             log_file_path: Specific path for the log file. Overrides log_dir and timestamped name.
+            max_bytes: Max size in bytes of a log file before it rotates (default 10 MB).
+            backup_count: Number of rotated log files to keep (default 5).
             console_format: Format string for console handler.
             file_format: Format string for file handler.
         """
@@ -60,7 +65,11 @@ class ConversionLogger:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 actual_log_file_path = os.path.join(log_dir, f"{logger_name}_{timestamp}.log")
             
-            file_handler = logging.FileHandler(actual_log_file_path)
+            # Rotate so a long-running CLI doesn't grow the log file unbounded
+            # (QUAL-5): cap each file at max_bytes and keep backup_count old files.
+            file_handler = RotatingFileHandler(
+                actual_log_file_path, maxBytes=max_bytes, backupCount=backup_count
+            )
             file_handler.setLevel(log_level)
             file_formatter = logging.Formatter(file_format)
             file_handler.setFormatter(file_formatter)

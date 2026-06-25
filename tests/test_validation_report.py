@@ -88,5 +88,39 @@ class TestValidationTracker(unittest.TestCase):
         self.assertIn("Successfully processed: <strong class=\"success\">0 (0.0%)</strong>", content)
         self.assertIn("Failed records: <strong class=\"error\">0</strong>", content)
 
+    def test_generate_html_report_large_issue_set(self):
+        # QUAL-4: the issue/category tables are now assembled with "".join()
+        # instead of repeated `+=` (which was O(n^2)). Build a large set and
+        # assert every row is rendered exactly once, so the join path produces
+        # complete, correct output at scale.
+        n = 2000
+        for i in range(n):
+            severity = "error" if i % 2 == 0 else "warning"
+            self.tracker.record_processed(success=(severity != "error"))
+            self.tracker.add_issue(
+                record_id=f"REC-{i:05d}",
+                severity=severity,
+                category=f"cat_{i % 7}",
+                field_name=f"Field {i % 5}",
+                message=f"Issue number {i}",
+            )
+
+        report_path = self.tracker.generate_html_report(output_dir=self.test_dir)
+        with open(report_path, 'r') as f:
+            content = f.read()
+
+        # First and last record IDs both present (nothing dropped by the join).
+        self.assertIn("REC-00000", content)
+        self.assertIn(f"REC-{n - 1:05d}", content)
+        # Each issue is rendered exactly once -> n detailed-issue rows total.
+        rendered_rows = (
+            content.count('<td class="error">ERROR</td>')
+            + content.count('<td class="warning">WARNING</td>')
+        )
+        self.assertEqual(rendered_rows, n)
+        # Both category tables are emitted.
+        self.assertIn("Errors by Category", content)
+        self.assertIn("Warnings by Category", content)
+
 if __name__ == '__main__':
     unittest.main()

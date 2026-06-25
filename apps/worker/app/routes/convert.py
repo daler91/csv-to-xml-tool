@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException
 
 from ..core.security import resolve_input_csv, resolve_output_xml
+from ..logging_context import job_id_var
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
@@ -31,6 +32,9 @@ router = APIRouter()
     },
 )
 async def convert(req: ConvertRequest):
+    # Bind the job id for the rest of this request's logs (incl. the conversion
+    # thread, since asyncio.to_thread copies the context) — QUAL-5 correlation.
+    job_id_var.set(req.job_id)
     try:
         # Clear any stale progress snapshot left by a previous attempt at this
         # job_id. ARCH-1 can re-queue the same job_id on a transient failure
@@ -125,6 +129,7 @@ async def cancel_convert(job_id: str):
     so the worker can stop wasting CPU on a cancelled job as quickly as
     the cooperative checkpoints allow.
     """
+    job_id_var.set(job_id)
     await asyncio.to_thread(cancel_registry.cancel, job_id)
     return {"job_id": job_id, "cancelled": True}
 
@@ -147,6 +152,7 @@ async def get_convert_progress(job_id: str):
     the /convert route's finally block) or because the worker
     hasn't started yet.
     """
+    job_id_var.set(job_id)
     snap = await asyncio.to_thread(progress_registry.get, job_id)
     if snap is None:
         raise HTTPException(

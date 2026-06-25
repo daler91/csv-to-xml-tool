@@ -6,9 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .core.auth import require_worker_token
+from .logging_context import LOG_FORMAT, install_job_id_log_factory
 from .routes import health, preview, convert, validate
 
-logging.basicConfig(level=logging.INFO)
+# Tag every log record with the active job id (default "-") so logs are
+# correlatable across the web↔worker boundary (QUAL-5).
+install_job_id_log_factory()
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CSV-to-XML Worker", version="1.2.0")

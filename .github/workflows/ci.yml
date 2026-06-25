@@ -33,7 +33,10 @@ jobs:
           pip-audit -r requirements.txt -r apps/worker/requirements.txt
 
       - name: Run tests
-        run: python -m pytest tests/ -v
+        # Coverage gate (QUAL-2): measure src/ + the worker app and fail under
+        # the current baseline (~71%) so coverage can't regress. Raise the floor
+        # as coverage improves.
+        run: python -m pytest tests/ -v --cov=src --cov=apps/worker/app --cov-report=term-missing --cov-report=xml --cov-fail-under=70
 
   web-lint:
     runs-on: ubuntu-latest

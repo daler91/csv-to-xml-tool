@@ -245,6 +245,38 @@ class TestCounselingConverter(unittest.TestCase):
         country = root.find('CounselingRecord/ClientRequest/AddressPart1/Country/Code')
         self.assertEqual(country.text, 'United States')
 
+    def test_ambiguous_date_emitted_month_first_and_warned(self):
+        """CONV-3: an ambiguous Date is emitted month-first AND flagged as a warning."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Date': '03/04/2025'})])
+        date_el = root.find('CounselingRecord/CounselorRecord/DateCounseled')
+        self.assertEqual(date_el.text, '2025-03-04')
+        cats = [i['category'] for i in self.validator.issues]
+        self.assertIn('ambiguous_date', cats)
+
+    def test_unambiguous_date_records_no_warning(self):
+        """CONV-3: an unambiguous ISO Date records no ambiguity warning."""
+        self._convert_and_parse([self._make_valid_row(**{'Date': '2025-03-04'})])
+        cats = [i['category'] for i in self.validator.issues]
+        self.assertNotIn('ambiguous_date', cats)
+
+    def test_percentage_over_100_clamped_and_warned(self):
+        """CONV-7: a >100 % Female value is clamped to 100 AND flagged."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Business Ownership - % Female(old)': '150',
+        })])
+        female = root.find('CounselingRecord/ClientIntake/BusinessOwnership/Female')
+        self.assertEqual(female.text, '100')
+        cats = [i['category'] for i in self.validator.issues]
+        self.assertIn('clamped_value', cats)
+
+    def test_header_whitespace_tolerated(self):
+        """CONV-2: a column whose header has stray whitespace is still matched."""
+        base = self._make_valid_row()
+        row = {(k + ' ' if k == 'Contact ID' else k): v for k, v in base.items()}
+        root = self._convert_and_parse([row])
+        num = root.find('CounselingRecord/PartnerClientNumber')
+        self.assertEqual(num.text, 'C-001')  # not the 'Row_1' fallback
+
 
 if __name__ == '__main__':
     unittest.main()

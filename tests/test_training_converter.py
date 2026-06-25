@@ -187,6 +187,20 @@ class TestTrainingConverter(unittest.TestCase):
         cosponsor = root.find('ManagementTrainingRecord/CosponsorsName')
         self.assertIsNone(cosponsor)
 
+    def test_ambiguous_start_date_warned(self):
+        """CONV-3: an ambiguous Start Date is flagged on the pandas/training path."""
+        self._convert_and_parse([self._make_training_row(**{'Start Date': '03/04/2025'})])
+        cats = [i['category'] for i in self.validator.issues]
+        self.assertIn('ambiguous_date', cats)
+
+    def test_header_whitespace_tolerated(self):
+        """CONV-2: a training header with stray whitespace is still matched (pandas)."""
+        base = self._make_training_row()
+        row = {(k + ' ' if k == 'Class/Event ID' else k): v for k, v in base.items()}
+        root = self._convert_and_parse([row])
+        num = root.find('ManagementTrainingRecord/PartnerTrainingNumber')
+        self.assertEqual(num.text, 'EVT-001')
+
 
 if __name__ == '__main__':
     unittest.main()

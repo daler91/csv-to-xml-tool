@@ -94,6 +94,9 @@ def generate_cleaning_diff(
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row_index, row in enumerate(reader, 1):
+            # CONV-2: normalize header whitespace before mapping/lookup so the diff
+            # matches what conversion reads.
+            row = data_cleaning.normalize_row_keys(row)
             # Apply column mapping (rename keys)
             if rename:
                 row = {rename.get(k, k): v for k, v in row.items()}

@@ -13,6 +13,14 @@ applied, so a CSV the user has correctly mapped is not falsely rejected.
 """
 
 import csv
+import os
+import sys
+
+_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from src.data_cleaning import normalize_header
 
 # --- Requirement tiers (moved here from preview_service so preview and conversion
 # share one definition). "required" -> hard-fail if missing; "conditional" -> warn. ---
@@ -115,6 +123,12 @@ def classify_columns(headers: list[str], converter_type: str) -> dict[str, list[
 
 
 def read_header_row(path: str) -> list[str]:
-    """Read just the header row of a CSV (utf-8-sig, matching the converters)."""
+    """Read just the header row of a CSV (utf-8-sig, matching the converters).
+
+    Headers are whitespace-normalized (CONV-2) so required-column matching here
+    agrees with the normalized keys the converters read. Duplicates are preserved
+    so the caller can detect collisions (two columns collapsing to one name).
+    """
     with open(path, "r", encoding="utf-8-sig", newline="") as f:
-        return next(csv.reader(f), [])
+        header = next(csv.reader(f), [])
+    return [normalize_header(h) for h in header]

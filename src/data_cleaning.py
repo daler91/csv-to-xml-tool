@@ -7,8 +7,13 @@ This module contains functions for cleaning and standardizing Salesforce data fo
 import logging
 import re
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
-from .config import CounselingConfig, DATE_INPUT_FORMATS as DEFAULT_DATE_FORMATS
+from .config import (
+    CounselingConfig,
+    DATE_INPUT_FORMATS as DEFAULT_DATE_FORMATS,
+    MULTI_VALUE_DELIMITER,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -245,6 +250,54 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
     _logger.debug("Failed to parse date '%s' with any known format", date_str)
     return default_return
 
+
+def is_ambiguous_date(date_str: str | None) -> bool:
+    """True when a date is ambiguous between US (month-first) and EU (day-first)
+    reading — i.e. both interpretations parse and yield *different* dates (CONV-3).
+
+    e.g. ``03/04/2025`` (Mar 4 vs Apr 3) -> True; ``03/03/2025`` (same either way),
+    ``13/04/2025`` (only day-first valid), and unambiguous ``2025-03-04`` -> False.
+    ``format_date`` resolves these month-first; this lets the converter flag the
+    value for human review without changing the emitted date.
+    """
+    if is_empty(date_str):
+        return False
+    s = str(date_str).strip()
+
+    def _try(formats):
+        for fmt in formats:
+            try:
+                return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        return None
+
+    month_first = _try(('%m/%d/%Y', '%m/%d/%y', '%m-%d-%Y', '%m-%d-%y'))
+    day_first = _try(('%d/%m/%Y', '%d/%m/%y', '%d-%m-%Y', '%d-%m-%y'))
+    return month_first is not None and day_first is not None and month_first != day_first
+
+
+def normalize_header(name: str) -> str:
+    """Normalize a CSV header for consistent column matching (CONV-2).
+
+    Strips surrounding whitespace and collapses internal whitespace runs to a
+    single space, so a stray trailing/leading or doubled space in an exported
+    header can't silently break a column lookup. Must be applied identically on
+    every read path (the converters, the CONV-1 required-column check, and the
+    preview/diff readers) so they all agree on the column set.
+    """
+    return re.sub(r'\s+', ' ', str(name)).strip()
+
+
+def normalize_row_keys(row: dict) -> dict:
+    """Return a copy of a CSV row dict with its header keys normalized (CONV-2).
+
+    If two headers collapse to the same normalized name the later column wins
+    (dict semantics); callers that care about collisions compare header counts.
+    """
+    return {normalize_header(key): value for key, value in row.items()}
+
+
 def clean_whitespace(text: str | None) -> str:
     """
     Cleans excess whitespace from text while preserving normal spacing between words and sentences.
@@ -294,7 +347,7 @@ def map_gender_to_sex(gender_value: str | None) -> str:
     # Return empty string for any other values like "Non-binary", "Prefer not to say", etc.
     return ""
 
-def split_multi_value(value: str | None, delimiter: str = ";") -> list[str]:
+def split_multi_value(value: str | None, delimiter: str = MULTI_VALUE_DELIMITER) -> list[str]:
     """
     Splits multi-value fields with the specified delimiter.
     Returns an empty list if the value is empty or None.
@@ -314,13 +367,21 @@ def clean_numeric(value: str | int | float | None) -> str:
     
     cleaned_str = str(value).replace(" ", "").replace("$", "").replace(",", "")
 
+    # Parse with Decimal, not float (CONV-4): a float round-trip loses cents on
+    # large financial values and can emit scientific notation like '1E+15', which
+    # is invalid for XSD decimal/integer types.
     try:
-        float_val = float(cleaned_str)
-        if float_val.is_integer():
-            return str(int(float_val))
-        return str(float_val)
-    except (ValueError, TypeError):
+        dec = Decimal(cleaned_str)
+    except (InvalidOperation, ValueError, TypeError):
         return ""
+    if not dec.is_finite():  # reject NaN / Infinity rather than emitting them
+        return ""
+
+    # Integer check BEFORE normalize(): Decimal('100').normalize() is Decimal('1E+2'),
+    # so take the integral branch first to keep whole numbers as plain integers.
+    if dec == dec.to_integral_value():
+        return str(int(dec))
+    return format(dec.normalize(), 'f')
 
 def clean_percentage(value: str | int | float | None) -> str:
     """
@@ -345,6 +406,23 @@ def clean_percentage(value: str | int | float | None) -> str:
         return str(float_val)
     except (ValueError, TypeError):
         return "0"
+
+
+def percentage_was_clamped(value: str | int | float | None) -> bool:
+    """True when ``clean_percentage`` would clamp ``value`` into [0, 100] (CONV-7),
+    i.e. it parses to a number below 0 or above 100. Lets the converter record an
+    audit warning while clean_percentage still clamps the emitted value.
+    """
+    if is_empty(value):
+        return False
+    value_str = str(value).strip()
+    if value_str.endswith('%'):
+        value_str = value_str[:-1].strip()
+    try:
+        float_val = float(value_str)
+    except (ValueError, TypeError):
+        return False
+    return float_val < PERCENTAGE_MIN or float_val > PERCENTAGE_MAX
 
 def truncate_counselor_notes(notes: str | None, max_length: int = CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"]) -> str:
     """

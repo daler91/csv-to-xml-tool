@@ -14,6 +14,7 @@ if _SRC_DIR not in sys.path:
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
 from src.converters.training_client_converter import TrainingClientConverter
+from src.converters.base_converter import EmptyCSVError
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
@@ -114,7 +115,20 @@ def run_conversion(
         # required column hard-fails the job; missing conditional / fabrication-risk
         # columns become warnings so absent source data is never silently defaulted
         # into the federal XML.
-        classification = classify_columns(read_header_row(actual_csv_path), converter_type)
+        header = read_header_row(actual_csv_path)
+        if len(header) != len(set(header)):
+            # CONV-2: two columns collapsed to one name after whitespace
+            # normalization; only the last is used. Surface it rather than
+            # silently dropping a column.
+            tracker.add_issue(
+                "file",
+                "warning",
+                ValidationCategory.INVALID_FORMAT,
+                "input_file",
+                "Two or more columns share the same name after whitespace "
+                "normalization; only the last occurrence was used.",
+            )
+        classification = classify_columns(header, converter_type)
         if classification["missing_required"]:
             raise RequiredColumnsMissingError(
                 converter_type, classification["missing_required"]

@@ -7,7 +7,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import re
 
-from .base_converter import BaseConverter
+from .base_converter import BaseConverter, EmptyCSVError
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
 from ..xml_utils import create_element
@@ -37,12 +37,20 @@ class TrainingConverter(BaseConverter):
     def _read_and_validate_csv(self, input_path):
         """Read CSV, validate columns and rows. Returns (event_groups, event_id_col) or (None, None)."""
         try:
-            df = pd.read_csv(input_path)
+            # CONV-2: explicit utf-8-sig + string dtype (both were missing) and
+            # normalize header whitespace so lookups match the other read paths.
+            df = pd.read_csv(input_path, encoding='utf-8-sig', dtype=str)
+            df.columns = [data_cleaning.normalize_header(c) for c in df.columns]
             self.logger.info(f"Successfully read CSV with {len(df)} records.")
         except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {e}")
             raise
+
+        if df.empty:
+            # CONV-6: a headers-only / empty CSV must fail, not return silently.
+            self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, "input_file", "CSV has headers but no data rows to convert.")
+            raise EmptyCSVError("CSV has no data rows to convert.")
 
         event_id_col = self.config.COLUMN_MAPPING.get("event_id")
         if not event_id_col or event_id_col not in df.columns:
@@ -85,6 +93,14 @@ class TrainingConverter(BaseConverter):
         date_val = self._get_column_value(first_record, "start_date")
         formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS, self.config.DEFAULT_START_DATE)
         create_element(record, 'DateTrainingStarted', formatted_date)
+        if data_cleaning.is_ambiguous_date(date_val):
+            # CONV-3: emitted month-first, but flag the ambiguity for human review.
+            self.validator.add_issue(
+                str(event_id), "warning", ValidationCategory.AMBIGUOUS_DATE,
+                "DateTrainingStarted",
+                f"Start date '{str(date_val).strip()}' is ambiguous between MM/DD "
+                f"and DD/MM; interpreted month-first as {formatted_date}.",
+            )
 
         create_element(record, 'NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS)
         create_element(record, 'TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS)

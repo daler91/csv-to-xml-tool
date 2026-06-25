@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Import the module to test
 import src.fix_sba_xml as fix_sba_xml
+from src.path_safety import output_base, resolve_within
 
 class TestFixSBAXML(unittest.TestCase):
 
@@ -189,12 +190,14 @@ class TestFixSBAXML(unittest.TestCase):
 
             result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
 
+            # --output is confined within the base before use (path_safety).
+            expected_out = resolve_within(output_base(), 'out_dir')
             self.assertEqual(result, 0)
-            mock_exists.assert_any_call('out_dir')
-            mock_makedirs.assert_called_once_with('out_dir')
+            mock_exists.assert_any_call(expected_out)
+            mock_makedirs.assert_called_once_with(expected_out)
             mock_validator_process_directory.assert_called_once_with(
                 input_dir='test_dir',
-                output_dir='out_dir',
+                output_dir=expected_out,
                 recursive=False,
                 pattern='*.xml',
                 xsd_file=None,
@@ -208,9 +211,11 @@ class TestFixSBAXML(unittest.TestCase):
     def test_process_directory_with_output_side_effect(self, mock_exists, mock_makedirs, mock_validator_process_directory):
         """Test directory processing with output directory creation and side effects."""
         mock_validator_process_directory.return_value = 2
-        # Patch exists to only return false for 'out_dir' to not break system calls
+        # --output is confined within the base before use (path_safety); exists()
+        # is checked against that confined path, so key the side effect off it.
+        expected_out = resolve_within(output_base(), 'out_dir')
         def side_effect(path):
-            if path == 'out_dir':
+            if path == expected_out:
                 return False
             return True
         mock_exists.side_effect = side_effect
@@ -222,12 +227,14 @@ class TestFixSBAXML(unittest.TestCase):
 
             result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
 
+            # --output is confined within the base before use (path_safety).
+            expected_out = resolve_within(output_base(), 'out_dir')
             self.assertEqual(result, 0)
-            mock_exists.assert_any_call('out_dir')
-            mock_makedirs.assert_called_once_with('out_dir')
+            mock_exists.assert_any_call(expected_out)
+            mock_makedirs.assert_called_once_with(expected_out)
             mock_validator_process_directory.assert_called_once_with(
                 input_dir='test_dir',
-                output_dir='out_dir',
+                output_dir=expected_out,
                 recursive=False,
                 pattern='*.xml',
                 xsd_file=None,

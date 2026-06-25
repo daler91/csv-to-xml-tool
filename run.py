@@ -11,6 +11,8 @@ import sys
 import glob
 from datetime import datetime
 
+from src.path_safety import output_base, resolve_within
+
 
 EXIT_PROMPT = "\nPress Enter to exit..."
 
@@ -102,6 +104,9 @@ def _pick_output_path(script_dir, input_path):
     print(f"  Default: output/{os.path.basename(default_output)}")
     custom_output = input("  Press Enter for default, or type a custom path: ").strip().strip('"').strip("'")
     output_path = custom_output if custom_output else default_output
+    # Confine the (possibly typed) output path within the allowed base so a
+    # stray "../.." can't escape the tool's working tree (CWE-22).
+    output_path = resolve_within(output_base(), output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     print(f"  -> {output_path}")
     print()
@@ -177,6 +182,10 @@ def main():
 
     # --- Step 2: Pick input CSV file ---
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    # This interactive launcher writes its output/, logs/ and reports/ under the
+    # script directory, so confine writes there by default (operators can widen
+    # it with SBA_OUTPUT_BASE). setdefault keeps an explicit env override.
+    os.environ.setdefault("SBA_OUTPUT_BASE", script_dir)
     input_path = _pick_input_csv(script_dir)
 
     if not os.path.exists(input_path):

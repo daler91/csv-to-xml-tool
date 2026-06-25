@@ -12,6 +12,7 @@ import sys
 from datetime import datetime
 
 from .logging_util import ConversionLogger
+from .path_safety import output_base, resolve_within
 from .validation_report import ValidationTracker
 from .converters.counseling_converter import CounselingConverter
 from .converters.training_converter import TrainingConverter
@@ -66,6 +67,10 @@ def main():
 
     args = parser.parse_args()
 
+    # Confine all writes (logs, output XML, reports) to the working directory by
+    # default; SBA_OUTPUT_BASE widens it. setdefault keeps an explicit override.
+    os.environ.setdefault("SBA_OUTPUT_BASE", os.getcwd())
+
     # --- Initialization ---
     log_level_val = getattr(logging, args.log_level.upper(), logging.INFO)
     logger = ConversionLogger(
@@ -85,12 +90,16 @@ def main():
         sys.exit(1)
 
     if args.output:
-        output_path = args.output
+        # An explicit --output is confined to the working dir (SBA_OUTPUT_BASE).
+        output_path = resolve_within(output_base(), args.output)
     else:
-        csv_dir = os.path.dirname(args.input)
+        # Default: write next to the input. Confine within the input's own
+        # directory so an absolute --input keeps working (its output lands
+        # beside it) while a crafted name can't escape that directory (CWE-22).
+        csv_dir = os.path.dirname(os.path.realpath(args.input))
         base_name = os.path.splitext(os.path.basename(args.input))[0]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(csv_dir, f"{base_name}_{timestamp}.xml")
+        output_path = resolve_within(csv_dir, f"{base_name}_{timestamp}.xml")
 
     # Ensure output directory exists
     output_dir = os.path.dirname(output_path)
@@ -108,12 +117,13 @@ def main():
         # --- Reporting ---
         validator.print_summary()
 
-        os.makedirs(args.report_dir, exist_ok=True)
-        csv_report = validator.save_issues_to_csv(args.report_dir)
+        report_dir = resolve_within(output_base(), args.report_dir)
+        os.makedirs(report_dir, exist_ok=True)
+        csv_report = validator.save_issues_to_csv(report_dir)
         if csv_report:
             logger.info(f"Validation issues CSV report saved to: {csv_report}")
 
-        html_report = validator.generate_html_report(args.report_dir)
+        html_report = validator.generate_html_report(report_dir)
         logger.info(f"Validation HTML report saved to: {html_report}")
 
     except Exception as e:

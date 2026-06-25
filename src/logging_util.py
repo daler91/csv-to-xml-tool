@@ -10,6 +10,13 @@ from logging.handlers import RotatingFileHandler
 import os
 from datetime import datetime
 
+# Imported both as ``src.logging_util`` (package) and standalone ``logging_util``
+# (fix_sba_xml / xml_validator add src/ to sys.path), so resolve path_safety both ways.
+try:
+    from .path_safety import output_base, resolve_within
+except ImportError:  # pragma: no cover - exercised only under standalone import
+    from path_safety import output_base, resolve_within
+
 class ConversionLogger:
     """Handles logging for the CSV to XML conversion process and other utilities."""
     
@@ -52,18 +59,23 @@ class ConversionLogger:
         effective_log_to_file = log_to_file or (log_file_path is not None)
 
         if effective_log_to_file:
+            # Confine the log file within the allowed base (CWE-22): a stray
+            # --log-dir / log_file_path can't write outside SBA_OUTPUT_BASE.
+            base = output_base()
             actual_log_file_path = log_file_path
             if actual_log_file_path:
+                actual_log_file_path = resolve_within(base, actual_log_file_path)
                 # Ensure directory for the specified log_file_path exists
                 log_file_dir = os.path.dirname(actual_log_file_path)
                 if log_file_dir and not os.path.exists(log_file_dir):
                     os.makedirs(log_file_dir)
             else:
                 # Use log_dir and generate timestamped name
+                log_dir = resolve_within(base, log_dir)
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                actual_log_file_path = os.path.join(log_dir, f"{logger_name}_{timestamp}.log")
+                actual_log_file_path = resolve_within(log_dir, f"{logger_name}_{timestamp}.log")
             
             # Rotate so a long-running CLI doesn't grow the log file unbounded
             # (QUAL-5): cap each file at max_bytes and keep backup_count old files.

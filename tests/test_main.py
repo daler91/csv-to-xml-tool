@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.main import main
+from src.path_safety import output_base, resolve_within
 
 class TestMain(unittest.TestCase):
     def setUp(self):
@@ -43,8 +44,10 @@ class TestMain(unittest.TestCase):
 
                 main()
 
-            # Assertions
-            mock_converter_instance.convert.assert_called_with('test.csv', 'test.xml')
+            # Assertions: --output is now confined within the base (path_safety),
+            # so it reaches the converter as a canonical path under SBA_OUTPUT_BASE.
+            expected_output = resolve_within(output_base(), 'test.xml')
+            mock_converter_instance.convert.assert_called_with('test.csv', expected_output)
             self.mock_exit.assert_not_called()
 
     @patch('src.main.ConversionLogger')
@@ -90,8 +93,10 @@ class TestMain(unittest.TestCase):
             with patch.object(sys, 'argv', test_args):
                 main()
 
-            # Assertions
-            expected_output_path = os.path.join('dir', 'test_20230101_120000.xml')
+            # Assertions: the derived "next to input" path is confined within the
+            # input's own directory (path_safety), so it is now absolute.
+            csv_dir = os.path.dirname(os.path.realpath('dir/test.csv'))
+            expected_output_path = resolve_within(csv_dir, 'test_20230101_120000.xml')
             mock_converter_instance.convert.assert_called_with('dir/test.csv', expected_output_path)
             self.mock_exit.assert_not_called()
 

@@ -10,6 +10,8 @@ import os
 from datetime import datetime
 from collections import defaultdict, Counter
 
+from .path_safety import output_base, resolve_within
+
 class ValidationTracker:
     """Tracks validation issues during the conversion process."""
     
@@ -123,14 +125,15 @@ class ValidationTracker:
         """
         if not self.issues:
             return None
-        
-        # Create output directory if it doesn't exist
+
+        # Confine the report directory + file within the allowed base (CWE-22).
+        output_dir = resolve_within(output_base(), output_dir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Create CSV file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_file = os.path.join(output_dir, f"validation_issues_{timestamp}.csv")
+        csv_file = resolve_within(output_dir, f"validation_issues_{timestamp}.csv")
         
         # Define CSV columns
         fieldnames = ['record_id', 'severity', 'category', 'field_name', 'message', 'timestamp']
@@ -255,11 +258,13 @@ class ValidationTracker:
         Returns:
             Path to the created HTML file
         """
+        # Confine the report directory + file within the allowed base (CWE-22).
+        output_dir = resolve_within(output_base(), output_dir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        html_file = os.path.join(output_dir, f"validation_report_{timestamp}.html")
+        html_file = resolve_within(output_dir, f"validation_report_{timestamp}.html")
 
         summary = self.get_summary()
 

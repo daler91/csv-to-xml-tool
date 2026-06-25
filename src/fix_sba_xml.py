@@ -18,6 +18,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from logging_util import ConversionLogger # Import ConversionLogger
+from path_safety import output_base, resolve_within
 
 # Import necessary functions from xml_validator
 from xml_validator import fix_client_intake_element_order as validator_fix_order
@@ -109,13 +110,16 @@ def process_directory(args, logger, always_fix, mimic_original_add_missing):
     # Backups were handled per-file in the old fix-sba-xml.py if output_dir was None.
     # This wrapper will not replicate the backup functionality for directory mode to keep it thin.
     # Users should rely on xml-validator's output directory behavior.
-    if args.output and not os.path.exists(args.output):
-         os.makedirs(args.output)
-         logger.info(f"[fix-sba-xml wrapper] Created output directory: {args.output}")
+    # Confine the output directory within the allowed base (CWE-22) before
+    # creating it or handing it to the validator.
+    output_dir = resolve_within(output_base(), args.output) if args.output else None
+    if output_dir and not os.path.exists(output_dir):
+         os.makedirs(output_dir)
+         logger.info(f"[fix-sba-xml wrapper] Created output directory: {output_dir}")
 
     count = validator_process_directory(
         input_dir=args.directory,
-        output_dir=args.output, # Pass output dir. If None, xml-validator will modify in-place.
+        output_dir=output_dir, # Pass output dir. If None, xml-validator will modify in-place.
         recursive=args.recursive,
         pattern=args.pattern,
         xsd_file=None, # fix-sba-xml didn't use XSD for its directory processing.

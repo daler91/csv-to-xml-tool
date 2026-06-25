@@ -1,0 +1,11 @@
+# Coverage config for the Python suite (QUAL-2). Source dirs are passed on the
+# CI command line via --cov so they're visible in the workflow; this file holds
+# the reporting/exclusion settings.
+[run]
+omit =
+    tests/*
+    */__init__.py
+
+[report]
+show_missing = True
+precision = 1

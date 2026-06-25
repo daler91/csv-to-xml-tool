@@ -25,3 +25,9 @@ apps/web/.env.local
 /data/
 uploads/
 instance/
+
+# Coverage / pytest
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/

@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit && node scripts/check-ui-classes.mjs",
+    "test": "vitest run",
     "postinstall": "prisma generate"
   },
   "keywords": [],
@@ -32,6 +33,7 @@
     "typescript": "^6.0.2"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6"
+    "@types/bcryptjs": "^2.4.6",
+    "vitest": "^4.1.9"
   }
 }

@@ -78,7 +78,9 @@ async function runLoop(): Promise<void> {
   }
 }
 
-async function handleFailure(jobId: string, err: unknown): Promise<void> {
+// Exported for unit testing (the retry/dead-letter classification); the runLoop
+// that calls it isn't directly testable.
+export async function handleFailure(jobId: string, err: unknown): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
   const status = workerErrorStatus(message);
 
@@ -131,7 +133,7 @@ async function deadLetter(jobId: string, error: string): Promise<void> {
 }
 
 /** workerFetch throws Error("Worker error <status>: ...") on a non-OK response. */
-function workerErrorStatus(message: string): number | null {
+export function workerErrorStatus(message: string): number | null {
   const m = message.match(/Worker error (\d+)/);
   return m ? Number(m[1]) : null;
 }

@@ -25,6 +25,11 @@ DATE_INPUT_FORMATS = [
 # Centralized here (CONV-5); split_multi_value() also accepts a per-call override.
 MULTI_VALUE_DELIMITER = ";"
 
+# Default "Services Provided" / training-topic value from the SBA controlled
+# vocabulary. Centralized so the literal isn't repeated across the mappings,
+# the defaults table and the converters (Sonar S1192).
+BUSINESS_STARTUP_PREPLANNING = "Business Start-up/Preplanning"
+
 
 def _fiscal_year_start():
     """Compute the start of the current SBA fiscal year (October 1)."""
@@ -145,7 +150,7 @@ class TrainingConfig:
     TRAINING_TOPIC_MAPPINGS = {
         'Technology': 'Technology', 'Tech': 'Technology', 'IT': 'Technology',
         'Marketing': 'Marketing/Sales', 'Sales': 'Marketing/Sales',
-        'Start-up': 'Business Start-up/Preplanning', 'Startup': 'Business Start-up/Preplanning',
+        'Start-up': BUSINESS_STARTUP_PREPLANNING, 'Startup': BUSINESS_STARTUP_PREPLANNING,
         'Business Plan': 'Business Plan',
     }
 
@@ -254,7 +259,7 @@ class TrainingClientConfig:
         'Other Certifications': '',
         'SBA Financial Assistance': '',
         'Other SBA Financial Assistance': '',
-        'Services Provided': 'Business Start-up/Preplanning',
+        'Services Provided': BUSINESS_STARTUP_PREPLANNING,
         'Other Counseling Provided': '',
         'Referred Client to': '',
         'Other (Referred Client to)': '',

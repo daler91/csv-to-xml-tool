@@ -168,7 +168,8 @@ class TestFixClientIntakeElementOrder(unittest.TestCase):
         result = xml_validator.fix_client_intake_element_order("dummy.xml")
 
         self.assertFalse(result)
-        mock_logger.assert_called_once_with("Error fixing XML file: Test exception")
+        # Now logged via logger.exception(...), i.e. error(msg, exc_info=True).
+        mock_logger.assert_called_once_with("Error fixing XML file", exc_info=True)
 
 
     def test_fix_client_intake_element_order_success(self):

@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import re
 
 from .base_converter import BaseConverter, EmptyCSVError
-from ..config import CounselingConfig, GeneralConfig, ValidationCategory
+from ..config import BUSINESS_STARTUP_PREPLANNING, CounselingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
 from .. import data_validation
 from ..xml_utils import create_element
@@ -352,7 +352,7 @@ class CounselingConverter(BaseConverter):
 
     def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
-        provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', 'Business Start-up/Preplanning'))
+        provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', BUSINESS_STARTUP_PREPLANNING))
         has_other_code = any(c.strip().lower() == 'other' for c in provided_codes)
         provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
         cp_other = row.get('Other Counseling Provided', '').strip()

@@ -15,6 +15,11 @@ try:
 except ImportError:
     from config import CounselingConfig
 
+try:
+    from .path_safety import output_base, resolve_within
+except ImportError:
+    from path_safety import output_base, resolve_within
+
 
 # Logger will be instantiated in main() using ConversionLogger,
 # but for standalone functions we provide a fallback
@@ -156,8 +161,8 @@ def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elem
         # Save the fixed XML
         tree.write(output_file, encoding='utf-8', xml_declaration=True)
         return True
-    except (OSError, ET.ParseError) as e:
-        logger.error(f"Error fixing XML file: {str(e)}")
+    except (OSError, ET.ParseError):
+        logger.exception("Error fixing XML file")
         return False
 
 def _collect_elements_by_tag(parent):
@@ -267,7 +272,9 @@ def _resolve_output_path(file_path, input_dir, output_dir):
     if not output_dir:
         return file_path
     rel_path = os.path.relpath(file_path, input_dir)
-    output_path = os.path.join(output_dir, rel_path)
+    # Confine the per-file output within output_dir: a crafted rel_path (e.g.
+    # "../..") derived from an input name must not escape it (CWE-22).
+    output_path = resolve_within(output_dir, rel_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     return output_path
 
@@ -318,6 +325,8 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
     if recursive:
         logger.info(f"Recursive mode enabled, pattern: {pattern}")
     if output_dir:
+        # Confine the chosen output directory within the allowed base (CWE-22).
+        output_dir = resolve_within(output_base(), output_dir)
         logger.info(f"Output directory: {output_dir}")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)

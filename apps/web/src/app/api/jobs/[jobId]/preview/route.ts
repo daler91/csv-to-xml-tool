@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
@@ -31,16 +31,14 @@ export async function GET(
       );
     }
 
-    // Read file content and stream to worker
-    const fileContent = await readFile(job.inputFilePath, "utf-8");
-
+    // ARCH-4: the worker reads the CSV off the shared volume by path; we just
+    // pass the job id + file name (the size cap is still enforced above).
     const preview = await workerFetch<PreviewResponse>("/preview", {
       method: "POST",
       body: JSON.stringify({
         job_id: jobId,
         file_name: job.inputFileName,
         converter_type: job.converterType,
-        file_content: fileContent,
       }),
     });
 

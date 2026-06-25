@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { readFile, realpath } from "node:fs/promises";
-import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
-
-const DATA_DIR = process.env.DATA_DIR || "/data";
+import { resolveWithinDataDir } from "@/lib/paths";
 
 export async function GET(
   _req: Request,
@@ -22,18 +20,13 @@ export async function GET(
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Validate the file path stays within DATA_DIR to prevent path
-    // traversal. The turbopackIgnore comments tell the bundler's file
-    // tracer not to try to statically resolve these paths — they're
-    // always runtime values from the DB, scoped to DATA_DIR. Without
-    // the comments Turbopack's NFT walker gives up and flags the
-    // whole project, including next.config.ts, as potentially
-    // needed.
-    const resolvedPath = await realpath(
-      /* turbopackIgnore: true */ job.outputFilePath
-    );
-    const resolvedDataDir = await realpath(/* turbopackIgnore: true */ DATA_DIR);
-    if (!resolvedPath.startsWith(resolvedDataDir + path.sep)) {
+    // Validate the file path stays within DATA_DIR to prevent path traversal
+    // (shared guard in lib/paths.ts). A path that escapes DATA_DIR or no longer
+    // exists throws -> 404.
+    let resolvedPath: string;
+    try {
+      resolvedPath = await resolveWithinDataDir(job.outputFilePath);
+    } catch {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 

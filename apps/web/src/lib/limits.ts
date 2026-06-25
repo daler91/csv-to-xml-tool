@@ -4,4 +4,7 @@
 // server-side before each worker call (the start and preview routes), and used
 // for the client-side pre-check on the convert page. Keep these in sync by
 // importing this constant rather than duplicating the literal.
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB
+//
+// Override with the MAX_UPLOAD_BYTES env var (in bytes); defaults to 50MB.
+export const MAX_UPLOAD_BYTES =
+  Number(process.env.MAX_UPLOAD_BYTES) || 50 * 1024 * 1024; // 50MB default

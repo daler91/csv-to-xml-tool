@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { workerFetch } from "@/lib/worker-client";
+import { resolveWithinDataDir } from "@/lib/paths";
 import type { ConvertResponse } from "@/types";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -39,32 +39,26 @@ export async function runJob(jobId: string): Promise<void> {
     data: { userId: job.userId, jobId, action: "conversion_started" },
   });
 
-  // Read the input file and stream it to the worker (unchanged HTTP contract).
-  const fileContent = await readFile(job.inputFilePath, "utf-8");
+  // ARCH-4: the worker reads the input and writes the output directly on the
+  // shared volume — we pass the job id + file name instead of streaming the file
+  // in and the XML back out as JSON strings.
+  const result = await workerFetch<ConvertResponse>("/convert", {
+    method: "POST",
+    body: JSON.stringify({
+      job_id: jobId,
+      file_name: job.inputFileName,
+      converter_type: job.converterType,
+      column_mapping: job.columnMapping,
+    }),
+    timeoutMs: CONVERSION_TIMEOUT_MS,
+  });
 
-  const result = await workerFetch<ConvertResponse & { xml_content?: string }>(
-    "/convert",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        job_id: jobId,
-        file_name: job.inputFileName,
-        converter_type: job.converterType,
-        column_mapping: job.columnMapping,
-        file_content: fileContent,
-      }),
-      timeoutMs: CONVERSION_TIMEOUT_MS,
-    }
+  // The worker wrote the XML to the deterministic shared-volume path. Re-derive
+  // it here (rather than trusting the returned string) and validate it stays
+  // within DATA_DIR; realpath also confirms the file is actually present.
+  const outputFilePath = await resolveWithinDataDir(
+    path.join(DATA_DIR, "output", jobId, `${jobId}.xml`)
   );
-
-  // Save the XML to the shared volume for download.
-  let outputFilePath = "";
-  if (result.xml_content) {
-    const outputDir = path.join(DATA_DIR, "output", jobId);
-    await mkdir(outputDir, { recursive: true });
-    outputFilePath = path.join(outputDir, `${jobId}.xml`);
-    await writeFile(outputFilePath, result.xml_content, "utf-8");
-  }
 
   // Conditional update: only write "complete" if the job is still converting.
   // If a cancel landed in the race window, updateMany returns count=0 and we

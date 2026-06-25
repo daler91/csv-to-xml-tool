@@ -34,12 +34,14 @@ def resolve_within(base: str, path: str) -> str:
 
     Raises ``ValueError`` if the resolved path escapes ``base`` -- via ``..`` or
     an absolute path pointing outside it -- naming ``SBA_OUTPUT_BASE`` as the way
-    to permit a different location. ``commonpath`` is used (rather than a string
-    prefix) so a sibling like ``/data-evil`` is not treated as inside ``/data``.
+    to permit a different location. Uses the same ``realpath`` + ``startswith(
+    base + os.sep)`` containment check as the worker's app/core/security.py; the
+    ``os.sep`` suffix stops a sibling like ``/data-evil`` counting as inside
+    ``/data``, and ``resolved == base_real`` (writing to the base itself) is allowed.
     """
     base_real = os.path.realpath(base)
     resolved = os.path.realpath(os.path.join(base_real, path))
-    if os.path.commonpath([base_real, resolved]) != base_real:
+    if resolved != base_real and not resolved.startswith(base_real + os.sep):
         raise ValueError(
             f"Refusing to write outside {base_real!r}: {path!r}. "
             "Set SBA_OUTPUT_BASE to allow a different location."

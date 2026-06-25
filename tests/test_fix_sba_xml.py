@@ -175,6 +175,15 @@ class TestFixSBAXML(unittest.TestCase):
             )
             logger_mock.info.assert_any_call("[fix-sba-xml wrapper] Successfully processed 5 XML files (via xml_validator)")
 
+    def _assert_output_delegation(self, mock_exists, mock_makedirs, mock_vpd, expected_out):
+        """The wrapper confines --output, creates it, and delegates with it."""
+        mock_exists.assert_any_call(expected_out)
+        mock_makedirs.assert_called_once_with(expected_out)
+        mock_vpd.assert_called_once_with(
+            input_dir='test_dir', output_dir=expected_out, recursive=False,
+            pattern='*.xml', xsd_file=None, fix=True, add_missing_elements_flag=False,
+        )
+
     @patch('src.fix_sba_xml.validator_process_directory')
     @patch('os.makedirs')
     @patch('os.path.exists')
@@ -190,19 +199,10 @@ class TestFixSBAXML(unittest.TestCase):
 
             result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
 
-            # --output is confined within the base before use (path_safety).
-            expected_out = resolve_within(output_base(), 'out_dir')
             self.assertEqual(result, 0)
-            mock_exists.assert_any_call(expected_out)
-            mock_makedirs.assert_called_once_with(expected_out)
-            mock_validator_process_directory.assert_called_once_with(
-                input_dir='test_dir',
-                output_dir=expected_out,
-                recursive=False,
-                pattern='*.xml',
-                xsd_file=None,
-                fix=True,
-                add_missing_elements_flag=False
+            self._assert_output_delegation(
+                mock_exists, mock_makedirs, mock_validator_process_directory,
+                resolve_within(output_base(), 'out_dir'),
             )
 
     @patch('src.fix_sba_xml.validator_process_directory')
@@ -227,19 +227,10 @@ class TestFixSBAXML(unittest.TestCase):
 
             result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
 
-            # --output is confined within the base before use (path_safety).
-            expected_out = resolve_within(output_base(), 'out_dir')
             self.assertEqual(result, 0)
-            mock_exists.assert_any_call(expected_out)
-            mock_makedirs.assert_called_once_with(expected_out)
-            mock_validator_process_directory.assert_called_once_with(
-                input_dir='test_dir',
-                output_dir=expected_out,
-                recursive=False,
-                pattern='*.xml',
-                xsd_file=None,
-                fix=True,
-                add_missing_elements_flag=False
+            self._assert_output_delegation(
+                mock_exists, mock_makedirs, mock_validator_process_directory,
+                resolve_within(output_base(), 'out_dir'),
             )
 
     @patch('src.fix_sba_xml.process_single_file')

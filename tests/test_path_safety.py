@@ -46,8 +46,8 @@ def test_resolve_within_rejects_absolute_outside_base(tmp_path):
 
 
 def test_resolve_within_rejects_sibling_prefix(tmp_path):
-    # A sibling like ``/data-evil`` must not count as inside ``/data`` -- this is
-    # why the guard uses commonpath rather than a string prefix.
+    # A sibling like ``/data-evil`` must not count as inside ``/data`` -- the
+    # ``base + os.sep`` suffix on the prefix check is what prevents that.
     base = str(tmp_path / "data")
     os.makedirs(base)
     sibling = str(tmp_path / "data-evil" / "x")

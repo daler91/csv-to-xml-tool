@@ -96,6 +96,57 @@ async function walk(dir) {
   return files;
 }
 
+// True if this specific line is whitelisted by a LINE_EXEMPTIONS entry
+// (a known false positive inside an otherwise-scanned file).
+function isLineExempt(rel, line) {
+  return LINE_EXEMPTIONS.some((e) => e.file === rel && line.includes(e.contains));
+}
+
+// Scan one file's contents and return every rule violation it contains,
+// in (rule, line) order. Extracted from main() so each loop nest stays
+// shallow.
+function findViolations(rel, content) {
+  const lines = content.split("\n");
+  const violations = [];
+  for (const rule of RULES) {
+    for (let i = 0; i < lines.length; i++) {
+      if (!rule.pattern.test(lines[i])) continue;
+      if (isLineExempt(rel, lines[i])) continue;
+      violations.push({
+        file: rel,
+        line: i + 1,
+        rule: rule.name,
+        hint: rule.hint,
+        snippet: lines[i].trim(),
+      });
+    }
+  }
+  return violations;
+}
+
+// Print the outcome and exit non-zero if anything was found.
+function report(violations, fileCount) {
+  if (violations.length === 0) {
+    console.log(`✓ check-ui-classes: no violations in ${fileCount} files`);
+    return;
+  }
+
+  console.error(
+    `✗ check-ui-classes: ${violations.length} violation(s) found\n`
+  );
+  for (const v of violations) {
+    console.error(`  ${v.file}:${v.line}`);
+    console.error(`    rule: ${v.rule}`);
+    console.error(`    hint: ${v.hint}`);
+    console.error(`    code: ${v.snippet}`);
+    console.error("");
+  }
+  console.error(
+    "See UX_REVIEW.md §8.1 and apps/web/src/components/ui/ for the primitives."
+  );
+  process.exit(1);
+}
+
 async function main() {
   const files = await walk(SRC);
   const violations = [];
@@ -103,46 +154,11 @@ async function main() {
   for (const file of files) {
     const rel = relative(ROOT, file);
     if (EXEMPT.has(rel)) continue;
-
     const content = await readFile(file, "utf-8");
-    const lines = content.split("\n");
-
-    for (const rule of RULES) {
-      for (let i = 0; i < lines.length; i++) {
-        if (!rule.pattern.test(lines[i])) continue;
-        const lineExempt = LINE_EXEMPTIONS.some(
-          (e) => e.file === rel && lines[i].includes(e.contains)
-        );
-        if (lineExempt) continue;
-        violations.push({
-          file: rel,
-          line: i + 1,
-          rule: rule.name,
-          hint: rule.hint,
-          snippet: lines[i].trim(),
-        });
-      }
-    }
+    violations.push(...findViolations(rel, content));
   }
 
-  if (violations.length > 0) {
-    console.error(
-      `✗ check-ui-classes: ${violations.length} violation(s) found\n`
-    );
-    for (const v of violations) {
-      console.error(`  ${v.file}:${v.line}`);
-      console.error(`    rule: ${v.rule}`);
-      console.error(`    hint: ${v.hint}`);
-      console.error(`    code: ${v.snippet}`);
-      console.error("");
-    }
-    console.error(
-      "See UX_REVIEW.md §8.1 and apps/web/src/components/ui/ for the primitives."
-    );
-    process.exit(1);
-  }
-
-  console.log(`✓ check-ui-classes: no violations in ${files.length} files`);
+  report(violations, files.length);
 }
 
 main().catch((err) => {

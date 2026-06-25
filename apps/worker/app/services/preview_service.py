@@ -22,6 +22,14 @@ from .column_requirements import (
     TRAINING_CLIENT_CONDITIONAL,
 )
 
+# Column names referenced from more than one structure below (the field-metadata
+# maps and the expected-column lists). Extracted so the spelling lives in one
+# place and to satisfy the duplicate-string-literal check.
+_COL_CONTACT_ID = "Contact ID"
+_COL_LAST_NAME = "Last Name"
+_COL_FIRST_NAME = "First Name"
+_COL_CLASS_EVENT_ID = "Class/Event ID"
+
 # Plain-language field metadata shown on the web mapping page.
 # Added for UX_REVIEW.md §3.5 — the mapping page previously exposed
 # raw XML field names like "BranchOfService" with no explanation of
@@ -38,13 +46,13 @@ from .column_requirements import (
 # optional fields are best-effort.
 
 COUNSELING_FIELD_METADATA: dict[str, dict[str, str]] = {
-    "Contact ID": {
+    _COL_CONTACT_ID: {
         "description": "Salesforce Contact ID for the individual being counseled. Must be unique per client.",
     },
-    "Last Name": {
+    _COL_LAST_NAME: {
         "description": "Client last (family) name.",
     },
-    "First Name": {
+    _COL_FIRST_NAME: {
         "description": "Client first (given) name.",
     },
     "Email": {
@@ -146,16 +154,16 @@ COUNSELING_FIELD_METADATA: dict[str, dict[str, str]] = {
 }
 
 TRAINING_FIELD_METADATA: dict[str, dict[str, str]] = {
-    "Class/Event ID": {
+    _COL_CLASS_EVENT_ID: {
         "description": "Unique identifier for the training event. Rows with the same Class/Event ID are aggregated into one XML record.",
     },
 }
 
 TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
-    "Class/Event ID": {
+    _COL_CLASS_EVENT_ID: {
         "description": "Identifier for the training event the attendee participated in.",
     },
-    "Contact ID": {
+    _COL_CONTACT_ID: {
         "description": "Salesforce Contact ID for the individual attendee. Must be unique within the event.",
     },
     "Training Topic": {
@@ -207,7 +215,7 @@ def _build_field_requirements(
 
 # Expected columns extracted from converter source code
 COUNSELING_EXPECTED = [
-    "Contact ID", "LocationCode", "Last Name", "First Name", "Middle Name",
+    _COL_CONTACT_ID, "LocationCode", _COL_LAST_NAME, _COL_FIRST_NAME, "Middle Name",
     "Email", "Contact: Phone", "Contact: Secondary Phone",
     "Mailing Street", "Mailing City", "Mailing State/Province",
     "Mailing Zip/Postal Code", "Mailing Country",
@@ -246,12 +254,12 @@ TRAINING_EXPECTED = list(TrainingConfig.COLUMN_MAPPING.keys())
 
 # Training client expected columns (the CSV columns before remapping)
 TRAINING_CLIENT_EXPECTED = [
-    "Class/Event ID", "Member Type", "First Name", "Last Name",
+    _COL_CLASS_EVENT_ID, "Member Type", _COL_FIRST_NAME, _COL_LAST_NAME,
     "Member Status", "Company", "Phone", "Email",
     "Unique Campaign Members", "Currently in Business?",
     "Ethnicity", "Race", "Disabilities", "Gender", "Military Status",
     "Related Record ID", "Training Topic", "Class/Event Type",
-    "Funding Source", "Member ID", "Class Teacher", "Contact ID",
+    "Funding Source", "Member ID", "Class Teacher", _COL_CONTACT_ID,
     "Street", "city", "State", "Zip code", "Start Date", "Class/Event Name",
 ]
 

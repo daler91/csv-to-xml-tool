@@ -24,6 +24,9 @@ router = APIRouter()
         404: {"description": "CSV file not found"},
         400: {"description": "Invalid request parameters"},
         409: {"description": "Conversion cancelled by user"},
+        422: {
+            "description": "Unprocessable CSV: required columns missing or the file is empty"
+        },
         500: {"description": "Internal conversion error"},
     },
 )

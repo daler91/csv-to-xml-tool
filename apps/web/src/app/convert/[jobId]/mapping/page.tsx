@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
  */
 function mappingKey(m: Record<string, string>): string {
   return Object.keys(m)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .map((k) => `${k}=${m[k]}`)
     .join("|");
 }

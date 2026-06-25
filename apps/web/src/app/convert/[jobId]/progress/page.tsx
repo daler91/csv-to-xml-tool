@@ -24,6 +24,54 @@ function formatEta(seconds: number): string {
   return `about ${mins} minutes`;
 }
 
+function computeHeading(isTimedOut: boolean, isCancelled: boolean): string {
+  if (isTimedOut) return "Conversion Timed Out";
+  if (isCancelled) return "Conversion Cancelled";
+  return "Converting...";
+}
+
+// Rate-based ETA. We start computing it once at least 5% of the work is
+// done, so the first noisy ticks don't produce wild estimates. The rate
+// is rows/ms; remaining is total-processed.
+function computeEtaText(
+  isConverting: boolean,
+  total: number,
+  processed: number,
+  elapsedMs: number
+): string {
+  if (!isConverting || total <= 0 || processed <= 0 || elapsedMs <= 2000) return "";
+  const fractionDone = processed / total;
+  if (fractionDone < 0.05 || fractionDone >= 1) return "";
+  const rate = processed / elapsedMs; // rows per ms
+  const remainingMs = (total - processed) / rate;
+  return formatEta(remainingMs / 1000);
+}
+
+function computeSubtitle(params: {
+  isTimedOut: boolean;
+  isCancelled: boolean;
+  isConverting: boolean;
+  status: string;
+  elapsedMs: number;
+  processed: number;
+  total: number;
+  etaText: string;
+}): string {
+  const { isTimedOut, isCancelled, isConverting, status, elapsedMs, processed, total, etaText } =
+    params;
+  if (isTimedOut) {
+    return "The conversion is taking longer than expected. Please check back later or try again.";
+  }
+  if (isCancelled) return "Taking you back to the dashboard…";
+  if (!isConverting) return status;
+  const elapsed = `Running for ${formatElapsed(elapsedMs)}`;
+  if (total <= 0) return elapsed;
+  const rowSummary = `${processed.toLocaleString()} of ${total.toLocaleString()} records`;
+  return etaText
+    ? `${rowSummary} · ${elapsed} · ${etaText} remaining`
+    : `${rowSummary} · ${elapsed}`;
+}
+
 export default function ProgressPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
@@ -146,44 +194,18 @@ export default function ProgressPage() {
   const showPollFailureBanner =
     isConverting && consecutiveFailures >= POLL_FAILURE_THRESHOLD;
 
-  let heading: string;
-  if (isTimedOut) heading = "Conversion Timed Out";
-  else if (isCancelled) heading = "Conversion Cancelled";
-  else heading = "Converting...";
-
-  // Rate-based ETA. We start computing it once at least 5% of the
-  // work is done, so the first noisy ticks don't produce wild
-  // estimates. The rate is rows/ms; remaining is total-processed.
-  let etaText = "";
-  if (isConverting && total > 0 && processed > 0 && elapsedMs > 2000) {
-    const fractionDone = processed / total;
-    if (fractionDone >= 0.05 && fractionDone < 1) {
-      const rate = processed / elapsedMs; // rows per ms
-      const remainingRows = total - processed;
-      const remainingMs = remainingRows / rate;
-      etaText = formatEta(remainingMs / 1000);
-    }
-  }
-
-  let subtitle: string;
-  if (isTimedOut) {
-    subtitle =
-      "The conversion is taking longer than expected. Please check back later or try again.";
-  } else if (isCancelled) {
-    subtitle = "Taking you back to the dashboard…";
-  } else if (isConverting) {
-    const elapsed = `Running for ${formatElapsed(elapsedMs)}`;
-    if (total > 0) {
-      const rowSummary = `${processed.toLocaleString()} of ${total.toLocaleString()} records`;
-      subtitle = etaText
-        ? `${rowSummary} · ${elapsed} · ${etaText} remaining`
-        : `${rowSummary} · ${elapsed}`;
-    } else {
-      subtitle = elapsed;
-    }
-  } else {
-    subtitle = status;
-  }
+  const heading = computeHeading(isTimedOut, isCancelled);
+  const etaText = computeEtaText(isConverting, total, processed, elapsedMs);
+  const subtitle = computeSubtitle({
+    isTimedOut,
+    isCancelled,
+    isConverting,
+    status,
+    elapsedMs,
+    processed,
+    total,
+    etaText,
+  });
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-16">

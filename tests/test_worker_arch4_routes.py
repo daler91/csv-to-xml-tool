@@ -11,6 +11,12 @@ import asyncio
 import os
 
 import pytest
+
+# fastapi (and the rest of the worker stack imported below) is a worker
+# dependency; skip this module cleanly if it isn't installed rather than
+# erroring at collection — mirrors the fakeredis importorskip elsewhere.
+pytest.importorskip("fastapi")
+
 from fastapi import HTTPException
 
 from app.core import security

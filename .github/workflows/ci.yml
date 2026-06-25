@@ -17,7 +17,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          # Worker deps (fastapi, redis, …) + fakeredis, so the worker route and
+          # registry tests under tests/ actually run here instead of erroring or
+          # skipping on a missing import.
+          pip install -r apps/worker/requirements-dev.txt
 
       - name: Run tests
         run: python -m pytest tests/ -v

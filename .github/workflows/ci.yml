@@ -24,6 +24,14 @@ jobs:
           # skipping on a missing import.
           pip install -r apps/worker/requirements-dev.txt
 
+      - name: Audit dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          # Scoped to our declared requirements — an env scan would also flag the
+          # runner's system pip/setuptools/wheel, which we don't control. Fails on
+          # any known advisory; allowlist a specific one with --ignore-vuln <ID>.
+          pip-audit -r requirements.txt -r apps/worker/requirements.txt
+
       - name: Run tests
         run: python -m pytest tests/ -v
 
@@ -41,6 +49,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies (npm)
+        # Blocks on high+ advisories; moderates are reported but don't fail CI.
+        run: npm audit --audit-level=high
 
       - name: Lint
         run: npm run lint

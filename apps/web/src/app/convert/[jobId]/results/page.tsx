@@ -274,6 +274,19 @@ function computeComparison(
   };
 }
 
+function issuesForView(
+  comparison: {
+    resolved: ValidationIssue[];
+    newIssues: ValidationIssue[];
+    persistent: ValidationIssue[];
+  },
+  view: ComparisonView
+): ValidationIssue[] {
+  if (view === "resolved") return comparison.resolved;
+  if (view === "new") return comparison.newIssues;
+  return comparison.persistent;
+}
+
 function ComparisonDrilldown({
   comparison,
   active,
@@ -323,12 +336,7 @@ function ComparisonDrilldown({
     },
   ];
 
-  const activeIssues =
-    active === "resolved"
-      ? comparison.resolved
-      : active === "new"
-        ? comparison.newIssues
-        : comparison.persistent;
+  const activeIssues = issuesForView(comparison, active);
 
   return (
     <section aria-labelledby="compare-heading" className="mb-6">

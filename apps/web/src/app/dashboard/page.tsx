@@ -18,7 +18,7 @@ export default async function DashboardPage({
   if (!session?.user?.id) redirect("/login");
 
   const { page: pageParam } = await searchParams;
-  const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
+  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
   const skip = (page - 1) * PAGE_SIZE;
 
   // ARCH-1: reconcile stuck "converting" jobs before listing.

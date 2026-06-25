@@ -77,6 +77,8 @@ function formatActionLabel(action: string): string {
   return labels[action] ?? action;
 }
 
+const SKELETON_ROW_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5"];
+
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -150,8 +152,8 @@ export default function AuditPage() {
           </thead>
           <tbody>
             {loading &&
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={`skeleton-${i}`} className="border-b">
+              SKELETON_ROW_KEYS.map((rowKey) => (
+                <tr key={rowKey} className="border-b">
                   <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>

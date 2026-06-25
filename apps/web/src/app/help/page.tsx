@@ -121,14 +121,14 @@ export default function HelpPage() {
           <li>
             <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200 mr-2">
               Required
-            </span>
+            </span>{" "}
             Must be present in the CSV (or mapped from another column)
             for the conversion to produce valid XML.
           </li>
           <li>
             <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 mr-2">
               Conditional
-            </span>
+            </span>{" "}
             Only required when a related field has a certain value.
             Each conditional field shows the exact rule ("When
             required: Required when Veteran Status indicates military
@@ -137,13 +137,13 @@ export default function HelpPage() {
           <li>
             <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200 mr-2">
               Optional
-            </span>
+            </span>{" "}
             Nice to have but not needed for validation.
           </li>
           <li>
             <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200 mr-2">
               Auto-matched
-            </span>
+            </span>{" "}
             Already found in your CSV with the expected name — no
             action needed.
           </li>
@@ -187,8 +187,8 @@ export default function HelpPage() {
 
       <Section id="cancel" title="Cancelling a conversion">
         <p>
-          While a conversion is running, the progress page shows a
-          <strong> Cancel conversion </strong> button. Clicking it
+          While a conversion is running, the progress page shows a{" "}
+          <strong>Cancel conversion</strong> button. Clicking it
           immediately flips the job to cancelled state and returns
           you to the dashboard. The worker stops at its next
           checkpoint; any partial output is discarded.
@@ -288,8 +288,7 @@ export default function HelpPage() {
               rel="noreferrer"
             >
               project repository
-            </a>
-            .
+            </a>.
           </li>
           <li>
             For anything involving client data, contact your SBA

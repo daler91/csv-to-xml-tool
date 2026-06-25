@@ -17,7 +17,7 @@ from fastapi import Header, HTTPException, status
 WORKER_AUTH_TOKEN = os.environ.get("WORKER_AUTH_TOKEN", "")
 
 
-async def require_worker_token(authorization: str | None = Header(default=None)) -> None:
+def require_worker_token(authorization: str | None = Header(default=None)) -> None:
     """Enforce the shared bearer token on a request.
 
     Raises 503 when the token isn't configured (server misconfiguration) and

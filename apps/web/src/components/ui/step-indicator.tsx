@@ -45,6 +45,18 @@ function deriveCurrentStep(pathname: string): StepKey {
   return "upload";
 }
 
+function circleClassesFor(isActive: boolean, isDone: boolean): string {
+  if (isActive) return "bg-blue-600 text-white border-blue-600";
+  if (isDone) return "bg-green-600 text-white border-green-600";
+  return "bg-white text-gray-500 border-gray-300";
+}
+
+function labelClassesFor(isActive: boolean, isDone: boolean): string {
+  if (isActive) return "text-blue-700 font-medium";
+  if (isDone) return "text-gray-700";
+  return "text-gray-500";
+}
+
 function extractJobId(pathname: string): string | null {
   const match = /^\/convert\/([^/]+)(?:\/|$)/.exec(pathname);
   if (!match) return null;
@@ -78,17 +90,8 @@ export function StepIndicator() {
           const isDone = i < currentIndex;
           const href = hrefFor(step, i);
 
-          const circleClasses = isActive
-            ? "bg-blue-600 text-white border-blue-600"
-            : isDone
-              ? "bg-green-600 text-white border-green-600"
-              : "bg-white text-gray-500 border-gray-300";
-
-          const labelClasses = isActive
-            ? "text-blue-700 font-medium"
-            : isDone
-              ? "text-gray-700"
-              : "text-gray-500";
+          const circleClasses = circleClassesFor(isActive, isDone);
+          const labelClasses = labelClassesFor(isActive, isDone);
 
           const inner = (
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">

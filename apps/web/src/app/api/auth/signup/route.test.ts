@@ -65,4 +65,32 @@ describe("POST /api/auth/signup", () => {
     const res = await signup({ email: "new@example.com", password: "ValidPass123!" });
     expect(res.status).toBe(429);
   });
+
+  it("normalizes the email (trim + lowercase) before lookup and creation", async () => {
+    const res = await signup({ email: "  New@Example.COM  ", password: "ValidPass123!" });
+    expect(res.status).toBe(201);
+    expect(db.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "new@example.com" },
+    });
+    expect(db.user.create).toHaveBeenCalledWith({
+      data: { email: "new@example.com", passwordHash: "hashed", name: null },
+    });
+  });
+
+  it("detects a duplicate regardless of the submitted email's case", async () => {
+    db.user.findUnique.mockResolvedValue({ id: "existing" } as never);
+    const res = await signup({ email: "TAKEN@Example.com", password: "ValidPass123!" });
+    expect(res.status).toBe(409);
+    expect(db.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "taken@example.com" },
+    });
+    expect(db.user.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a whitespace-only email as missing", async () => {
+    const res = await signup({ email: "   ", password: "ValidPass123!" });
+    expect(res.status).toBe(400);
+    expect(db.user.findUnique).not.toHaveBeenCalled();
+    expect(db.user.create).not.toHaveBeenCalled();
+  });
 });

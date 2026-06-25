@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { normalizeEmail } from "@/lib/normalize";
 
 function getClientIdentifier(req: Request): string {
   // Use x-forwarded-for but take only the first (client) IP,
@@ -43,7 +44,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const { email, password, name } = await req.json();
+    const { email: rawEmail, password, name } = await req.json();
+    const email = typeof rawEmail === "string" ? normalizeEmail(rawEmail) : "";
 
     if (!email || !password) {
       return NextResponse.json(

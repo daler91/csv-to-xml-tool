@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { JobStatus } from "@prisma/client";
 import { stat } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
@@ -8,7 +9,7 @@ import { enqueueJob } from "@/lib/job-queue";
 // Statuses a job can transition *out of* into the queue.
 // A cancelled/complete/error job can't be started — the user should re-upload
 // instead. A job already queued/converting can't be started a second time.
-const STARTABLE_STATUSES = ["uploaded", "previewed", "mapping"] as const;
+const STARTABLE_STATUSES: JobStatus[] = ["uploaded", "previewed", "mapping"];
 
 export async function POST(
   _req: Request,
@@ -26,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    if (!STARTABLE_STATUSES.includes(job.status as typeof STARTABLE_STATUSES[number])) {
+    if (!STARTABLE_STATUSES.includes(job.status)) {
       return NextResponse.json(
         {
           error:

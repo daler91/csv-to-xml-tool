@@ -23,7 +23,7 @@ model Job {
   userId         String
   user           User      @relation(fields: [userId], references: [id])
   converterType  String
-  status         String    @default("uploaded")
+  status         JobStatus @default(uploaded)
   inputFileName  String
   inputFilePath  String
   outputFilePath String?
@@ -58,4 +58,15 @@ model AuditEntry {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([action])
+}
+
+enum JobStatus {
+  uploaded
+  previewed
+  mapping
+  queued
+  converting
+  complete
+  error
+  cancelled
 }

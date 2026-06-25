@@ -6,7 +6,7 @@ import csv
 import xml.etree.ElementTree as ET
 import re
 
-from .base_converter import BaseConverter
+from .base_converter import BaseConverter, EmptyCSVError
 from ..config import CounselingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
 from .. import data_validation
@@ -34,12 +34,20 @@ class CounselingConverter(BaseConverter):
         try:
             with open(input_path, 'r', encoding='utf-8-sig') as csv_file:
                 reader = csv.DictReader(csv_file)
-                rows = list(reader)
+                # CONV-2: normalize header whitespace so a stray/doubled space in a
+                # column name can't silently break row.get() lookups downstream.
+                rows = [data_cleaning.normalize_row_keys(row) for row in reader]
                 self.logger.info(f"Successfully read CSV file with {len(rows)} records")
         except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {str(e)}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {str(e)}")
             raise
+
+        if not rows:
+            # CONV-6: a headers-only / empty CSV must fail, not silently produce
+            # an empty <CounselingInformation/>.
+            self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, "input_file", "CSV has headers but no data rows to convert.")
+            raise EmptyCSVError("CSV has no data rows to convert.")
 
         root = ET.Element('CounselingInformation')
         processed_records = 0
@@ -166,7 +174,7 @@ class CounselingConverter(BaseConverter):
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "Internet", "Internet field should be mandatory when the media code is 'Internet'.")
 
-    def _build_business_fields(self, client_intake, row):
+    def _build_business_fields(self, client_intake, row, record_id):
         """Build business status, ownership, employees, and income fields. Returns in_business_val."""
         in_business_raw = row.get('Currently In Business?', '').strip()
         in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
@@ -182,7 +190,16 @@ class CounselingConverter(BaseConverter):
             create_element(client_intake, 'BusinessType', business_type)
 
         bo_element = create_element(client_intake, 'BusinessOwnership')
-        female_ownership_val = data_cleaning.clean_percentage(row.get('Business Ownership - % Female(old)', '0'))
+        female_raw = row.get('Business Ownership - % Female(old)', '0')
+        female_ownership_val = data_cleaning.clean_percentage(female_raw)
+        if data_cleaning.percentage_was_clamped(female_raw):
+            # CONV-7: record the out-of-range original before clean_percentage clamps it.
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.CLAMPED_VALUE,
+                "BusinessOwnership/Female",
+                f"% Female ownership '{str(female_raw).strip()}' is outside 0-100 "
+                f"and was clamped to {female_ownership_val}.",
+            )
         create_element(bo_element, 'Female', female_ownership_val)
 
         create_element(client_intake, 'ConductingBusinessOnline', row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS))
@@ -251,7 +268,7 @@ class CounselingConverter(BaseConverter):
         self._build_demographics(client_intake, row)
         self._build_military_status(client_intake, row, record_id)
         self._build_media_and_internet(client_intake, row, record_id)
-        in_business_val = self._build_business_fields(client_intake, row)
+        in_business_val = self._build_business_fields(client_intake, row, record_id)
         if in_business_val.lower() == 'yes':
             self._build_legal_entity(client_intake, row, record_id)
         self._build_rural_urban(client_intake, row, record_id)
@@ -362,9 +379,18 @@ class CounselingConverter(BaseConverter):
         if lang_other:
             create_element(lang_element, 'Other', lang_other)
 
-        date_counseled = data_cleaning.format_date(row.get('Date', ''))
+        date_raw = row.get('Date', '')
+        date_counseled = data_cleaning.format_date(date_raw)
         if date_counseled:
             create_element(counselor_record, 'DateCounseled', date_counseled)
+        if data_cleaning.is_ambiguous_date(date_raw):
+            # CONV-3: emitted month-first, but flag the ambiguity for human review.
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.AMBIGUOUS_DATE,
+                "DateCounseled",
+                f"Date '{str(date_raw).strip()}' is ambiguous between MM/DD and "
+                f"DD/MM; interpreted month-first as {date_counseled}.",
+            )
 
         counselor_name = row.get('Name of Counselor', '').strip()
         if counselor_name:

@@ -8,7 +8,7 @@ from ..core.security import resolve_input_csv, resolve_output_xml
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
-from ..services.conversion_service import run_conversion
+from ..services.conversion_service import run_conversion, EmptyCSVError
 from ..services.column_requirements import RequiredColumnsMissingError
 from ..services.progress import registry as progress_registry
 
@@ -81,6 +81,10 @@ async def convert(req: ConvertRequest):
     except RequiredColumnsMissingError as e:
         # CONV-1: surface exactly which required columns are missing instead of a
         # generic 400, so the web layer can record/show what the user must fix.
+        raise HTTPException(status_code=422, detail=str(e))
+    except EmptyCSVError as e:
+        # CONV-6: headers-only / empty CSV is unprocessable; map to 422 (before the
+        # generic ValueError handler, since EmptyCSVError subclasses ValueError).
         raise HTTPException(status_code=422, detail=str(e))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found")

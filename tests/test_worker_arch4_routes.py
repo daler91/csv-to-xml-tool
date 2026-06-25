@@ -148,3 +148,22 @@ def test_preview_missing_input_returns_404(data_dir, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(preview_route.preview(req))
     assert exc.value.status_code == 404
+
+
+def test_convert_empty_csv_maps_to_422(data_dir, monkeypatch):
+    # CONV-6: the converter raises EmptyCSVError for a headers-only CSV; the route
+    # must surface it as 422 (before the generic ValueError -> 400 handler).
+    from app.services.conversion_service import EmptyCSVError
+
+    _write_input(data_dir, "jobE", "in.csv")
+
+    def _raise_empty(*args, **kwargs):
+        raise EmptyCSVError("CSV has no data rows to convert.")
+
+    monkeypatch.setattr(convert_route, "run_conversion", _raise_empty)
+    req = ConvertRequest(
+        job_id="jobE", file_name="in.csv", converter_type="counseling"
+    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(convert_route.convert(req))
+    assert exc.value.status_code == 422

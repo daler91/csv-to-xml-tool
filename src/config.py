@@ -19,6 +19,12 @@ DATE_INPUT_FORMATS = [
     '%m-%d-%y',
 ]
 
+# Delimiter for Salesforce multi-select picklist exports (e.g. "Race", "Services
+# Provided"): Salesforce joins multi-value fields with a semicolon, and the
+# individual code values are controlled vocabulary assumed not to contain ';'.
+# Centralized here (CONV-5); split_multi_value() also accepts a per-call override.
+MULTI_VALUE_DELIMITER = ";"
+
 
 def _fiscal_year_start():
     """Compute the start of the current SBA fiscal year (October 1)."""
@@ -276,3 +282,5 @@ class ValidationCategory:
     PROCESSING_ERROR = "processing_error"
     FILE_ACCESS = "file_access"
     FILE_WRITE = "file_write"
+    AMBIGUOUS_DATE = "ambiguous_date"
+    CLAMPED_VALUE = "clamped_value"

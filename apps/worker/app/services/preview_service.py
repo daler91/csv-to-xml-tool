@@ -10,6 +10,7 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
+from src.data_cleaning import normalize_header, normalize_row_keys
 
 from ..core.security import DATA_DIR
 from .column_requirements import (
@@ -280,11 +281,13 @@ def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> 
 
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        headers = reader.fieldnames or []
+        # CONV-2: normalize header whitespace (and the preview row keys) so the
+        # mapping UI's matched/missing badges agree with what conversion reads.
+        headers = [normalize_header(h) for h in (reader.fieldnames or [])]
         for i, row in enumerate(reader):
             total_rows += 1
             if i < max_rows:
-                rows.append(dict(row))
+                rows.append(normalize_row_keys(dict(row)))
 
     expected = get_expected_columns(converter_type)
     actual_set = set(headers)

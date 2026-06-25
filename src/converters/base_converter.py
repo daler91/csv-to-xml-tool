@@ -20,6 +20,16 @@ if TYPE_CHECKING:
 # First int is rows processed so far, second is total rows.
 ProgressCallback = Callable[[int, int], None]
 
+
+class EmptyCSVError(ValueError):
+    """Raised when an input CSV has headers but no data rows (CONV-6).
+
+    Subclasses ValueError so existing ValueError handling still catches it; the
+    worker maps it to HTTP 422 and the CLI exits non-zero, so an empty/headers-only
+    CSV fails loudly instead of silently producing an empty federal XML.
+    """
+
+
 class BaseConverter(abc.ABC):
     """
     Abstract Base Class for all data converters.

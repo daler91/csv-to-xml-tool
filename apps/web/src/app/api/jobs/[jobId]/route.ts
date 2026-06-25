@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
@@ -71,7 +72,7 @@ export async function GET(
 // perspective: the flow is over, and PATCH requests from stale
 // tabs should not be able to revive it. Matches the set enforced
 // in the /cancel, /start, and /preview routes.
-const TERMINAL_STATUSES = new Set(["cancelled", "complete", "error"]);
+const TERMINAL_STATUSES = new Set<JobStatus>(["cancelled", "complete", "error"]);
 
 export async function PATCH(
   req: Request,

@@ -1,3 +1,4 @@
+import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // Backstop deadline: a job stuck in "queued" or "converting" past this is failed.
@@ -16,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 // it entered that state and is a sound staleness baseline.
 const REAP_DEADLINE_MS = Number(process.env.REAP_DEADLINE_MS) || 60 * 60 * 1000;
 
-const STUCK_STATUSES = ["queued", "converting"];
+const STUCK_STATUSES: JobStatus[] = ["queued", "converting"];
 
 /**
  * Fail jobs stuck in "queued"/"converting" past the deadline so they don't linger

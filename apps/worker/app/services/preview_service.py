@@ -2,6 +2,7 @@
 
 import csv
 import difflib
+import io
 import os
 import sys
 
@@ -278,24 +279,25 @@ def get_expected_columns(converter_type: str) -> list[str]:
     return []
 
 
-def read_csv_preview(csv_path: str, converter_type: str, max_rows: int = 20) -> dict:
+def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) -> dict:
     """Read first N rows of a CSV and detect column matching status.
 
-    csv_path is a temp file created by the calling route from streamed content.
+    csv_content is the raw CSV text sent by the web in the request body (the
+    services no longer share a disk). A leading UTF-8 BOM is stripped so the
+    first header isn't corrupted, matching the utf-8-sig read path elsewhere.
     """
     rows = []
     headers = []
     total_rows = 0
 
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        # CONV-2: normalize header whitespace (and the preview row keys) so the
-        # mapping UI's matched/missing badges agree with what conversion reads.
-        headers = [normalize_header(h) for h in (reader.fieldnames or [])]
-        for i, row in enumerate(reader):
-            total_rows += 1
-            if i < max_rows:
-                rows.append(normalize_row_keys(dict(row)))
+    reader = csv.DictReader(io.StringIO(csv_content.lstrip("\ufeff")))
+    # CONV-2: normalize header whitespace (and the preview row keys) so the
+    # mapping UI's matched/missing badges agree with what conversion reads.
+    headers = [normalize_header(h) for h in (reader.fieldnames or [])]
+    for i, row in enumerate(reader):
+        total_rows += 1
+        if i < max_rows:
+            rows.append(normalize_row_keys(dict(row)))
 
     expected = get_expected_columns(converter_type)
     actual_set = set(headers)

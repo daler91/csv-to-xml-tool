@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import os
+import shutil
+import tempfile
 
 from fastapi import APIRouter, HTTPException
 
-from ..core.security import resolve_input_csv, resolve_output_xml
 from ..logging_context import job_id_var
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
@@ -18,11 +19,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _write_text(path: str, text: str) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _read_text(path: str) -> str:
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 @router.post(
     "/convert",
     response_model=ConvertResponse,
     responses={
-        404: {"description": "CSV file not found"},
         400: {"description": "Invalid request parameters"},
         409: {"description": "Conversion cancelled by user"},
         422: {
@@ -35,6 +47,7 @@ async def convert(req: ConvertRequest):
     # Bind the job id for the rest of this request's logs (incl. the conversion
     # thread, since asyncio.to_thread copies the context) — QUAL-5 correlation.
     job_id_var.set(req.job_id)
+    tmp_dir = None
     try:
         # Clear any stale progress snapshot left by a previous attempt at this
         # job_id. ARCH-1 can re-queue the same job_id on a transient failure
@@ -46,18 +59,14 @@ async def convert(req: ConvertRequest):
         # it could wipe a cancel that landed in the gap before the worker started.
         await asyncio.to_thread(progress_registry.clear, req.job_id)
 
-        # ARCH-4: read the input straight off the shared volume and write the
-        # output back to it, instead of streaming the file in/out as JSON. Both
-        # paths are derived from the job id (+ file name) and confined to
-        # DATA_DIR; an invalid path raises ValueError -> 400, a missing input
-        # FileNotFoundError -> 404 via the handlers below.
-        csv_path = await asyncio.to_thread(
-            resolve_input_csv, req.job_id, req.file_name
-        )
-        xml_path = await asyncio.to_thread(resolve_output_xml, req.job_id)
-        await asyncio.to_thread(
-            os.makedirs, os.path.dirname(xml_path), exist_ok=True
-        )
+        # The web sends the CSV content in the request body and persists the XML
+        # we return — web and worker are separate Railway services and cannot
+        # share a volume. Stage the input and output in a worker-local temp dir;
+        # nothing is read from or written to a shared disk.
+        tmp_dir = await asyncio.to_thread(tempfile.mkdtemp, prefix="convert_")
+        csv_path = os.path.join(tmp_dir, "input.csv")
+        xml_path = os.path.join(tmp_dir, "output.xml")
+        await asyncio.to_thread(_write_text, csv_path, req.csv_content)
 
         # Capture job_id for the cancellation callback; run_conversion will
         # poll cancel_registry.is_cancelled between phases and raise if
@@ -79,8 +88,11 @@ async def convert(req: ConvertRequest):
             on_progress=_on_progress,
         )
 
-        # run_conversion already set result["xml_path"] = xml_path; the XML now
-        # lives on the shared volume for the web to serve. No content over HTTP.
+        # Return the converted XML text for the web to persist on its own disk;
+        # the on-disk path is worker-local and meaningless to the web.
+        xml_content = await asyncio.to_thread(_read_text, xml_path)
+        result.pop("xml_path", None)
+        result["xml_content"] = xml_content
         return result
     except ConversionCancelledError:
         logger.info("Conversion cancelled for job %s", req.job_id)
@@ -93,8 +105,6 @@ async def convert(req: ConvertRequest):
         # CONV-6: headers-only / empty CSV is unprocessable; map to 422 (before the
         # generic ValueError handler, since EmptyCSVError subclasses ValueError).
         raise HTTPException(status_code=422, detail=str(e))
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="CSV file not found")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid request parameters")
     except HTTPException:
@@ -104,11 +114,12 @@ async def convert(req: ConvertRequest):
         raise HTTPException(status_code=500, detail="Internal conversion error")
     finally:
         # Drop the cancellation flag and progress snapshot so the same job_id
-        # can be reused after a re-upload. Offloaded to a thread so the Redis
-        # round-trips don't block the event loop. (No scratch files to clean up
-        # anymore — ARCH-4 reads/writes the shared volume directly.)
+        # can be reused after a re-upload, and remove the worker-local temp dir.
+        # Offloaded to a thread so the Redis round-trips don't block the loop.
         await asyncio.to_thread(cancel_registry.clear, req.job_id)
         await asyncio.to_thread(progress_registry.clear, req.job_id)
+        if tmp_dir:
+            await asyncio.to_thread(shutil.rmtree, tmp_dir, ignore_errors=True)
 
 
 @router.post(

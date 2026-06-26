@@ -7,18 +7,18 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
 vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
 vi.mock("@/lib/limits", () => ({ MAX_UPLOAD_BYTES: 1000 }));
-vi.mock("node:fs/promises", () => ({ stat: vi.fn() }));
+vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }));
 
 import { GET } from "@/app/api/jobs/[jobId]/preview/route";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
-import { stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 const db = vi.mocked(prisma, true);
 const auth = vi.mocked(getRequiredUser);
 const worker = vi.mocked(workerFetch);
-const statMock = vi.mocked(stat);
+const readMock = vi.mocked(readFile);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -31,7 +31,7 @@ beforeEach(() => {
     inputFileName: "in.csv",
     converterType: "counseling",
   } as never);
-  statMock.mockResolvedValue({ size: 100 } as never);
+  readMock.mockResolvedValue("Contact ID\n003\n" as never);
   worker.mockResolvedValue({ total_rows: 42 } as never);
   db.job.updateMany.mockResolvedValue({ count: 1 } as never);
 });
@@ -44,7 +44,7 @@ describe("GET /api/jobs/[jobId]/preview", () => {
   });
 
   it("re-checks the size cap and returns 413 when too large", async () => {
-    statMock.mockResolvedValue({ size: 5000 } as never);
+    readMock.mockResolvedValue("x".repeat(5000) as never);
     const res = await GET(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(413);
     expect(worker).not.toHaveBeenCalled();

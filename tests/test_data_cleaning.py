@@ -295,3 +295,59 @@ class TestCleanPhoneNumber(unittest.TestCase):
         from src.data_cleaning import clean_phone_number
         self.assertEqual(clean_phone_number(1234567890), "1234567890")
         self.assertEqual(clean_phone_number(1.8001234567), "8001234567")  # 11 digits starting with 1, strip leading 1, then truncate to 10
+
+
+class TestDemographicClassifiers(unittest.TestCase):
+
+    def test_is_affirmative(self):
+        from src.data_cleaning import is_affirmative
+        for v in ['Yes', 'yes', 'Y', 'true', '1', ' YES ']:
+            self.assertTrue(is_affirmative(v), v)
+        for v in ['No', 'n', '', None, 'Prefer not to say', 'maybe']:
+            self.assertFalse(is_affirmative(v), v)
+
+    def test_is_negative(self):
+        from src.data_cleaning import is_negative
+        for v in ['No', 'no', 'N', 'false', '0']:
+            self.assertTrue(is_negative(v), v)
+        for v in ['Yes', '', None, 'Prefer not to say']:
+            self.assertFalse(is_negative(v), v)
+
+    def test_classify_ethnicity(self):
+        from src.data_cleaning import classify_ethnicity
+        self.assertEqual(classify_ethnicity('Hispanic or Latino'), 'hispanic')
+        self.assertEqual(classify_ethnicity('Latino'), 'hispanic')
+        self.assertEqual(classify_ethnicity('Non Hispanic or Latino'), 'non_hispanic')
+        self.assertEqual(classify_ethnicity('Non-Hispanic'), 'non_hispanic')
+        self.assertIsNone(classify_ethnicity('Prefer not to say'))
+        self.assertIsNone(classify_ethnicity(''))
+        self.assertIsNone(classify_ethnicity(None))
+
+    def test_classify_races_multivalue(self):
+        from src.data_cleaning import classify_races
+        km = {
+            'asian': ['asian'], 'black': ['black', 'african american'],
+            'white': ['white', 'caucasian'],
+            'native_american': ['american indian', 'alaska native', 'native american'],
+            'pacific_islander': ['hawaiian', 'pacific islander'],
+            'middle_eastern': ['middle east'], 'north_african': ['north africa'],
+        }
+        self.assertEqual(classify_races('Black or African American; White; ', km), {'black', 'white'})
+        self.assertEqual(classify_races('Asian; Black or African American; White; ', km),
+                         {'asian', 'black', 'white'})
+        self.assertEqual(classify_races('Prefer not to say', km), set())
+        self.assertEqual(classify_races('', km), set())
+
+    def test_classify_military_overlap(self):
+        from src.data_cleaning import classify_military
+        km = {
+            'active_duty': ['active duty', 'active-duty'], 'veteran': ['veteran'],
+            'service_disabled_veteran': ['service disabled', 'disabled vet'],
+            'reserve_guard': ['reserve', 'guard'], 'spouse': ['spouse'],
+        }
+        self.assertEqual(classify_military('Service Disabled Veteran', km),
+                         {'veteran', 'service_disabled_veteran'})
+        self.assertEqual(classify_military('Veteran', km), {'veteran'})
+        self.assertEqual(classify_military('No military service', km), set())
+        self.assertEqual(classify_military('Prefer not to say', km), set())
+        self.assertEqual(classify_military('', km), set())

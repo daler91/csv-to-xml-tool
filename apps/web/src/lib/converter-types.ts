@@ -38,7 +38,8 @@ export const CONVERTER_TYPES: readonly ConverterTypeMeta[] = [
     value: "training",
     label: "Training (Form 888)",
     description:
-      "Aggregated training event data with attendee demographics rolled up per class.",
+      "Per-attendee training rows (one line per participant). The converter totals the "
+      + "demographics per event automatically \u2014 no pre-calculated columns needed.",
     sample: "/samples/training-sample.csv",
     formName: "Form 888",
   },

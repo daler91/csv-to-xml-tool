@@ -159,6 +159,67 @@ class TrainingConfig:
         'Seminar': 'In-person', 'Webinar': 'Online', 'Virtual': 'Online', 'Remote': 'Online',
     }
 
+    # Valid TrainingTopic/Code values from the XSD enumeration. A CSV value that
+    # already matches one of these (case-insensitive) is emitted verbatim so a
+    # populated "Training Topic" column is authoritative instead of being
+    # overwritten by the default. TRAINING_TOPIC_MAPPINGS only adds synonyms.
+    VALID_TRAINING_TOPICS = [
+        "Business Accounting/Budget", "Business Financial/Cash Flow",
+        "Business Financing/Capital Sources", "Business Operations/Management",
+        "Business Plan", "Business Start-up/Preplanning", "Buy/Sell Business",
+        "Credit Counseling", "Customer Relations", "Cyber Security/Cyber Awareness",
+        "Disaster Planning/Recovery", "eCommerce", "Franchising",
+        "Government Contracting", "Human Resources/Managing Employees",
+        "Intellectual Property Training", "International Trade", "Legal Issues",
+        "Marketing/Sales", "Tax Planning", "Technology", "Other",
+    ]
+
+    # Valid FundingSource values from the XSD enumeration (disaster/program codes).
+    # FundingSource is optional (minOccurs=0); a value that is NOT one of these
+    # (e.g. a WBC "CORE"/"Federal" funding label) must be omitted, not emitted, or
+    # the XML fails schema validation. Emitted verbatim when matched case-insensitively.
+    VALID_FUNDING_SOURCES = [
+        "2020 SBDC Portable Assistance – PA2003",
+        "2023 Portable Assistance - PA2023",
+        "2024 SBDC Supplemental Program - SP2024",
+        "Hurricane Dolly (TX) – 1780",
+        "Hurricane Gustav (LA) – 1786",
+        "Hurricane Gustav (MS) – 1794",
+        "Hurricane Ike (LA) – 1792",
+        "Hurricane Ike (TX) – 1791",
+        "Hurricane Sandy - Phase 1 – SANDY1",
+        "Hurricane Sandy - Phase 2 – SANDY2",
+        "Resiliency and Recovery Demonstration Grant – CARESRRD",
+        "Severe Storms, and Flooding (GA) – 1761",
+        "Severe Storms, and Flooding (IL) – 1747",
+        "Severe Storms, and Flooding (IL) – 1771",
+        "Severe Storms, and Flooding (IL) – 1800",
+        "Severe Storms, and Flooding (IN) – 1795",
+        "Severe Storms, and Flooding (IN) – 1766",
+        "Severe Storms, and Flooding (MO) – 1749",
+        "Severe Storms, and Flooding (MO) – 1773",
+        "Severe Storms, and Flooding (MS) – 1753",
+        "Severe Storms, and Flooding (PR) – 1798",
+        "Severe Storms, and Flooding, Tornadoes (MO) – 1809",
+        "Severe Storms, and Tornadoes (CO) – 1762",
+        "Severe Storms, and Tornadoes (GA) – 1750",
+        "Severe Storms, and Tornadoes (MO) – 1760",
+        "Severe Storms, and Tornadoes (MS) – 1764",
+        "Severe Storms, Tornadoes, and Flooding (AR) – 1744",
+        "Severe Storms, Tornadoes, and Flooding (AR) – 1751",
+        "Severe Storms, Tornadoes, and Flooding (AR) – 1758",
+        "Severe Storms, Tornadoes, and Flooding (IA) – 1763",
+        "Severe Storms, Tornadoes, and Flooding (NE) – 1770",
+        "Severe Storms, Tornadoes, and Flooding (WI) – 1768",
+        "Severe Storms, Tornadoes, Flooding, Mudslides, and Landslides (WV) – 1769",
+        "Severe Storms, Tornadoes, Straight Line Winds, and Flooding (KY) – 1746",
+        "Severe Storms, Tornadoes, Straight Line Winds, and Flooding (TN) – 1745",
+        "Severe Winter Storm and Flooding (IN) – 1740",
+        "Severe Winter Storm and Flooding (NV) – 1738",
+        "Tropical Storm Fay (FL) – 1785",
+        "Wildfires (CA) – 1810",
+    ]
+
     # Keywords for parsing demographic data from free-text fields
     DEMOGRAPHIC_KEYWORDS = {
         "gender": {

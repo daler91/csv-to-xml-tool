@@ -143,7 +143,7 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(loc.find('ZipCode').text, '50312')
 
     def test_calculate_demographics(self):
-        """Tests the _calculate_demographics method."""
+        """Per-attendee rows aggregate to correct, controlled-vocabulary counts."""
         converter = TrainingConverter(self.logger, self.validator)
 
         data = {
@@ -152,29 +152,130 @@ class TestTrainingConverter(unittest.TestCase):
             'Disabilities': ['Yes', 'No', 'No', 'Prefer not to say'],
             'Military Status': ['Active Duty', 'Veteran', '', ''],
             'Race': ['Asian', 'Black', 'White', 'White'],
-            'Ethnicity': ['Hispanic', 'Non-Hispanic', 'Latino', 'Prefer not to say']
+            'Ethnicity': ['Hispanic', 'Non-Hispanic', 'Latino', 'Prefer not to say'],
         }
         df = pd.DataFrame(data)
 
         demographics = converter._calculate_demographics(df)
 
-        self.assertIsNotNone(demographics)
         self.assertEqual(demographics.get('total'), 4)
         self.assertEqual(demographics.get('currently_in_business'), 3)
         self.assertEqual(demographics.get('not_in_business'), 1)
         self.assertEqual(demographics.get('female'), 2)
-        # Note: 'male' keyword matches inside 'Female' too (str.contains), so count is 4
-        self.assertEqual(demographics.get('male'), 4)
+        self.assertEqual(demographics.get('male'), 2)  # "Female" is NOT counted as Male
         self.assertEqual(demographics.get('disabilities'), 1)  # "Prefer not to say" excluded
         self.assertEqual(demographics.get('active_duty'), 1)
         self.assertEqual(demographics.get('veterans'), 1)
-        self.assertIn('race', demographics)
-        self.assertIn('ethnicity', demographics)
-        # "Non-Hispanic" also matches 'hispanic' substring, so hispanic count includes it
-        self.assertEqual(demographics['ethnicity']['hispanic'], 3)
-        # "Prefer not to say" should NOT count as non-Hispanic
-        self.assertEqual(demographics['ethnicity']['non_hispanic'], 0)
-        self.assertIn('minorities', demographics)
+        self.assertEqual(demographics['race']['asian'], 1)
+        self.assertEqual(demographics['race']['black'], 1)
+        self.assertEqual(demographics['race']['white'], 2)
+        self.assertEqual(demographics['ethnicity']['hispanic'], 2)  # Hispanic + Latino
+        self.assertEqual(demographics['ethnicity']['non_hispanic'], 1)  # Non-Hispanic only
+        self.assertEqual(demographics.get('minorities'), 3)
+
+    def test_demographics_prefer_not_to_say_excluded(self):
+        """Salesforce "Prefer not to say"/blank values fall into no demographic bucket."""
+        converter = TrainingConverter(self.logger, self.validator)
+        df = pd.DataFrame({
+            'Gender': ['Prefer not to say', 'Prefer not to say', 'Male'],
+            'Ethnicity': ['Prefer not to say', 'Non Hispanic or Latino', ''],
+            'Race': ['Prefer not to say', '', 'White; '],
+            'Military Status': ['Prefer not to say', 'No military service', ''],
+        })
+        demographics = converter._calculate_demographics(df)
+        self.assertEqual(demographics['female'], 0)  # no "f"-in-"prefer" false positives
+        self.assertEqual(demographics['male'], 1)
+        self.assertEqual(demographics['ethnicity']['hispanic'], 0)
+        self.assertEqual(demographics['ethnicity']['non_hispanic'], 1)
+        self.assertEqual(demographics['race']['white'], 1)
+        self.assertEqual(demographics['veterans'], 0)
+
+    def test_demographics_multivalue_race(self):
+        """A semicolon-joined Race counts toward each listed category, once each."""
+        converter = TrainingConverter(self.logger, self.validator)
+        df = pd.DataFrame({
+            'Race': ['Black or African American; White; ',
+                     'Asian; Black or African American; White; '],
+        })
+        demographics = converter._calculate_demographics(df)
+        self.assertEqual(demographics['race']['black'], 2)
+        self.assertEqual(demographics['race']['white'], 2)
+        self.assertEqual(demographics['race']['asian'], 1)
+        self.assertEqual(demographics['minorities'], 2)  # both attendees non-white
+
+    def test_demographics_service_disabled_counts_as_veteran(self):
+        """A service-disabled veteran is counted in BOTH Veterans and ServiceDisabledVeterans."""
+        converter = TrainingConverter(self.logger, self.validator)
+        df = pd.DataFrame({
+            'Military Status': ['Service Disabled Veteran', 'Veteran', 'No military service'],
+        })
+        demographics = converter._calculate_demographics(df)
+        self.assertEqual(demographics['veterans'], 2)
+        self.assertEqual(demographics['service_disabled_veterans'], 1)
+
+    def test_demographics_blank_business_status_excluded(self):
+        """A blank "Currently in Business?" is neither in-business nor not-in-business."""
+        converter = TrainingConverter(self.logger, self.validator)
+        df = pd.DataFrame({'Currently in Business?': ['Yes', 'No', '', 'Prefer not to say']})
+        demographics = converter._calculate_demographics(df)
+        self.assertEqual(demographics['currently_in_business'], 1)
+        self.assertEqual(demographics['not_in_business'], 1)
+
+    def test_valid_training_topic_passes_through(self):
+        """A Training Topic already in the SBA vocabulary is emitted verbatim, not defaulted."""
+        root = self._convert_and_parse([self._make_training_row(**{'Training Topic': 'Marketing/Sales'})])
+        code = root.find('ManagementTrainingRecord/TrainingTopic/Code')
+        self.assertEqual(code.text, 'Marketing/Sales')
+
+    def test_unrecognized_training_topic_defaults_and_warns(self):
+        """An unrecognized Training Topic defaults and records a warning for review."""
+        root = self._convert_and_parse([self._make_training_row(**{'Training Topic': 'Underwater Basket Weaving'})])
+        code = root.find('ManagementTrainingRecord/TrainingTopic/Code')
+        self.assertEqual(code.text, 'Technology')
+        self.assertIn('invalid_value', [i['category'] for i in self.validator.issues])
+
+    def test_invalid_funding_source_omitted(self):
+        """A non-enumerated Funding Source (e.g. "CORE") is omitted so the XML stays valid."""
+        root = self._convert_and_parse([self._make_training_row(**{'Funding Source': 'CORE'})])
+        self.assertIsNone(root.find('ManagementTrainingRecord/FundingSource'))
+
+    def test_output_validates_against_xsd(self):
+        """End-to-end: a per-attendee CSV converts to schema-valid Form 888 XML."""
+        from src.xml_validator import validate_against_xsd
+        rows = [
+            self._make_training_row(**{
+                'Class/Event ID': 'EVT-1', 'Gender': 'Female', 'Ethnicity': 'Hispanic or Latino',
+                'Race': 'White; ', 'Military Status': 'No military service',
+                'Currently in Business?': 'Yes', 'Funding Source': 'CORE', 'Training Topic': 'Marketing/Sales',
+            }),
+            self._make_training_row(**{
+                'Class/Event ID': 'EVT-1', 'Gender': 'Male', 'Ethnicity': 'Non Hispanic or Latino',
+                'Race': 'Asian; Black or African American; White; ', 'Military Status': 'Service Disabled Veteran',
+                'Currently in Business?': '', 'Funding Source': 'CORE', 'Training Topic': 'Marketing/Sales',
+            }),
+            self._make_training_row(**{
+                'Class/Event ID': 'EVT-1', 'Gender': 'Prefer not to say', 'Ethnicity': 'Prefer not to say',
+                'Race': 'Prefer not to say', 'Military Status': 'Prefer not to say',
+                'Currently in Business?': '', 'Funding Source': 'CORE', 'Training Topic': 'Marketing/Sales',
+            }),
+        ]
+        csv_path = self._write_csv(rows)
+        xml_path = tempfile.NamedTemporaryFile(suffix='.xml', delete=False).name
+        try:
+            TrainingConverter(self.logger, self.validator).convert(csv_path, xml_path)
+            xsd = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'SBA_NEXUS_Training-2-25-2025.xsd')
+            result = validate_against_xsd(xml_path, xsd)
+            self.assertTrue(result['is_valid'], msg=str(result['errors']))
+            nt = ET.parse(xml_path).getroot().find('ManagementTrainingRecord/NumberTrained')
+            self.assertEqual(nt.find('Total').text, '3')
+            self.assertEqual(nt.find('Female').text, '1')
+            self.assertEqual(nt.find('Male').text, '1')
+            self.assertEqual(nt.find('Veterans').text, '1')
+            self.assertEqual(nt.find('ServiceDisabledVeterans').text, '1')
+        finally:
+            os.unlink(csv_path)
+            if os.path.exists(xml_path):
+                os.unlink(xml_path)
 
     def test_cosponsor_included_when_present(self):
         root = self._convert_and_parse([self._make_training_row(Cosponsor='SBDC')])

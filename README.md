@@ -34,7 +34,7 @@ Sample CSVs for each converter type live under
 and the dashboard empty state inside the app:
 
 - `counseling-sample.csv` — individual counseling sessions (Form 641)
-- `training-sample.csv` — aggregated training events (Form 888)
+- `training-sample.csv` — per-attendee training rows (Form 888); the converter totals the demographics automatically
 - `training-client-sample.csv` — per-attendee rows (Form 641)
 
 ### UX documentation
@@ -75,7 +75,10 @@ Your output XML and validation reports will be saved in the `output/` and `repor
 
   * **Dual Converters**:
       * **Counseling Data (Form 641)**: Converts detailed client counseling session data.
-      * **Training Data**: Aggregates participant data from training events and converts it.
+      * **Training Data (Form 888)**: Takes per-attendee rows (one line per participant) and
+      automatically rolls them up per event, computing the demographic totals the schema
+      requires (Female, Male, race, ethnicity, veterans, disabilities, etc.). No
+      pre-calculated total columns are needed.
   * **Data Cleaning & Standardization**:
       * Formats dates to the required `YYYY-MM-DD` standard.
       * Cleans and validates phone numbers, numeric values, and percentages.

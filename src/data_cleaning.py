@@ -357,6 +357,82 @@ def split_multi_value(value: str | None, delimiter: str = MULTI_VALUE_DELIMITER)
     
     return [item.strip() for item in str(value).split(delimiter) if item.strip()]
 
+def is_affirmative(value: str | None) -> bool:
+    """True when a yes/no-style field affirmatively means "yes" (yes/y/true/1).
+
+    Blank, "no", and "prefer not to say" are not affirmative."""
+    if is_empty(value):
+        return False
+    return str(value).strip().lower() in {"yes", "y", "true", "1"}
+
+
+def is_negative(value: str | None) -> bool:
+    """True when a yes/no-style field explicitly means "no" (no/n/false/0).
+
+    Blank/unknown is neither affirmative nor negative, so callers can exclude it
+    from both sides of a count rather than assuming a blank means "no"."""
+    if is_empty(value):
+        return False
+    return str(value).strip().lower() in {"no", "n", "false", "0"}
+
+
+def classify_ethnicity(value: str | None) -> str | None:
+    """Classify a Salesforce ethnicity value as 'hispanic', 'non_hispanic', or None.
+
+    Returns None for blank or "Prefer not to say". Critically, "Non Hispanic or
+    Latino" classifies as non_hispanic -- a bare substring test for "hispanic"
+    mis-buckets it as hispanic.
+    """
+    if is_empty(value):
+        return None
+    v = str(value).strip().lower()
+    if "prefer not" in v:
+        return None
+    if "hispanic" not in v and "latino" not in v and "latina" not in v:
+        return None
+    if re.search(r"\bnon\b|\bnot\b", v):  # "Non Hispanic", "Not Hispanic or Latino"
+        return "non_hispanic"
+    return "hispanic"
+
+
+def classify_races(value: str | None, keyword_map: dict) -> set:
+    """Return the set of race-category keys present in a (multi-value) race field.
+
+    Salesforce joins multiple races with ';' (e.g. "Black or African American; White;").
+    Each token is matched against keyword_map ({category: [keywords]}); blank and
+    "Prefer not to say" tokens contribute nothing. A set is returned so a multi-race
+    person counts once toward each of their categories and never twice toward one.
+    """
+    categories = set()
+    for token in split_multi_value(value):
+        token_lower = token.lower()
+        if "prefer not" in token_lower:
+            continue
+        for category, keywords in keyword_map.items():
+            if any(kw in token_lower for kw in keywords):
+                categories.add(category)
+    return categories
+
+
+def classify_military(value: str | None, keyword_map: dict) -> set:
+    """Return the set of military-status category keys for a status value.
+
+    Categories may overlap: "Service Disabled Veteran" yields both the veteran and
+    service-disabled-veteran keys (service-disabled veterans are a subset of all
+    veterans). Blank, "No military service" and "Prefer not to say" yield an empty set.
+    """
+    if is_empty(value):
+        return set()
+    v = str(value).strip().lower()
+    if "prefer not" in v or "no military" in v or v in {"none", "n/a", "na"}:
+        return set()
+    categories = set()
+    for category, keywords in keyword_map.items():
+        if any(kw in v for kw in keywords):
+            categories.add(category)
+    return categories
+
+
 def clean_numeric(value: str | int | float | None) -> str:
     """
     Cleans a numeric string by removing commas, currency symbols, and whitespace.

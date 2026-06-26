@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
@@ -22,22 +22,22 @@ export async function GET(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // SEC-1: enforce the upload size cap server-side before streaming to the worker.
-    const { size: inputSize } = await stat(job.inputFilePath);
-    if (inputSize > MAX_UPLOAD_BYTES) {
+    // SEC-1: enforce the upload size cap server-side before sending to the worker.
+    const csvContent = await readFile(job.inputFilePath, "utf-8");
+    if (Buffer.byteLength(csvContent, "utf-8") > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
         { error: "File size exceeds 50MB limit" },
         { status: 413 }
       );
     }
 
-    // ARCH-4: the worker reads the CSV off the shared volume by path; we just
-    // pass the job id + file name (the size cap is still enforced above).
+    // Web and worker are separate Railway services with no shared volume, so we
+    // send the CSV content in the request body (job_id is for log correlation).
     const preview = await workerFetch<PreviewResponse>("/preview", {
       method: "POST",
       body: JSON.stringify({
         job_id: jobId,
-        file_name: job.inputFileName,
+        csv_content: csvContent,
         converter_type: job.converterType,
       }),
     });

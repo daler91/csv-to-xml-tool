@@ -2,8 +2,8 @@ from pydantic import BaseModel
 
 
 class PreviewRequest(BaseModel):
-    job_id: str
-    file_name: str  # ARCH-4: input is read from the shared volume by job_id + file_name
+    job_id: str  # for log correlation only; the CSV travels in csv_content
+    csv_content: str  # the uploaded CSV text, sent by the web (no shared volume)
     converter_type: str  # "counseling" | "training"
 
 
@@ -15,14 +15,14 @@ class PreviewResponse(BaseModel):
 
 
 class ConvertRequest(BaseModel):
-    job_id: str
-    file_name: str  # ARCH-4: input is read from the shared volume by job_id + file_name
+    job_id: str  # for log correlation only; the CSV travels in csv_content
+    csv_content: str  # the uploaded CSV text, sent by the web (no shared volume)
     converter_type: str
     column_mapping: dict[str, str] | None = None
 
 
 class ConvertResponse(BaseModel):
-    xml_path: str  # ARCH-4: output is written to the shared volume; only the path is returned
+    xml_content: str  # the converted XML text, returned to the web (no shared volume)
     stats: dict
     xsd_valid: bool
     xsd_errors: list[str]

@@ -57,7 +57,18 @@ export default function MappingPage() {
         typeof job.columnMapping === "object" &&
         Object.keys(job.columnMapping).length > 0
       ) {
-        nextMapping = job.columnMapping as Record<string, string>;
+        // Keep only saved entries whose target is still an expected field, so a
+        // stale entry (e.g. a pre-fix {"Class/Event ID":"event_id"}) is dropped
+        // rather than carried invisibly in state and re-sent on Convert.
+        const expectedFields = new Set([
+          ...data.column_status.matched,
+          ...data.column_status.missing,
+        ]);
+        nextMapping = Object.fromEntries(
+          Object.entries(job.columnMapping as Record<string, string>).filter(
+            ([, target]) => expectedFields.has(target)
+          )
+        );
       } else {
         nextMapping = {};
         data.column_status.suggestions.forEach(

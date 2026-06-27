@@ -153,3 +153,26 @@ def test_convert_end_to_end_content_to_valid_xml(monkeypatch):
     assert nt.find("Veterans").text == "1"
     assert nt.find("ServiceDisabledVeterans").text == "1"
     assert records[0].find("FundingSource") is None  # CORE omitted -> stays valid
+
+
+def test_convert_ignores_stale_event_id_mapping(monkeypatch):
+    """A persisted {"Class/Event ID": "event_id"} mapping (the pre-fix auto-
+    suggestion) must not break /convert: the worker drops the invalid target and
+    still converts the file instead of failing with "Event ID column is missing.\""""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    req = ConvertRequest(
+        job_id="jobStale",
+        csv_content=TRAINING_CSV,
+        converter_type="training",
+        column_mapping={"Class/Event ID": "event_id"},
+    )
+    result = asyncio.run(convert_route.convert(req))
+
+    assert result["stats"]["successful"] == 1
+    assert result["stats"]["errors"] == 0
+    cats = [i["category"] for i in result["issues"]]
+    assert "missing_required_field" not in cats
+    root = ET.fromstring(result["xml_content"])
+    assert len(root.findall("ManagementTrainingRecord")) == 1

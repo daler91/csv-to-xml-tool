@@ -250,8 +250,9 @@ COUNSELING_EXPECTED = [
     "Prep Hours", "Travel Hours", "Comments",
 ]
 
-# Training uses flexible COLUMN_MAPPING from config
-TRAINING_EXPECTED = list(TrainingConfig.COLUMN_MAPPING.keys())
+# Training expected columns are derived from TrainingConfig.COLUMN_MAPPING at call
+# time by get_expected_columns() below (returning the human header names, not the
+# internal snake_case keys).
 
 # Training client expected columns (the CSV columns before remapping)
 TRAINING_CLIENT_EXPECTED = [
@@ -269,10 +270,18 @@ def get_expected_columns(converter_type: str) -> list[str]:
     if converter_type == "counseling":
         return COUNSELING_EXPECTED
     elif converter_type == "training":
-        # Flatten all possible header names
+        # COLUMN_MAPPING maps internal snake_case keys -> human CSV header(s):
+        # a string is the single header, a list is the accepted aliases (the
+        # first is canonical). Return the HEADER, never the key, or a real header
+        # (e.g. "Class/Event ID") is reported missing and a fuzzy suggestion
+        # renames it to the key, which strips the column and breaks conversion.
         all_headers = []
-        for key, alts in TrainingConfig.COLUMN_MAPPING.items():
-            all_headers.append(alts[0] if isinstance(alts, list) and alts else key)
+        for alts in TrainingConfig.COLUMN_MAPPING.values():
+            if isinstance(alts, list):
+                if alts:
+                    all_headers.append(alts[0])
+            else:
+                all_headers.append(alts)
         return all_headers
     elif converter_type == "training-client":
         return TRAINING_CLIENT_EXPECTED

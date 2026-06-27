@@ -22,6 +22,7 @@ from src.config import ValidationCategory
 
 from .cancellation import ConversionCancelledError
 from .diff_service import generate_cleaning_diff
+from .preview_service import get_expected_columns
 from .column_requirements import (
     classify_columns,
     read_header_row,
@@ -45,6 +46,26 @@ CONVERTER_MAP = {
     "training": TrainingConverter,
     "training-client": TrainingClientConverter,
 }
+
+
+def _sanitize_column_mapping(
+    column_mapping: dict[str, str], converter_type: str
+) -> dict[str, str]:
+    """Drop mapping entries whose TARGET isn't a column the converter expects.
+
+    The training mapping page once auto-suggested renaming a real header to an
+    internal snake_case key (e.g. ``{"Class/Event ID": "event_id"}``); such an
+    entry renames the source column out from under the converter, which then
+    can't find it. A persisted bad mapping would keep breaking a job even after
+    the suggestion bug is fixed, so we defensively ignore any entry whose target
+    isn't a known expected column. A legitimate alias rename (target IS an
+    expected header, e.g. ``{"Partner Organization": "Cosponsor"}``) is kept.
+    """
+    expected = set(get_expected_columns(converter_type))
+    if not expected:
+        # No expected-column list for this type; don't second-guess the mapping.
+        return dict(column_mapping)
+    return {src: dst for src, dst in column_mapping.items() if dst in expected}
 
 
 def run_conversion(
@@ -85,8 +106,12 @@ def run_conversion(
     actual_csv_path = csv_path
     tmp_mapped = None
     if column_mapping:
-        df = pd.read_csv(csv_path, dtype=str)
-        df.rename(columns=column_mapping, inplace=True)
+        # utf-8-sig so a BOM on the first header can't desync this rename from the
+        # converter's own utf-8-sig read of the temp file written below (every
+        # other CSV read path strips the BOM; this one was the lone exception).
+        df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
+        safe_mapping = _sanitize_column_mapping(column_mapping, converter_type)
+        df.rename(columns=safe_mapping, inplace=True)
         tmp_mapped = tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, dir=os.path.dirname(csv_path)
         )

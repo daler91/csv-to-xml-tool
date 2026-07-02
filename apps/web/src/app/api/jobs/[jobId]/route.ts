@@ -180,23 +180,16 @@ export async function DELETE(
       );
     }
 
-    // Files first, row second: if the row delete fails the job still
-    // renders (downloads 404), which is recoverable by retrying —
-    // whereas deleting the row first could orphan files no sweep can
-    // find. Paths are built from the DB-issued id, not the URL param.
-    await rm(path.join(DATA_DIR, "uploads", job.id), {
-      recursive: true,
-      force: true,
-    }).catch(() => {});
-    await rm(path.join(DATA_DIR, "output", job.id), {
-      recursive: true,
-      force: true,
-    }).catch(() => {});
-
-    // Guarded delete: a job that raced into queued/converting since the
-    // read above is left alone. Postgres nulls auditEntry.jobId and any
-    // child job's previousJobId (optional relations -> SET NULL), so the
-    // audit trail and re-upload rows survive.
+    // Row first, files second. The guarded row delete is the atomic
+    // claim: once it succeeds, a racing POST /start can no longer flip
+    // the job to queued (its guarded updateMany matches zero rows), so
+    // the queue can never pick up a job whose input file we are about to
+    // remove. Deleting files first would leave that window open — a job
+    // racing into "queued" here would keep its row (409 below) but lose
+    // its uploaded CSV, dead-lettering the conversion with ENOENT.
+    // Postgres nulls auditEntry.jobId and any child job's previousJobId
+    // (optional relations -> SET NULL), so the audit trail and re-upload
+    // rows survive.
     const deleted = await prisma.job.deleteMany({
       where: {
         id: jobId,
@@ -210,6 +203,19 @@ export async function DELETE(
         { error: "This job is still running and can't be deleted." },
         { status: 409 }
       );
+    }
+
+    // Best-effort file removal; log loudly on failure because with the
+    // row gone no retention sweep can find these directories again.
+    // Paths are built from the DB-issued id, not the URL param.
+    for (const dir of ["uploads", "output"]) {
+      const target = path.join(DATA_DIR, dir, job.id);
+      await rm(target, { recursive: true, force: true }).catch((rmError) => {
+        console.error(
+          `Job ${job.id} deleted but removing ${target} failed — orphaned files need manual cleanup:`,
+          rmError
+        );
+      });
     }
 
     await prisma.auditEntry.create({

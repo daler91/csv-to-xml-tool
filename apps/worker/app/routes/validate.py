@@ -1,21 +1,15 @@
-import asyncio
 import logging
 import os
-import shutil
-import sys
-import tempfile
 
 from fastapi import APIRouter, HTTPException
 
-# Ensure src is importable
-_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
-if _SRC_DIR not in sys.path:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from src.xml_validator import validate_against_xsd
-
 from ..logging_context import job_id_var
 from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
+from ..services.xsd_validation import (
+    cleanup_staging,
+    stage_xml_content,
+    validate_with_details,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +25,6 @@ XSD_MAP = {
     "training": "SBA_NEXUS_Training-2-25-2025.xsd",
     "training-client": "SBA_NEXUS_Counseling-2-14.xsd",
 }
-
-
-def _write_text(path: str, text: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
 
 
 @router.post(
@@ -66,24 +55,12 @@ async def validate_xsd(req: ValidateXsdRequest):
 
     tmp_dir = None
     try:
-        # Stage the XML in a worker-local temp dir (same pattern as /convert)
-        # and validate it the way conversion_service does post-convert.
-        tmp_dir = await asyncio.to_thread(tempfile.mkdtemp, prefix="validate_")
-        xml_path = os.path.join(tmp_dir, "input.xml")
-        await asyncio.to_thread(_write_text, xml_path, req.xml_content)
-
-        result = await asyncio.to_thread(validate_against_xsd, xml_path, xsd_file)
-        errors = result.get("errors", [])
-        return {
-            "is_valid": result.get("is_valid", False),
-            "errors": errors,
-            "error_count": len(errors),
-        }
+        tmp_dir, xml_path = await stage_xml_content("validate_", req.xml_content)
+        return await validate_with_details(xml_path, xsd_file, req.schema_type)
     except HTTPException:
         raise
     except Exception:
         logger.exception("XSD validation failed")
         raise HTTPException(status_code=500, detail="Internal validation error")
     finally:
-        if tmp_dir:
-            await asyncio.to_thread(shutil.rmtree, tmp_dir, ignore_errors=True)
+        await cleanup_staging(tmp_dir)

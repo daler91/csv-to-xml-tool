@@ -98,8 +98,17 @@ export default function PreviewPage() {
     );
   }
 
-  const { column_status } = preview;
+  const { column_status, data_quality } = preview;
   const hasMissing = column_status.missing.length > 0;
+
+  // Errors (rows skipped) before warnings (converted but degraded); the
+  // worker only sends checks with count > 0. Absent entirely on old workers.
+  const qualityChecks = data_quality
+    ? [...data_quality.checks].sort((a, b) =>
+        a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1
+      )
+    : [];
+  const hasQualityErrors = qualityChecks.some((c) => c.severity === "error");
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -161,6 +170,64 @@ export default function PreviewPage() {
             Map columns manually
           </Link>
         </div>
+      )}
+
+      {/* Data quality report (feature 2.5) — informational only, never
+          blocks conversion. Hidden entirely when an older worker doesn't
+          send the data_quality field. */}
+      {data_quality && (
+        <section aria-labelledby="data-quality-heading" className="mb-6">
+          <h2 id="data-quality-heading" className="font-semibold mb-2">
+            Data quality
+          </h2>
+          {qualityChecks.length === 0 ? (
+            <Alert variant="success">
+              No data-quality issues detected across {data_quality.total_rows}{" "}
+              rows.
+            </Alert>
+          ) : (
+            <div className="bg-white border rounded divide-y">
+              {qualityChecks.map((check) => (
+                <div key={check.key} className="p-3 flex items-start gap-2">
+                  <span
+                    className={`flex-shrink-0 mt-0.5 ${
+                      check.severity === "error"
+                        ? "text-red-700"
+                        : "text-yellow-700"
+                    }`}
+                  >
+                    <StatusIcon kind={check.severity} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium inline-flex items-center gap-2">
+                      {check.label}
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                          check.severity === "error"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {check.count}
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {check.detail}
+                      {check.column ? ` (column: ${check.column})` : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {hasQualityErrors && (
+                <p className="p-3 text-xs text-red-700">
+                  Rows flagged with errors above will be skipped during
+                  conversion; you can still convert now and fix them in a
+                  re-upload.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
       )}
 
       {/* Data Table */}

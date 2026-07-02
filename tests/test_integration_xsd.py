@@ -13,6 +13,7 @@ from lxml import etree
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.config import EXPORT_COUNTRY_CODES
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
@@ -226,6 +227,33 @@ class TestCounselingXSDValidation(unittest.TestCase):
             self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
+
+
+@unittest.skipUnless(
+    os.path.exists(COUNSELING_XSD),
+    f"Counseling XSD not found at {COUNSELING_XSD}"
+)
+class TestExportCountryCodesMatchXSD(unittest.TestCase):
+    """Drift guard: config.EXPORT_COUNTRY_CODES must mirror the XSD enumeration.
+
+    The converter only emits ExportCountries/Code values from that constant, so
+    if SBA ships an updated schema with a changed country list this fails CI
+    instead of letting the constant silently drift from the XSD."""
+
+    def test_export_country_codes_match_xsd_enumeration(self):
+        parser = etree.XMLParser(resolve_entities=False)
+        schema_doc = etree.parse(COUNSELING_XSD, parser=parser)
+        ns = {'xs': 'http://www.w3.org/2001/XMLSchema'}
+        # The enumeration lives on the anonymous simpleType of the Code element
+        # inside the ExportCountryList complexType.
+        values = schema_doc.xpath(
+            '//xs:complexType[@name="ExportCountryList"]'
+            '/xs:sequence/xs:element[@name="Code"]'
+            '/xs:simpleType/xs:restriction/xs:enumeration/@value',
+            namespaces=ns,
+        )
+        self.assertTrue(values, "ExportCountryList/Code enumeration not found in XSD")
+        self.assertEqual(tuple(values), EXPORT_COUNTRY_CODES)
 
 
 @unittest.skipUnless(

@@ -6,18 +6,35 @@
  * conversion job here — hand-edited XML, output from older tool
  * versions, or files from other systems. No job is created; nothing is
  * stored beyond an audit entry.
+ *
+ * When a counseling-format file fails validation, an optional auto-fix
+ * (/api/fix-xml) can reorder elements to match the schema — it never
+ * invents or changes data — and the reordered file can be downloaded.
  */
 
 import { useState } from "react";
 import { StatusIcon } from "@/components/status-icon";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { XsdErrorDetailList } from "@/components/xsd-error-details";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import type { XsdErrorDetail } from "@/types";
 
 interface ValidationResult {
   is_valid: boolean;
   errors: string[];
   error_count: number;
+  /** Structured per-error details (Contract B); absent on older workers. */
+  error_details?: XsdErrorDetail[];
+}
+
+interface FixResult {
+  changed: boolean;
+  fixed_xml_content: string;
+  is_valid: boolean;
+  errors: string[];
+  error_count: number;
+  error_details: XsdErrorDetail[];
 }
 
 const SCHEMA_OPTIONS = [
@@ -40,11 +57,20 @@ export default function ValidatePage() {
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
+  const [fixing, setFixing] = useState(false);
+  const [fixError, setFixError] = useState("");
+  const [fixResult, setFixResult] = useState<FixResult | null>(null);
+
+  function resetOutcome() {
+    setError("");
+    setResult(null);
+    setFixError("");
+    setFixResult(null);
+  }
 
   function acceptFile(candidate: File | undefined | null) {
     if (!candidate) return;
-    setError("");
-    setResult(null);
+    resetOutcome();
     if (!candidate.name.toLowerCase().endsWith(".xml")) {
       setError("Only .xml files can be validated here.");
       setFile(null);
@@ -62,8 +88,7 @@ export default function ValidatePage() {
     e.preventDefault();
     if (!file) return;
     setValidating(true);
-    setError("");
-    setResult(null);
+    resetOutcome();
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -85,6 +110,51 @@ export default function ValidatePage() {
       setValidating(false);
     }
   }
+
+  async function handleFix() {
+    if (!file) return;
+    setFixing(true);
+    setFixError("");
+    setFixResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("schemaType", schemaType);
+      const res = await fetch("/api/fix-xml", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Auto-fix failed");
+      }
+      setFixResult(data);
+    } catch (err) {
+      setFixError(err instanceof Error ? err.message : "Auto-fix failed");
+    } finally {
+      setFixing(false);
+    }
+  }
+
+  // Client-side Blob download of the reordered XML — nothing is stored
+  // server-side for this ad-hoc flow.
+  function downloadFixedXml() {
+    if (!fixResult || !file) return;
+    const blob = new Blob([fixResult.fixed_xml_content], {
+      type: "application/xml",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${file.name.replace(/\.xml$/i, "")}-fixed.xml`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  const canAttemptFix =
+    result !== null && !result.is_valid && schemaType === "counseling";
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
@@ -171,14 +241,88 @@ export default function ValidatePage() {
                 result.error_count === 1 ? "error" : "errors"
               })`}
             >
-              <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
-                {result.errors.map((err) => (
-                  <li key={err} className="font-mono">
-                    {err}
-                  </li>
-                ))}
-              </ul>
+              {result.error_details && result.error_details.length > 0 ? (
+                <XsdErrorDetailList details={result.error_details} />
+              ) : (
+                <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
+                  {result.errors.map((err) => (
+                    <li key={err} className="font-mono">
+                      {err}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Alert>
+          )}
+
+          {canAttemptFix && (
+            <div className="mt-4 bg-white border rounded p-4">
+              <p className="text-sm text-gray-600 mb-3">
+                Auto-fix only reorders elements to match the order the Form
+                641 schema requires — it never invents or changes your data.
+                Issues in the data itself still need to be corrected at the
+                source.
+              </p>
+              <Button
+                variant="secondary"
+                onClick={handleFix}
+                isLoading={fixing}
+              >
+                {fixing ? "Attempting fix…" : "Attempt automatic fix"}
+              </Button>
+
+              {fixError && (
+                <Alert variant="error" className="mt-3">
+                  {fixError}
+                </Alert>
+              )}
+
+              {fixResult && !fixResult.changed && (
+                <Alert variant="info" className="mt-3">
+                  No automatic fixes applied — the issues are in the data,
+                  not the element order.
+                </Alert>
+              )}
+
+              {fixResult && fixResult.changed && fixResult.is_valid && (
+                <Alert variant="success" className="mt-3">
+                  <p className="mb-2">
+                    Element order fixed — the corrected file now passes
+                    validation.
+                  </p>
+                  <Button variant="secondary" onClick={downloadFixedXml}>
+                    Download fixed XML
+                  </Button>
+                </Alert>
+              )}
+
+              {fixResult && fixResult.changed && !fixResult.is_valid && (
+                <Alert
+                  variant="warning"
+                  className="mt-3"
+                  title={`Element order fixed, but ${fixResult.error_count} ${
+                    fixResult.error_count === 1 ? "issue remains" : "issues remain"
+                  } in the data`}
+                >
+                  {fixResult.error_details.length > 0 ? (
+                    <XsdErrorDetailList details={fixResult.error_details} />
+                  ) : (
+                    <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
+                      {fixResult.errors.map((err) => (
+                        <li key={err} className="font-mono">
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-2">
+                    <Button variant="secondary" onClick={downloadFixedXml}>
+                      Download fixed XML
+                    </Button>
+                  </div>
+                </Alert>
+              )}
+            </div>
           )}
         </section>
       )}

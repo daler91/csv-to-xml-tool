@@ -11,5 +11,6 @@ export const config = {
     "/api/audit/:path*",
     "/api/mapping-templates/:path*",
     "/api/validate-xml/:path*",
+    "/api/fix-xml/:path*",
   ],
 };

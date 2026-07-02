@@ -5,12 +5,16 @@ import tempfile
 import csv
 import xml.etree.ElementTree as ET
 
+from lxml import etree
+
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.converters.counseling_converter import CounselingConverter
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
+
+COUNSELING_XSD = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'SBA_NEXUS_Counseling-2-14.xsd')
 
 class TestCounselingConverter(unittest.TestCase):
 
@@ -122,6 +126,24 @@ class TestCounselingConverter(unittest.TestCase):
             converter.convert(csv_path, xml_path)
             tree = ET.parse(xml_path)
             return tree.getroot()
+        finally:
+            os.unlink(csv_path)
+            if os.path.exists(xml_path):
+                os.unlink(xml_path)
+
+    def _convert_validate_and_parse(self, rows):
+        """Convert rows to XML, assert the output validates against the real
+        counseling XSD, and return the parsed root element."""
+        csv_path = self._write_csv(rows)
+        xml_path = tempfile.NamedTemporaryFile(suffix='.xml', delete=False).name
+        try:
+            converter = CounselingConverter(self.logger, self.validator)
+            converter.convert(csv_path, xml_path)
+            parser = etree.XMLParser(resolve_entities=False)
+            schema = etree.XMLSchema(etree.parse(COUNSELING_XSD, parser=parser))
+            is_valid = schema.validate(etree.parse(xml_path, parser=parser))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(str(e) for e in schema.error_log[:10]))
+            return ET.parse(xml_path).getroot()
         finally:
             os.unlink(csv_path)
             if os.path.exists(xml_path):
@@ -365,6 +387,61 @@ class TestCounselingConverter(unittest.TestCase):
         self.assertIsNone(root.find('CounselingRecord/ClientIntake/ExportCountries'))
         root = self._convert_and_parse([self._make_valid_row()])
         self.assertIsNone(root.find('CounselingRecord/ClientIntake/ExportCountries'))
+
+    # --- ExportCountries enum resolution (enum-invalid Code values fail XSD
+    # validation for the whole document, so only canonical spellings from
+    # config.EXPORT_COUNTRY_CODES may ever be emitted) ---
+
+    def _export_country_warnings(self):
+        """Return the invalid_value warnings recorded for 'Export Countries'."""
+        return [i for i in self.validator.issues
+                if i['category'] == 'invalid_value' and i['field_name'] == 'Export Countries']
+
+    def _make_xsd_valid_row(self, **overrides):
+        """Like _make_valid_row, but with the base values the converter emits
+        verbatim ('Funding Source', 'Ethnicity:') replaced by XSD-enum-valid
+        ones, so the whole document can validate against the real schema."""
+        row = self._make_valid_row(**{'Funding Source': '', 'Ethnicity:': 'Non Hispanic or Latino'})
+        row.update(overrides)
+        return row
+
+    def test_export_countries_resolve_to_canonical_and_validate(self):
+        """Standardized values resolve to canonical enum spellings and the
+        output validates against the real XSD."""
+        root = self._convert_validate_and_parse([self._make_xsd_valid_row(**{
+            'Export Countries': 'US;United Kingdom'})])
+        codes = [e.text for e in root.findall('CounselingRecord/ClientIntake/ExportCountries/Code')]
+        self.assertEqual(codes, ['United States', 'United Kingdom'])
+        self.assertEqual(self._export_country_warnings(), [])
+
+    def test_export_countries_mixed_valid_and_invalid(self):
+        """A value not in the enum is omitted with a warning; valid values still emit."""
+        root = self._convert_validate_and_parse([self._make_xsd_valid_row(**{
+            'Export Countries': 'US;Atlantis'})])
+        codes = [e.text for e in root.findall('CounselingRecord/ClientIntake/ExportCountries/Code')]
+        self.assertEqual(codes, ['United States'])
+        warnings = self._export_country_warnings()
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['severity'], 'warning')
+        self.assertEqual(warnings[0]['record_id'], 'C-001')
+        self.assertIn("'Atlantis'", warnings[0]['message'])
+
+    def test_export_countries_all_invalid_omits_element(self):
+        """When no value resolves, no ExportCountries element is emitted (rather
+        than an empty or enum-invalid one) and the output still validates."""
+        root = self._convert_validate_and_parse([self._make_xsd_valid_row(**{
+            'Export Countries': 'Atlantis;Deutschland'})])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/ExportCountries'))
+        warnings = self._export_country_warnings()
+        self.assertEqual(len(warnings), 2)
+        self.assertIn("'Deutschland'", warnings[1]['message'])
+
+    def test_export_countries_case_insensitive_match(self):
+        """A case-insensitive match is emitted with the enum's canonical casing."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Export Countries': 'united kingdom'})])
+        codes = [e.text for e in root.findall('CounselingRecord/ClientIntake/ExportCountries/Code')]
+        self.assertEqual(codes, ['United Kingdom'])
+        self.assertEqual(self._export_country_warnings(), [])
 
 
 if __name__ == '__main__':

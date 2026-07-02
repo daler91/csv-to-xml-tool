@@ -1,5 +1,12 @@
 // Creates database tables on startup. Each statement runs separately
 // because Prisma doesn't support multiple statements in one call.
+//
+// IMPORTANT: this script — not `prisma db push` — is what the deployed
+// container runs (Dockerfile CMD), so every change to prisma/schema.prisma
+// MUST be mirrored here as an idempotent statement (ADD COLUMN IF NOT
+// EXISTS / CREATE TABLE IF NOT EXISTS), or production boots against a
+// database missing the new columns and every query on that model fails
+// with P2022.
 
 const { PrismaClient } = require("@prisma/client");
 
@@ -77,6 +84,22 @@ const statements = [
   `DO $$ BEGIN ALTER TABLE "Job" ADD CONSTRAINT "Job_previousJobId_fkey" FOREIGN KEY ("previousJobId") REFERENCES "Job"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   `DO $$ BEGIN ALTER TABLE "AuditEntry" ADD CONSTRAINT "AuditEntry_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   `DO $$ BEGIN ALTER TABLE "AuditEntry" ADD CONSTRAINT "AuditEntry_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "Job"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Retention purge (PR #103): records when the sweep removed this job's files.
+  `ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "filesPurgedAt" TIMESTAMP(3)`,
+  // Saved column-mapping templates (PR #103).
+  `CREATE TABLE IF NOT EXISTS "MappingTemplate" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "converterType" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "mapping" JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "MappingTemplate_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "MappingTemplate_userId_converterType_name_key" ON "MappingTemplate"("userId", "converterType", "name")`,
+  `CREATE INDEX IF NOT EXISTS "MappingTemplate_userId_converterType_idx" ON "MappingTemplate"("userId", "converterType")`,
+  `DO $$ BEGIN ALTER TABLE "MappingTemplate" ADD CONSTRAINT "MappingTemplate_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ];
 
 async function migrate() {

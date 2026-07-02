@@ -54,6 +54,18 @@ describe("purgeExpiredJobFiles", () => {
     expect(where?.filesPurgedAt).toBeNull();
   });
 
+  it("fails open when the sweep query throws (dashboard must not 500)", async () => {
+    db.job.findMany.mockRejectedValue(
+      new Error("column Job.filesPurgedAt does not exist")
+    );
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    await expect(purgeExpiredJobFiles("user-1")).resolves.toBe(0);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("skips a job another sweep claimed first (count 0) without touching files", async () => {
     db.job.findMany.mockResolvedValue([
       { id: "old-1", inputFileName: "jan.csv" },

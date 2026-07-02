@@ -169,7 +169,7 @@ describe("DELETE /api/jobs/[jobId]", () => {
     );
   });
 
-  it("returns 409 when the guarded delete loses the race (count 0)", async () => {
+  it("returns 409 and leaves files intact when the guarded delete loses the race (count 0)", async () => {
     db.job.findFirst.mockResolvedValue({
       id: "j1",
       status: "uploaded",
@@ -180,6 +180,9 @@ describe("DELETE /api/jobs/[jobId]", () => {
     fsRm.mockResolvedValue(undefined as never);
     const res = await DELETE(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(409);
+    // The row delete is the atomic claim: when it loses (job raced into
+    // the queue), the input files MUST survive for the queued conversion.
+    expect(fsRm).not.toHaveBeenCalled();
     expect(db.auditEntry.create).not.toHaveBeenCalled();
   });
 });

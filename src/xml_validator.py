@@ -77,7 +77,13 @@ def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
                 errors.append(f"Line {error.line}: {error.message}")
 
         return {"is_valid": is_valid, "errors": errors}
-    except (OSError, etree.XMLSyntaxError, etree.XMLSchemaError, etree.XMLSchemaParseError):
+    except etree.XMLSyntaxError as e:
+        # Unparseable XML is a validation *result*, not an internal error:
+        # surface the parse message so callers (e.g. the worker's /validate-xsd
+        # route) can show the user what is wrong with the document.
+        logger.exception("Error during XML/XSD validation")
+        return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
+    except (OSError, etree.XMLSchemaError, etree.XMLSchemaParseError):
         logger.exception("Error during XML/XSD validation")
         return {"is_valid": False, "errors": ["Validation error"]}
 

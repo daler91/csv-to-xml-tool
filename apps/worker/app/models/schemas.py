@@ -28,3 +28,15 @@ class ConvertResponse(BaseModel):
     xsd_errors: list[str]
     issues: list[dict]
     cleaning_diff: list[dict]
+
+
+class ValidateXsdRequest(BaseModel):
+    job_id: str  # for log correlation only; the XML travels in xml_content
+    xml_content: str  # the XML text to validate, sent by the web (no shared volume)
+    schema_type: str  # "counseling" | "training" | "training-client"
+
+
+class ValidateXsdResponse(BaseModel):
+    is_valid: bool
+    errors: list[str]
+    error_count: int

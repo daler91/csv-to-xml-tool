@@ -19,9 +19,10 @@ pytest.importorskip("fastapi")
 
 from fastapi import HTTPException
 
-from app.models.schemas import ConvertRequest, PreviewRequest
+from app.models.schemas import ConvertRequest, PreviewRequest, ValidateXsdRequest
 from app.routes import convert as convert_route
 from app.routes import preview as preview_route
+from app.routes import validate as validate_route
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _SCHEMAS_DIR = os.path.join(_REPO_ROOT, "schemas")
@@ -153,6 +154,151 @@ def test_convert_end_to_end_content_to_valid_xml(monkeypatch):
     assert nt.find("Veterans").text == "1"
     assert nt.find("ServiceDisabledVeterans").text == "1"
     assert records[0].find("FundingSource") is None  # CORE omitted -> stays valid
+
+
+# --- /validate-xsd: content-based validation contract (plan 1.2) ---
+# The web sends the XML text in the request body and the schema_type to pick
+# the XSD; nothing is read from a shared output directory (which the deployed
+# split-service setup never writes).
+
+
+def _validate(xml_content, schema_type="counseling", job_id="jobV"):
+    req = ValidateXsdRequest(
+        job_id=job_id, xml_content=xml_content, schema_type=schema_type
+    )
+    return asyncio.run(validate_route.validate_xsd(req))
+
+
+def test_validate_xsd_valid_content(monkeypatch):
+    """XSD-valid XML content -> is_valid true, no errors."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+
+    convert_req = ConvertRequest(
+        job_id="jobV", csv_content=TRAINING_CSV, converter_type="training"
+    )
+    xml_content = asyncio.run(convert_route.convert(convert_req))["xml_content"]
+
+    result = _validate(xml_content, schema_type="training")
+    assert result["is_valid"] is True
+    assert result["errors"] == []
+    assert result["error_count"] == 0
+
+
+def test_validate_xsd_schema_violation(monkeypatch):
+    """Well-formed XML that violates the XSD -> 200-style result with errors."""
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    result = _validate(
+        "<CounselingInformation><Bogus/></CounselingInformation>",
+        schema_type="counseling",
+    )
+    assert result["is_valid"] is False
+    assert len(result["errors"]) > 0
+    assert result["error_count"] == len(result["errors"])
+
+
+def test_validate_xsd_training_client_uses_counseling_xsd(monkeypatch):
+    """schema_type training-client validates against the counseling XSD."""
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    result = _validate(
+        "<CounselingInformation><Bogus/></CounselingInformation>",
+        schema_type="training-client",
+    )
+    assert result["is_valid"] is False
+    assert any("Bogus" in e for e in result["errors"])
+
+
+def test_validate_xsd_unparseable_content_is_a_result_not_500(monkeypatch):
+    """Garbage input -> is_valid false with the parse error message, not a 500."""
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    result = _validate("this is not xml <", schema_type="counseling")
+    assert result["is_valid"] is False
+    assert result["error_count"] == len(result["errors"]) >= 1
+    assert "parse" in result["errors"][0].lower()
+
+
+def test_validate_xsd_unknown_schema_type_maps_to_400():
+    with pytest.raises(HTTPException) as exc:
+        _validate("<a/>", schema_type="bogus")
+    assert exc.value.status_code == 400
+    assert "schema type" in exc.value.detail.lower()
+
+
+def test_validate_xsd_empty_content_maps_to_400():
+    with pytest.raises(HTTPException) as exc:
+        _validate("   ", schema_type="counseling")
+    assert exc.value.status_code == 400
+
+
+def _asgi_request(app, method, path, body=b"", headers=None):
+    """Drive the ASGI app in-process (no TestClient/httpx dependency) and
+    return (status, body) so middleware and route dependencies are exercised."""
+    messages = []
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (k.lower().encode(), v.encode()) for k, v in (headers or {}).items()
+        ],
+        "client": ("127.0.0.1", 1234),
+        "server": ("127.0.0.1", 80),
+    }
+    asyncio.run(app(scope, receive, send))
+    status = next(
+        m["status"] for m in messages if m["type"] == "http.response.start"
+    )
+    payload = b"".join(
+        m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+    )
+    return status, payload
+
+
+def test_validate_xsd_requires_worker_token(monkeypatch):
+    """/validate-xsd sits behind the same bearer-token auth as the other
+    functional routes (SEC-1): no Authorization header -> 401; the correct
+    bearer token passes auth and reaches the handler."""
+    import json
+
+    from app import main as worker_main
+    from app.core import auth as worker_auth
+
+    monkeypatch.setattr(worker_auth, "WORKER_AUTH_TOKEN", "test-token")
+    payload = json.dumps(
+        {"job_id": "jobV", "xml_content": "<a/>", "schema_type": "counseling"}
+    ).encode()
+    headers = {
+        "content-type": "application/json",
+        "content-length": str(len(payload)),
+    }
+
+    status, _ = _asgi_request(
+        worker_main.app, "POST", "/validate-xsd", payload, headers
+    )
+    assert status == 401
+
+    headers["authorization"] = "Bearer test-token"
+    status, body = _asgi_request(
+        worker_main.app, "POST", "/validate-xsd", payload, headers
+    )
+    assert status == 200
+    result = json.loads(body)
+    assert result["is_valid"] is False  # <a/> is well-formed but violates the XSD
 
 
 def test_convert_ignores_stale_event_id_mapping(monkeypatch):

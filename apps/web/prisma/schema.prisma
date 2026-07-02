@@ -8,14 +8,15 @@ generator client {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  jobs         Job[]
-  auditEntries AuditEntry[]
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String?
+  passwordHash     String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  jobs             Job[]
+  auditEntries     AuditEntry[]
+  mappingTemplates MappingTemplate[]
 }
 
 model Job {
@@ -41,9 +42,32 @@ model Job {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   completedAt    DateTime?
+  // Set when the retention sweep removed this job's files from disk.
+  // The row (and its audit trail) survives; downloads show "expired".
+  filesPurgedAt  DateTime?
   auditEntries   AuditEntry[]
 
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// A named, reusable column mapping saved by a user for one converter
+// type, so recurring Salesforce exports don't have to be re-mapped on
+// every upload. The `mapping` JSON has the same {csvColumn: xmlField}
+// shape as Job.columnMapping; the worker re-validates entries against
+// the expected columns at convert time, so a stale template entry is
+// dropped rather than misapplied.
+model MappingTemplate {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  converterType String
+  name          String
+  mapping       Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, converterType, name])
+  @@index([userId, converterType])
 }
 
 model AuditEntry {

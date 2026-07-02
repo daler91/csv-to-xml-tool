@@ -21,6 +21,14 @@ export interface PreviewResponse {
   };
 }
 
+export interface MappingTemplate {
+  id: string;
+  name: string;
+  converterType: string;
+  mapping: Record<string, string>;
+  updatedAt: string;
+}
+
 export interface ConvertRequest {
   job_id: string;
   csv_content: string;

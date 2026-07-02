@@ -113,7 +113,7 @@ def _pick_output_path(script_dir, input_path):
     return output_path
 
 
-def _pick_xsd(script_dir):
+def _pick_xsd(script_dir, converter_type=None):
     """Step 4: optionally pick XSD for validation."""
     xsd_files = find_files(script_dir, ".xsd")
     if not xsd_files:
@@ -126,6 +126,15 @@ def _pick_xsd(script_dir):
     print()
     validate_choice = input("Enter your choice (number): ").strip()
     if validate_choice == "1":
+        if converter_type == "training-client":
+            # Training client output is Form 641 counseling-format XML, so it
+            # validates against the counseling XSD (same rule as the web worker).
+            counseling_xsds = [f for f in xsd_files if "counseling" in os.path.basename(f).lower()]
+            if counseling_xsds:
+                xsd_path = counseling_xsds[0]
+                print("\n  Training client XML uses the Counseling (Form 641) schema.")
+                print(f"  -> {os.path.basename(xsd_path)}")
+                return xsd_path
         xsd_path = pick_from_list("\n  Which XSD schema file?", xsd_files)
         print(f"  -> {os.path.basename(xsd_path)}")
         return xsd_path
@@ -170,6 +179,7 @@ def main():
     converter_types = {
         "Counseling (Form 641)": "counseling",
         "Training (Management Training Report)": "training",
+        "Training Client (Form 641 - per-attendee training rows)": "training-client",
     }
     type_names = list(converter_types.keys())
     chosen_name = pick_from_list(
@@ -200,7 +210,7 @@ def main():
     output_path = _pick_output_path(script_dir, input_path)
 
     # --- Step 4: Pick XSD for validation (optional) ---
-    xsd_path = _pick_xsd(script_dir)
+    xsd_path = _pick_xsd(script_dir, converter_type)
 
     # --- Confirm and run ---
     print("=" * 60)
@@ -230,11 +240,13 @@ def main():
     from src.validation_report import ValidationTracker
     from src.converters.counseling_converter import CounselingConverter
     from src.converters.training_converter import TrainingConverter
+    from src.converters.training_client_converter import TrainingClientConverter
     import logging
 
     converters = {
         "counseling": CounselingConverter,
         "training": TrainingConverter,
+        "training-client": TrainingClientConverter,
     }
 
     logger = ConversionLogger(

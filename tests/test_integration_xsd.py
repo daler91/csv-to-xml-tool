@@ -207,6 +207,26 @@ class TestCounselingXSDValidation(unittest.TestCase):
         finally:
             os.unlink(xml_path)
 
+    def test_employee_owned_and_export_countries_validate(self):
+        """Optional Employee_Owned and ExportCountries are emitted in the correct
+        ClientIntake sequence position and validate against the XSD."""
+        xml_path = self._convert([_make_counseling_row(**{
+            'Employee Owned': 'Yes',
+            'Export Countries': 'Belgium; Canada',
+        })])
+        try:
+            parser = etree.XMLParser(resolve_entities=False)
+            doc = etree.parse(xml_path, parser=parser)
+            self.assertEqual(doc.find('.//ClientIntake/Employee_Owned').text, 'Yes')
+            self.assertEqual(
+                [c.text for c in doc.findall('.//ClientIntake/ExportCountries/Code')],
+                ['Belgium', 'Canada'],
+            )
+            is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
+            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+        finally:
+            os.unlink(xml_path)
+
 
 @unittest.skipUnless(
     os.path.exists(TRAINING_XSD),

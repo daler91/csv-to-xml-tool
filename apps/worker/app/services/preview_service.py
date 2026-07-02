@@ -101,6 +101,12 @@ COUNSELING_FIELD_METADATA: dict[str, dict[str, str]] = {
     "Currently In Business?": {
         "description": "Whether the client currently operates a business. Drives several conditional business-detail requirements.",
     },
+    "Employee Owned": {
+        "description": "Whether the business is employee-owned (Yes/No). Optional; omitted from the XML when blank.",
+    },
+    "Export Countries": {
+        "description": "Countries the client exports to. Salesforce multi-value lists are split into one entry per country. Optional; omitted from the XML when blank.",
+    },
     "Legal Entity of Business": {
         "description": "Legal structure of the client's business (LLC, S-Corp, etc.).",
         "conditional_rule": "Required when Currently In Business? is Yes.",
@@ -227,13 +233,14 @@ COUNSELING_EXPECTED = [
     "Currently In Business?", "Are you currently exporting?",
     "Account Name", "Type of Business",
     "Business Ownership - % Female", "Conduct Business Online?",
-    "8(a) Certified?", "Total Number of Employees",
+    "8(a) Certified?", "Employee Owned", "Total Number of Employees",
     "Number of Employees in Exporting Business",
     "Gross Revenues/Sales", "Profits/Losses",
     "Legal Entity of Business", "Other legal entity (specify)",
     "Rural_vs_Urban", "FIPS_Code",
     "Nature of the Counseling Seeking?",
     "Nature of the Counseling Seeking - Other Detail",
+    "Export Countries",
     "Activity ID", "Funding Source", "Verified To Be In Business",
     "Reportable Impact", "Reportable Impact Date",
     "Business Start Date", "Date Started (Meeting)",

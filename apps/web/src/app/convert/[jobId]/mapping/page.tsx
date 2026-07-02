@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import type { PreviewResponse } from "@/types";
+import type { MappingTemplate, PreviewResponse } from "@/types";
 import { useToast } from "@/components/toast";
 import { Skeleton, SkeletonTable } from "@/components/skeleton";
 import { Alert } from "@/components/ui/alert";
@@ -32,6 +32,15 @@ export default function MappingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [converterType, setConverterType] = useState("");
+  const [templates, setTemplates] = useState<MappingTemplate[]>([]);
+  const [lastJobMapping, setLastJobMapping] = useState<Record<string, string> | null>(null);
+  // The "reuse your last mapping" offer only makes sense on a job the
+  // user hasn't already mapped — a saved mapping means they were here.
+  const [offerLastMapping, setOfferLastMapping] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,14 +58,33 @@ export default function MappingPage() {
       const data = await previewRes.json();
       const job = await jobRes.json();
       setPreview(data);
+      setConverterType(job.converterType ?? "");
+
+      // Saved templates and the last completed job's mapping are
+      // nice-to-have — a failure here must not block the mapping page.
+      if (job.converterType) {
+        try {
+          const templatesRes = await fetch(
+            `/api/mapping-templates?converterType=${encodeURIComponent(job.converterType)}`
+          );
+          if (templatesRes.ok) {
+            const templateData = await templatesRes.json();
+            setTemplates(templateData.templates ?? []);
+            setLastJobMapping(templateData.lastJobMapping ?? null);
+          }
+        } catch {
+          // Ignore — the section simply doesn't render.
+        }
+      }
 
       // Restore saved mapping if available; otherwise use suggestions
-      let nextMapping: Record<string, string>;
-      if (
+      const hasSavedMapping =
         job.columnMapping &&
         typeof job.columnMapping === "object" &&
-        Object.keys(job.columnMapping).length > 0
-      ) {
+        Object.keys(job.columnMapping).length > 0;
+      setOfferLastMapping(!hasSavedMapping);
+      let nextMapping: Record<string, string>;
+      if (hasSavedMapping) {
         // Keep only saved entries whose target is still an expected field, so a
         // stale entry (e.g. a pre-fix {"Class/Event ID":"event_id"}) is dropped
         // rather than carried invisibly in state and re-sent on Convert.
@@ -181,6 +209,91 @@ export default function MappingPage() {
     setMapping(newMapping);
   }
 
+  /**
+   * Applies a stored mapping (template or previous job), keeping only
+   * entries whose CSV column exists in this file and whose target is
+   * still an expected field — a stale entry is skipped, not carried.
+   */
+  function applyStoredMapping(source: Record<string, string>, label: string) {
+    const headerSet = new Set(preview!.headers);
+    const fieldSet = new Set(allFields);
+    const applicable = Object.entries(source).filter(
+      ([csvCol, field]) => headerSet.has(csvCol) && fieldSet.has(field)
+    );
+    const skipped = Object.keys(source).length - applicable.length;
+    if (applicable.length === 0) {
+      toast.error(
+        `None of the columns in ${label} match this file, so nothing was applied.`
+      );
+      return;
+    }
+    setMapping(Object.fromEntries(applicable));
+    toast.success(
+      `Applied ${applicable.length} mapping${applicable.length === 1 ? "" : "s"} from ${label}` +
+        (skipped > 0
+          ? ` (${skipped} skipped — column not in this file)`
+          : "")
+    );
+  }
+
+  async function handleSaveTemplate() {
+    const name = templateName.trim();
+    if (!name || Object.keys(mapping).length === 0) return;
+    setSavingTemplate(true);
+    try {
+      const res = await fetch("/api/mapping-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, converterType, mapping }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save template");
+      }
+      // Overwrite-by-name upsert: replace a same-id entry if present.
+      setTemplates((prev) => [
+        data.template,
+        ...prev.filter((t) => t.id !== data.template.id),
+      ]);
+      setTemplateName("");
+      toast.success(`Template "${name}" saved`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save template"
+      );
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function handleDeleteTemplate() {
+    const template = templates.find((t) => t.id === selectedTemplateId);
+    if (!template) return;
+    if (!window.confirm(`Delete the template "${template.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/mapping-templates/${template.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete template");
+      }
+      setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+      setSelectedTemplateId("");
+      toast.success(`Template "${template.name}" deleted`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete template"
+      );
+    }
+  }
+
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+  const showLastMappingOffer =
+    offerLastMapping && lastJobMapping && Object.keys(lastJobMapping).length > 0;
+  const showTemplatesSection =
+    showLastMappingOffer || templates.length > 0 || Object.keys(mapping).length > 0;
+
   return (
     <main className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-2">Column Mapping</h1>
@@ -193,6 +306,105 @@ export default function MappingPage() {
         fields are only needed when their rule triggers — hover the badge
         or read the rule below each field.
       </p>
+
+      {showTemplatesSection && (
+        <section
+          aria-label="Saved mappings"
+          className="bg-white border rounded p-4 mb-4 flex flex-col gap-3"
+        >
+          {showLastMappingOffer && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <p className="text-sm text-gray-700 flex-1">
+                You&apos;ve converted this file type before. Start from the
+                mapping used on your last completed job?
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  applyStoredMapping(lastJobMapping!, "your last job")
+                }
+              >
+                Apply last mapping
+              </Button>
+            </div>
+          )}
+          {templates.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <label
+                htmlFor="template-select"
+                className="text-sm font-medium whitespace-nowrap"
+              >
+                Saved templates
+              </label>
+              <select
+                id="template-select"
+                className="flex-1 border rounded px-2 py-1 text-sm"
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+              >
+                <option value="">Choose a template…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({Object.keys(t.mapping).length} columns)
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={!selectedTemplate}
+                  onClick={() =>
+                    selectedTemplate &&
+                    applyStoredMapping(
+                      selectedTemplate.mapping,
+                      `"${selectedTemplate.name}"`
+                    )
+                  }
+                >
+                  Apply
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!selectedTemplate}
+                  onClick={handleDeleteTemplate}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          )}
+          {Object.keys(mapping).length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <label
+                htmlFor="template-name"
+                className="text-sm text-gray-600 whitespace-nowrap"
+              >
+                Save current mapping as
+              </label>
+              <input
+                id="template-name"
+                type="text"
+                maxLength={60}
+                placeholder="e.g. Monthly Salesforce export"
+                className="flex-1 border rounded px-2 py-1 text-sm"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                isLoading={savingTemplate}
+                disabled={!templateName.trim()}
+                onClick={handleSaveTemplate}
+              >
+                Save template
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
 
       {suggestions.length > 0 && (
         <div className="flex items-center gap-3 mb-4">

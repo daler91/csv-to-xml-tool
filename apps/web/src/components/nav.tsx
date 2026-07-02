@@ -20,6 +20,7 @@ export function Nav() {
   const links = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/convert", label: "Convert" },
+    { href: "/validate", label: "Validate XML" },
     { href: "/audit", label: "Audit Trail" },
     { href: "/help", label: "Help" },
   ];

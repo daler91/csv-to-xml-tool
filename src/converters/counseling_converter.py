@@ -7,7 +7,13 @@ import xml.etree.ElementTree as ET
 import re
 
 from .base_converter import BaseConverter, EmptyCSVError
-from ..config import BUSINESS_STARTUP_PREPLANNING, CounselingConfig, GeneralConfig, ValidationCategory
+from ..config import (
+    BUSINESS_STARTUP_PREPLANNING,
+    COUNSELING_FABRICATION_DEFAULTS,
+    CounselingConfig,
+    GeneralConfig,
+    ValidationCategory,
+)
 from .. import data_cleaning
 from .. import data_validation
 from ..xml_utils import create_element
@@ -20,10 +26,31 @@ class CounselingConverter(BaseConverter):
         super().__init__(logger, validator)
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
+        # Fabrication-risk fields (plan 1.3): when one of these is blank/missing
+        # for a row and a non-empty default is emitted in its place, a
+        # FABRICATED_DEFAULT warning is recorded. Subclasses narrow this set for
+        # fields their own form intentionally defaults (see TrainingClientConverter).
+        self.fabrication_warn_fields = set(COUNSELING_FABRICATION_DEFAULTS)
+        self._fabrication_warned = set()
 
     def _preprocess_row(self, row):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
+
+    def _warn_fabricated_default(self, record_id, field, default_value, element_label):
+        """Record a FABRICATED_DEFAULT warning when a blank/missing cell is replaced
+        by a non-empty default that ships in the XML. One warning per (record, field),
+        however many XML elements the default lands in."""
+        if field not in self.fabrication_warn_fields:
+            return
+        key = (record_id, field)
+        if key in self._fabrication_warned:
+            return
+        self._fabrication_warned.add(key)
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.FABRICATED_DEFAULT, field,
+            f"Blank value defaulted to '{default_value}' ({element_label}).",
+        )
 
     def convert(self, input_path: str, output_path: str):
         """
@@ -61,6 +88,8 @@ class CounselingConverter(BaseConverter):
         for row_index, row in enumerate(rows, 1):
             row = self._preprocess_row(row)
             record_id = row.get('Contact ID', f"Row_{row_index}")
+            # Reset per row so duplicate Contact IDs still warn independently.
+            self._fabrication_warned.clear()
 
             if not data_validation.validate_counseling_record(row, row_index, self.validator):
                 self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
@@ -192,6 +221,8 @@ class CounselingConverter(BaseConverter):
         bo_element = create_element(client_intake, 'BusinessOwnership')
         female_raw = row.get('Business Ownership - % Female(old)', '0')
         female_ownership_val = data_cleaning.clean_percentage(female_raw)
+        if data_cleaning.is_empty(row.get('Business Ownership - % Female(old)')):
+            self._warn_fabricated_default(record_id, 'Business Ownership - % Female(old)', female_ownership_val, '% Female Ownership')
         if data_cleaning.percentage_was_clamped(female_raw):
             # CONV-7: record the out-of-range original before clean_percentage clamps it.
             self.validator.add_issue(
@@ -202,8 +233,22 @@ class CounselingConverter(BaseConverter):
             )
         create_element(bo_element, 'Female', female_ownership_val)
 
-        create_element(client_intake, 'ConductingBusinessOnline', row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS))
-        create_element(client_intake, 'ClientIntake_Certified8a', row.get('8(a) Certified?(old)', self.general_config.DEFAULT_BUSINESS_STATUS))
+        conducting_online = row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS)
+        if data_cleaning.is_empty(row.get('Conduct Business Online?')) and conducting_online:
+            self._warn_fabricated_default(record_id, 'Conduct Business Online?', conducting_online, 'Conducting Business Online')
+        create_element(client_intake, 'ConductingBusinessOnline', conducting_online)
+        certified_8a = row.get('8(a) Certified?(old)', self.general_config.DEFAULT_BUSINESS_STATUS)
+        if data_cleaning.is_empty(row.get('8(a) Certified?(old)')) and certified_8a:
+            self._warn_fabricated_default(record_id, '8(a) Certified?(old)', certified_8a, '8(a) Certified')
+        create_element(client_intake, 'ClientIntake_Certified8a', certified_8a)
+        # Employee_Owned is optional (minOccurs=0): emit only when the CSV provides
+        # an affirmative/negative value; omit entirely when absent/blank or
+        # unrecognized (never fabricated).
+        employee_owned_raw = row.get('Employee Owned', '')
+        if data_cleaning.is_affirmative(employee_owned_raw):
+            create_element(client_intake, 'Employee_Owned', 'Yes')
+        elif data_cleaning.is_negative(employee_owned_raw):
+            create_element(client_intake, 'Employee_Owned', 'No')
         total_emp_intake = data_cleaning.clean_numeric(row.get('Total Number of Employees', ''))
         if total_emp_intake:
             create_element(client_intake, 'TotalNumberOfEmployees', total_emp_intake)
@@ -213,8 +258,12 @@ class CounselingConverter(BaseConverter):
 
         income_part2 = create_element(client_intake, 'ClientAnnualIncomePart2')
         gross_rev = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', ''))
+        if not gross_rev:
+            self._warn_fabricated_default(record_id, 'Gross Revenues/Sales', '0', 'Gross Revenues')
         create_element(income_part2, 'GrossRevenues', gross_rev if gross_rev else '0')
         profit_loss = data_cleaning.clean_numeric(row.get('Profits/Losses', ''))
+        if not profit_loss:
+            self._warn_fabricated_default(record_id, 'Profits/Losses', '0', 'Profit/Loss')
         create_element(income_part2, 'ProfitLoss', profit_loss if profit_loss else '0')
         create_element(income_part2, 'ExportGrossRevenuesOrSales', '0')
 
@@ -262,6 +311,18 @@ class CounselingConverter(BaseConverter):
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "CounselingSeeking", "Counseling Seeking is required under Part 2 if Client is in Business.")
 
+    def _build_export_countries(self, client_intake, row):
+        """Emit ExportCountries (last element of ClientIntake per the XSD sequence)
+        when the CSV provides countries; omitted entirely when absent/blank (never
+        fabricated). The XSD Code enumeration uses full country names, so each
+        value is run through the same country standardization as addresses."""
+        countries = data_cleaning.split_multi_value(row.get('Export Countries', ''))
+        if not countries:
+            return
+        ec_element = create_element(client_intake, 'ExportCountries')
+        for country in countries:
+            create_element(ec_element, 'Code', data_cleaning.standardize_country_code(country))
+
     def _build_client_intake_section(self, parent, row, record_id):
         client_intake = create_element(parent, 'ClientIntake')
         self._build_race(client_intake, row, record_id)
@@ -273,6 +334,7 @@ class CounselingConverter(BaseConverter):
             self._build_legal_entity(client_intake, row, record_id)
         self._build_rural_urban(client_intake, row, record_id)
         self._build_counseling_seeking(client_intake, row, record_id, in_business_val)
+        self._build_export_countries(client_intake, row)
 
     def _build_counselor_identity(self, counselor_record, row, record_id):
         create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))
@@ -314,7 +376,7 @@ class CounselingConverter(BaseConverter):
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
-    def _build_financial_data(self, counselor_record, row):
+    def _build_financial_data(self, counselor_record, row, record_id):
         total_employees = data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0')))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
@@ -326,16 +388,29 @@ class CounselingConverter(BaseConverter):
         gross_rev_part3 = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '')))
         profit_loss_part3 = data_cleaning.clean_numeric(row.get('Profit & Loss (Meeting)', row.get('Profits/Losses', '')))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
+        # No fabrication warnings here for gross revenue / profit-loss: they are
+        # keyed on the base columns (the "(Meeting)" variants are intentionally
+        # excluded, see COUNSELING_FABRICATION_DEFAULTS) and Part 2 already warns
+        # whenever the base column is blank, so warning again would be noise.
         create_element(income_part3, 'GrossRevenues', gross_rev_part3 if gross_rev_part3 else '0')
         create_element(income_part3, 'ProfitLoss', profit_loss_part3 if profit_loss_part3 else '0')
         create_element(income_part3, 'ExportGrossRevenuesOrSales', '0')
 
-        sba_loan = data_cleaning.clean_numeric(row.get('SBA Loan Amount', '0'))
-        non_sba_loan = data_cleaning.clean_numeric(row.get('Non-SBA Loan Amount', '0'))
-        equity_capital = data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', '0'))
+        # Default to '' (not '0') so an absent column is indistinguishable from a
+        # blank cell here and both trip the fabrication warning; the emitted value
+        # is unchanged because the create_element calls below fall back to '0'.
+        sba_loan = data_cleaning.clean_numeric(row.get('SBA Loan Amount', ''))
+        non_sba_loan = data_cleaning.clean_numeric(row.get('Non-SBA Loan Amount', ''))
+        equity_capital = data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', ''))
         rpsc = create_element(counselor_record, 'ResourcePartnerServiceContributed')
+        if not sba_loan:
+            self._warn_fabricated_default(record_id, 'SBA Loan Amount', '0', 'SBA Loan Amount')
         create_element(rpsc, 'SBALoanAmount', sba_loan if sba_loan else '0')
+        if not non_sba_loan:
+            self._warn_fabricated_default(record_id, 'Non-SBA Loan Amount', '0', 'Non-SBA Loan Amount')
         create_element(rpsc, 'NonSBALoanAmount', non_sba_loan if non_sba_loan else '0')
+        if not equity_capital:
+            self._warn_fabricated_default(record_id, 'Amount of Equity Capital Received', '0', 'Equity Capital Received')
         create_element(rpsc, 'EquityCapitalReceived', equity_capital if equity_capital else '0')
 
     def _build_coded_section(self, parent, element_name, codes, other_text, default_other_code=None):
@@ -412,7 +487,7 @@ class CounselingConverter(BaseConverter):
         counselor_record = create_element(parent, 'CounselorRecord')
         self._build_counselor_identity(counselor_record, row, record_id)
         self._build_business_verification(counselor_record, row)
-        self._build_financial_data(counselor_record, row)
+        self._build_financial_data(counselor_record, row, record_id)
 
         self._build_coded_section(counselor_record, 'Certifications',
             data_cleaning.split_multi_value(row.get('Certifications (SDB, HUBZONE, etc)', '')),
@@ -448,7 +523,12 @@ class CounselingConverter(BaseConverter):
         if zip4_match:
             create_element(address, 'Zip4Code', zip4_match.group(1))
         country = create_element(address, 'Country')
-        create_element(country, 'Code', data_cleaning.standardize_country_code(row.get('Mailing Country', 'US')))
+        country_val = data_cleaning.standardize_country_code(row.get('Mailing Country', 'US'))
+        if data_cleaning.is_empty(row.get('Mailing Country')):
+            # Deduped per (record, field): the address is built for both
+            # AddressPart1 and AddressPart3 but only one warning is recorded.
+            self._warn_fabricated_default(record_id, 'Mailing Country', country_val, 'Mailing Country')
+        create_element(country, 'Code', country_val)
 
     def _build_phone(self, parent, element_name, row):
         primary_phone = data_cleaning.clean_phone_number(row.get('Contact: Phone', ''))

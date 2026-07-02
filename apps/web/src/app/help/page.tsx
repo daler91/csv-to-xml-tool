@@ -195,6 +195,23 @@ export default function HelpPage() {
         </p>
       </Section>
 
+      <Section id="validate" title="Validating an existing XML file">
+        <p className="mb-3">
+          The <strong>Validate XML</strong> page (in the navigation bar)
+          checks any XML file against the SBA Nexus schemas without
+          running a conversion — useful for hand-edited files, output
+          from older tools, or files you received from another system.
+          Pick the schema (Form 641 counseling or Form 888 training),
+          upload the file, and you get a pass/fail with the exact
+          schema errors.
+        </p>
+        <p>
+          Files converted here don&apos;t need this step — every
+          conversion is validated automatically and the result is shown
+          on the results page.
+        </p>
+      </Section>
+
       <Section id="errors" title="Common errors">
         <dl className="space-y-4">
           <div>

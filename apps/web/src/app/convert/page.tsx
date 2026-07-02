@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/skeleton";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { MAX_UPLOAD_BYTES, RETENTION_DAYS } from "@/lib/limits";
 
 function isCsvFile(f: File): boolean {
   return f.name.toLowerCase().endsWith(".csv");
@@ -205,8 +205,10 @@ function ConvertForm() {
 
         <p className="text-xs text-gray-600 leading-relaxed">
           Your CSV is stored in your account and is visible only to you.
-          Files are retained per our data-retention policy. Data is processed
-          internally; nothing is sent to third-party services.
+          Uploaded files and converted XML are automatically deleted after{" "}
+          {RETENTION_DAYS} days, and you can delete a job and its files any
+          time from the dashboard. Data is processed internally; nothing is
+          sent to third-party services.
         </p>
       </form>
     </main>

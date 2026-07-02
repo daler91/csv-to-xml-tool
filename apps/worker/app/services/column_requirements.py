@@ -20,6 +20,7 @@ _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from src.config import COUNSELING_FABRICATION_DEFAULTS as _FABRICATION_DEFAULTS_MAP
 from src.data_cleaning import normalize_header
 
 # --- Requirement tiers (moved here from preview_service so preview and conversion
@@ -49,26 +50,11 @@ TRAINING_CLIENT_REQUIRED = {"Class/Event ID", "Contact ID"}
 TRAINING_CLIENT_CONDITIONAL: set[str] = set()
 
 # Columns the counseling converter silently defaults to a *non-empty* value when the
-# column is absent -- i.e. it fabricates data that ships in the federal XML. Exact
-# header strings are taken from counseling_converter.py's row.get(...) calls so the
-# check matches what the converter actually reads:
-#   Gross Revenues/Sales, Profits/Losses, SBA/Non-SBA Loan, Equity Capital -> "0"
-#   Business Ownership - % Female(old) -> 0 ; Mailing Country -> "United States"
-#   Conduct Business Online?, 8(a) Certified?(old) -> "No"
-# The "(Meeting)" revenue/profit variants are intentionally excluded: the converter
-# falls back to the base "Gross Revenues/Sales" / "Profits/Losses" columns (already
-# listed), so warning on the variants too would just be noise.
-COUNSELING_FABRICATION_DEFAULTS = {
-    "Gross Revenues/Sales",
-    "Profits/Losses",
-    "SBA Loan Amount",
-    "Non-SBA Loan Amount",
-    "Amount of Equity Capital Received",
-    "Business Ownership - % Female(old)",
-    "Mailing Country",
-    "Conduct Business Online?",
-    "8(a) Certified?(old)",
-}
+# column is absent -- i.e. it fabricates data that ships in the federal XML. The
+# canonical column -> emitted-default map lives in src/config.py (shared with the
+# converters' per-row FABRICATED_DEFAULT warnings); this module only needs the
+# column names.
+COUNSELING_FABRICATION_DEFAULTS = set(_FABRICATION_DEFAULTS_MAP)
 
 
 class RequiredColumnsMissingError(Exception):

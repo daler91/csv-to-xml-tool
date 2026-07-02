@@ -232,6 +232,19 @@ class TestTrainingClientConverter(unittest.TestCase):
         self.assertTrue(len(race_codes) >= 1)
         self.assertEqual(race_codes[0].text, 'White')
 
+    def test_injected_defaults_do_not_warn_fabricated_default(self):
+        """The counseling defaults injected by TrainingClientConfig.DEFAULTS for
+        columns absent from the shorter training-client form (blank revenue fields
+        defaulted to '0', Mailing Country 'US', etc.) are intentional and must not
+        produce a per-row FABRICATED_DEFAULT warning storm."""
+        rows = [
+            self._make_valid_row(**{'Contact ID': 'C-001'}),
+            self._make_valid_row(**{'Contact ID': 'C-002', 'First Name': 'Robin'}),
+        ]
+        self._convert_and_parse(rows)
+        fabricated = [i for i in self.validator.issues if i['category'] == 'fabricated_default']
+        self.assertEqual(fabricated, [])
+
 
 if __name__ == '__main__':
     unittest.main()

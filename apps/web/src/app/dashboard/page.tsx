@@ -6,6 +6,8 @@ import { StatusIcon } from "@/components/status-icon";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { buttonClasses } from "@/components/ui/button-classes";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
+import { purgeExpiredJobFiles } from "@/lib/retention";
+import { DeleteJobButton } from "@/components/delete-job-button";
 
 const PAGE_SIZE = 20;
 
@@ -23,6 +25,8 @@ export default async function DashboardPage({
 
   // ARCH-1: reconcile stuck "converting" jobs before listing.
   await reapStuckConvertingJobs(session.user.id);
+  // Retention: lazily remove files older than the retention window.
+  await purgeExpiredJobFiles(session.user.id);
 
   const [jobs, totalCount] = await Promise.all([
     prisma.job.findMany({
@@ -115,12 +119,18 @@ export default async function DashboardPage({
                         {new Date(job.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/convert/${job.id}/results`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          View
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/convert/${job.id}/results`}
+                            className="text-blue-600 hover:underline"
+                          >
+                            View
+                          </Link>
+                          <DeleteJobButton
+                            jobId={job.id}
+                            fileName={job.inputFileName}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

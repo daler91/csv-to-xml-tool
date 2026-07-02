@@ -3,14 +3,22 @@ import { TEST_USER, jobParams, jsonRequest } from "@/test/helpers";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    job: { findFirst: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
+    job: {
+      findFirst: vi.fn(),
+      updateMany: vi.fn(),
+      findUnique: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    auditEntry: { create: vi.fn() },
   },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
 vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
 vi.mock("@/lib/job-reaper", () => ({ reapStuckConvertingJobs: vi.fn() }));
+vi.mock("node:fs/promises", () => ({ rm: vi.fn() }));
 
-import { GET, PATCH } from "@/app/api/jobs/[jobId]/route";
+import { rm } from "node:fs/promises";
+import { GET, PATCH, DELETE } from "@/app/api/jobs/[jobId]/route";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
@@ -109,5 +117,69 @@ describe("PATCH /api/jobs/[jobId]", () => {
       jobParams("j1")
     );
     expect(res.status).toBe(409);
+  });
+});
+
+describe("DELETE /api/jobs/[jobId]", () => {
+  const fsRm = vi.mocked(rm);
+
+  it("returns 404 for a job the user does not own", async () => {
+    db.job.findFirst.mockResolvedValue(null as never);
+    const res = await DELETE(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(404);
+    expect(fsRm).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a running job (409)", async () => {
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      status: "converting",
+    } as never);
+    const res = await DELETE(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(409);
+    expect(fsRm).not.toHaveBeenCalled();
+    expect(db.job.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("removes files, deletes the row, and writes a job_deleted audit entry", async () => {
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      status: "complete",
+      inputFileName: "data.csv",
+      converterType: "counseling",
+    } as never);
+    db.job.deleteMany.mockResolvedValue({ count: 1 } as never);
+    fsRm.mockResolvedValue(undefined as never);
+
+    const res = await DELETE(new Request("http://localhost"), jobParams("j1"));
+
+    expect(res.status).toBe(200);
+    const rmPaths = fsRm.mock.calls.map((c) => c[0]);
+    expect(rmPaths.some((p) => String(p).includes("uploads"))).toBe(true);
+    expect(rmPaths.some((p) => String(p).includes("output"))).toBe(true);
+    // Guarded delete: still refuses a job that raced into a running state.
+    const deleteWhere = db.job.deleteMany.mock.calls[0]?.[0]?.where;
+    expect(deleteWhere?.status).toEqual({
+      notIn: expect.arrayContaining(["queued", "converting"]),
+    });
+    expect(db.auditEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "job_deleted" }),
+      })
+    );
+  });
+
+  it("returns 409 when the guarded delete loses the race (count 0)", async () => {
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      status: "uploaded",
+      inputFileName: "data.csv",
+      converterType: "counseling",
+    } as never);
+    db.job.deleteMany.mockResolvedValue({ count: 0 } as never);
+    fsRm.mockResolvedValue(undefined as never);
+    const res = await DELETE(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(409);
+    expect(db.auditEntry.create).not.toHaveBeenCalled();
   });
 });

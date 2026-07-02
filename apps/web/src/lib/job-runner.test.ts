@@ -124,6 +124,69 @@ describe("runJob", () => {
     );
   });
 
+  it("persists structured xsd_error_details when the worker provides them", async () => {
+    const detail = {
+      line: 42,
+      row_number: 3,
+      record_id: "003",
+      element: "Race",
+      field_label: "Race",
+      csv_column: "Race",
+      message: "Element 'Race': This element is not expected.",
+      friendly_message: "Row 3: the Race value is out of order or missing.",
+    };
+    db.job.findUnique.mockResolvedValue(JOB as never);
+    db.job.updateMany
+      .mockResolvedValueOnce({ count: 1 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+    db.auditEntry.create.mockResolvedValue({} as never);
+    read.mockResolvedValue("Contact ID\n003\n" as never);
+    worker.mockResolvedValue({
+      ...RESULT,
+      xsd_valid: false,
+      xsd_errors: ["Element 'Race': This element is not expected."],
+      xsd_error_details: [detail],
+    } as never);
+
+    await runJob("j1");
+
+    expect(db.job.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          xsdValid: false,
+          xsdErrors: [detail],
+        }),
+      })
+    );
+  });
+
+  it("falls back to raw xsd error strings when details are absent (older worker)", async () => {
+    db.job.findUnique.mockResolvedValue(JOB as never);
+    db.job.updateMany
+      .mockResolvedValueOnce({ count: 1 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+    db.auditEntry.create.mockResolvedValue({} as never);
+    read.mockResolvedValue("Contact ID\n003\n" as never);
+    worker.mockResolvedValue({
+      ...RESULT,
+      xsd_valid: false,
+      xsd_errors: ["Element 'Race': bad"],
+    } as never);
+
+    await runJob("j1");
+
+    expect(db.job.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          xsdValid: false,
+          xsdErrors: ["Element 'Race': bad"],
+        }),
+      })
+    );
+  });
+
   it("propagates worker errors so the consumer decides retry vs dead-letter", async () => {
     db.job.findUnique.mockResolvedValue(JOB as never);
     db.job.updateMany.mockResolvedValueOnce({ count: 1 } as never);

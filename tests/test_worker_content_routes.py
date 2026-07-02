@@ -19,8 +19,14 @@ pytest.importorskip("fastapi")
 
 from fastapi import HTTPException
 
-from app.models.schemas import ConvertRequest, PreviewRequest, ValidateXsdRequest
+from app.models.schemas import (
+    ConvertRequest,
+    FixXmlRequest,
+    PreviewRequest,
+    ValidateXsdRequest,
+)
 from app.routes import convert as convert_route
+from app.routes import fix as fix_route
 from app.routes import preview as preview_route
 from app.routes import validate as validate_route
 
@@ -42,6 +48,21 @@ TRAINING_CSV = (
     "EVT-1,Always Ready: Marketing,2025-02-03,Marketing/Sales,In-person,CORE,,"
     "Prefer not to say,Prefer not to say,,Prefer not to say,Prefer not to say,"
     "Des Moines,IA,50312\n"
+)
+
+
+# Compact counseling CSV covering the required columns; the first row converts
+# to XSD-valid XML, the second carries an Email the XSD pattern rejects so the
+# structured error mapping (feature 2.4) has something to trace.
+COUNSELING_CSV = (
+    "Contact ID,Last Name,First Name,Email,Mailing City,Mailing State/Province,"
+    "Mailing Zip/Postal Code,Client Signature - Date,Race,Ethnicity:,Gender,"
+    "Disability,Veteran Status,Currently In Business?,Type of Session,"
+    "Language(s) Used,Date,Name of Counselor,Duration (hours)\n"
+    "C-001,Smith,John,john@example.com,Des Moines,IA,50309,2025-01-15,White,"
+    "Non Hispanic or Latino,Male,No,,No,Telephone,English,2025-01-15,Jane Doe,1.5\n"
+    "C-002,Jones,Amy,not an email,Des Moines,IA,50309,2025-01-15,White,"
+    "Non Hispanic or Latino,Female,No,,No,Telephone,English,2025-01-15,Jane Doe,1\n"
 )
 
 
@@ -322,3 +343,175 @@ def test_convert_ignores_stale_event_id_mapping(monkeypatch):
     assert "missing_required_field" not in cats
     root = ET.fromstring(result["xml_content"])
     assert len(root.findall("ManagementTrainingRecord")) == 1
+
+
+# --- Feature 2.4: structured XSD error details on /convert ---
+
+
+def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
+    """When post-convert XSD validation fails, /convert adds xsd_error_details
+    tracing each raw error back to the record (row) and CSV column while the
+    flat xsd_errors string list stays unchanged for compat."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    req = ConvertRequest(
+        job_id="jobBadEmail", csv_content=COUNSELING_CSV, converter_type="counseling"
+    )
+    result = asyncio.run(convert_route.convert(req))
+
+    assert result["xsd_valid"] is False
+    assert len(result["xsd_errors"]) >= 1
+    details = result["xsd_error_details"]
+    assert len(details) == len(result["xsd_errors"])
+    # Both Email errors (ClientRequest + CounselorRecord copies) trace back to
+    # the second CSV row / Contact C-002 and the 'Email' source column.
+    for detail in details:
+        assert detail["element"] == "Email"
+        assert detail["row_number"] == 2
+        assert detail["record_id"] == "C-002"
+        assert detail["csv_column"] == "Email"
+        assert detail["message"] in result["xsd_errors"]
+        assert detail["friendly_message"].startswith(
+            "Row 2 (Contact C-002): 'Email' (CSV column 'Email') — "
+        )
+
+
+def test_convert_xsd_valid_returns_empty_error_details(monkeypatch):
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    req = ConvertRequest(
+        job_id="jobOK", csv_content=TRAINING_CSV, converter_type="training"
+    )
+    result = asyncio.run(convert_route.convert(req))
+
+    assert result["xsd_valid"] is True
+    assert result["xsd_error_details"] == []
+
+
+# --- /fix-xml: element-order auto-fix contract (feature 2.4) ---
+# The web sends counseling-format XML content; the worker reorders ClientIntake
+# children per the XSD sequence (order-fix only, never adding elements),
+# re-validates the fixed content, and returns it with the validation outcome.
+
+
+def _fix(xml_content, schema_type="counseling", job_id="jobF"):
+    req = FixXmlRequest(
+        job_id=job_id, xml_content=xml_content, schema_type=schema_type
+    )
+    return asyncio.run(fix_route.fix_xml(req))
+
+
+def _misordered_counseling_xml(monkeypatch):
+    """Convert a valid counseling CSV, then move Race (which the XSD sequence
+    requires first in ClientIntake) to the end so only the order is wrong."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    valid_csv = "\n".join(COUNSELING_CSV.splitlines()[:2]) + "\n"  # header + C-001
+    req = ConvertRequest(
+        job_id="jobFixSrc", csv_content=valid_csv, converter_type="counseling"
+    )
+    result = asyncio.run(convert_route.convert(req))
+    assert result["xsd_valid"] is True, result["xsd_errors"]
+
+    root = ET.fromstring(result["xml_content"])
+    client_intake = root.find(".//ClientIntake")
+    race = client_intake.find("Race")
+    client_intake.remove(race)
+    client_intake.append(race)
+    return ET.tostring(root, encoding="unicode")
+
+
+def test_fix_xml_reorders_and_revalidates(monkeypatch):
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    misordered = _misordered_counseling_xml(monkeypatch)
+
+    # Sanity: the misordered document really is XSD-invalid before the fix.
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    assert _validate(misordered, schema_type="counseling")["is_valid"] is False
+
+    result = _fix(misordered)
+
+    assert result["changed"] is True
+    assert result["is_valid"] is True
+    assert result["errors"] == []
+    assert result["error_count"] == 0
+    assert result["error_details"] == []
+    fixed_root = ET.fromstring(result["fixed_xml_content"])
+    assert fixed_root.find(".//ClientIntake")[0].tag == "Race"
+
+
+def test_fix_xml_no_op_on_already_ordered_content(monkeypatch):
+    """Already-correct XML round-trips with changed=false (the fixer rewrites
+    the file, but no element actually moved)."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    valid_csv = "\n".join(COUNSELING_CSV.splitlines()[:2]) + "\n"  # header + C-001
+    req = ConvertRequest(
+        job_id="jobFixNoop", csv_content=valid_csv, converter_type="counseling"
+    )
+    xml_content = asyncio.run(convert_route.convert(req))["xml_content"]
+
+    result = _fix(xml_content)
+
+    assert result["changed"] is False
+    assert result["is_valid"] is True
+
+
+def test_fix_xml_training_schema_type_maps_to_400():
+    with pytest.raises(HTTPException) as exc:
+        _fix("<a/>", schema_type="training")
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "auto-fix supports counseling-format XML only"
+
+
+def test_fix_xml_empty_content_maps_to_400():
+    with pytest.raises(HTTPException) as exc:
+        _fix("   ")
+    assert exc.value.status_code == 400
+
+
+def test_fix_xml_unparseable_content_is_a_result_not_500(monkeypatch):
+    """Garbage input -> 200-style result: changed=false, is_valid=false with
+    the parse error surfaced, never a 500."""
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    result = _fix("this is not xml <")
+
+    assert result["changed"] is False
+    assert result["is_valid"] is False
+    assert result["fixed_xml_content"] == "this is not xml <"
+    assert result["error_count"] == len(result["errors"]) >= 1
+    assert "parse" in result["errors"][0].lower()
+
+
+def test_fix_xml_requires_worker_token(monkeypatch):
+    """/fix-xml is registered in the app behind the same bearer-token auth as
+    the other functional routes (Contract C): no Authorization header -> 401."""
+    import json
+
+    from app import main as worker_main
+    from app.core import auth as worker_auth
+
+    monkeypatch.setattr(worker_auth, "WORKER_AUTH_TOKEN", "test-token")
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    payload = json.dumps(
+        {"job_id": "jobF", "xml_content": "<a/>", "schema_type": "counseling"}
+    ).encode()
+    headers = {
+        "content-type": "application/json",
+        "content-length": str(len(payload)),
+    }
+
+    status, _ = _asgi_request(worker_main.app, "POST", "/fix-xml", payload, headers)
+    assert status == 401
+
+    headers["authorization"] = "Bearer test-token"
+    status, body = _asgi_request(worker_main.app, "POST", "/fix-xml", payload, headers)
+    assert status == 200
+    result = json.loads(body)
+    assert result["is_valid"] is False  # <a/> is well-formed but violates the XSD
+    assert result["changed"] is False

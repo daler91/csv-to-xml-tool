@@ -13,6 +13,7 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.xml_validator import validate_against_xsd
+from src.xsd_error_mapping import build_error_details
 
 from ..logging_context import job_id_var
 from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
@@ -74,10 +75,20 @@ async def validate_xsd(req: ValidateXsdRequest):
 
         result = await asyncio.to_thread(validate_against_xsd, xml_path, xsd_file)
         errors = result.get("errors", [])
+        is_valid = result.get("is_valid", False)
+        error_details: list[dict] = []
+        if not is_valid and errors:
+            # Feature 2.4: map each raw error string back to the record (row)
+            # and CSV column it came from. Degrades to null fields when the
+            # XML is unparseable or an error can't be traced to a record.
+            error_details = await asyncio.to_thread(
+                build_error_details, xml_path, errors, req.schema_type
+            )
         return {
-            "is_valid": result.get("is_valid", False),
+            "is_valid": is_valid,
             "errors": errors,
             "error_count": len(errors),
+            "error_details": error_details,
         }
     except HTTPException:
         raise

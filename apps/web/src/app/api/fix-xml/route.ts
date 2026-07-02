@@ -7,31 +7,32 @@ import { workerFetch } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import type { XsdErrorDetail } from "@/types";
 
-// Mirrors the worker's schema_type contract: training-client shares the
-// counseling XSD, so the UI only exposes counseling/training, but all
-// three are accepted for future callers.
-const SCHEMA_TYPES = new Set(["counseling", "training", "training-client"]);
+// The worker's auto-fix only understands counseling-format XML (Form 641);
+// training-client shares that XSD so it's accepted too. Plain "training"
+// (Form 888) is rejected by the worker, so it's rejected here as well.
+const SCHEMA_TYPES = new Set(["counseling", "training-client"]);
 
-interface ValidateXsdResponse {
+interface FixXmlResponse {
+  changed: boolean;
+  fixed_xml_content: string;
   is_valid: boolean;
   errors: string[];
   error_count: number;
-  /** Structured per-error details (Contract B); absent on older workers. */
-  error_details?: XsdErrorDetail[];
+  error_details: XsdErrorDetail[];
 }
 
 /**
- * Standalone pre-submission check: validate an existing XML file
- * (hand-edited, legacy, or from another tool) against the SBA Nexus
- * XSDs without creating a conversion job. Proxies to the worker's
- * content-based /validate-xsd endpoint.
+ * Attempt an automatic structural fix of an XML file (element reordering
+ * to match the schema — never inventing data), then re-validate the fixed
+ * content. Companion to /api/validate-xml: same auth, limits, and worker
+ * proxying, but against the worker's /fix-xml endpoint (Contract C).
  */
 export async function POST(req: Request) {
   try {
     const user = await getRequiredUser();
 
     const { success, remaining } = await rateLimit(
-      `validate-xml:${user.id}`,
+      `fix-xml:${user.id}`,
       10,
       60
     );
@@ -66,13 +67,13 @@ export async function POST(req: Request) {
     }
     if (!SCHEMA_TYPES.has(schemaType)) {
       return NextResponse.json(
-        { error: "Unknown schema type" },
+        { error: "Auto-fix supports counseling-format XML only" },
         { status: 400 }
       );
     }
 
     const xmlContent = await file.text();
-    const result = await workerFetch<ValidateXsdResponse>("/validate-xsd", {
+    const result = await workerFetch<FixXmlResponse>("/fix-xml", {
       method: "POST",
       body: JSON.stringify({
         job_id: `adhoc-${randomUUID()}`,
@@ -85,12 +86,12 @@ export async function POST(req: Request) {
     await prisma.auditEntry.create({
       data: {
         userId: user.id,
-        action: "xml_validated",
+        action: "xml_autofix",
         metadata: {
           fileName: file.name,
           schemaType,
+          changed: result.changed,
           isValid: result.is_valid,
-          errorCount: result.error_count,
         },
       },
     });
@@ -100,9 +101,9 @@ export async function POST(req: Request) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    console.error("Validate XML error:", error);
+    console.error("Fix XML error:", error);
     return NextResponse.json(
-      { error: "Validation failed — the validation service may be busy. Try again in a moment." },
+      { error: "Auto-fix failed — the fix service may be busy. Try again in a moment." },
       { status: 502 }
     );
   }

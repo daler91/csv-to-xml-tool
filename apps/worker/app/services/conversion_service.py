@@ -18,6 +18,7 @@ from src.converters.base_converter import EmptyCSVError
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd
+from src.xsd_error_mapping import build_error_details
 from src.config import ValidationCategory
 
 from .cancellation import ConversionCancelledError
@@ -80,7 +81,7 @@ def run_conversion(
     Run a CSV-to-XML conversion using the existing converter logic.
 
     All paths must be constructed and validated by the calling route.
-    Returns a dict with stats, issues, xsd_valid, xsd_errors.
+    Returns a dict with stats, issues, xsd_valid, xsd_errors, xsd_error_details.
 
     If ``is_cancelled`` is provided, it is polled at each major phase
     boundary. When it returns True, ``ConversionCancelledError`` is raised
@@ -181,10 +182,17 @@ def run_conversion(
         xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP[converter_type])
         xsd_valid = False
         xsd_errors: list[str] = []
+        xsd_error_details: list[dict] = []
         if os.path.exists(xml_path) and os.path.exists(xsd_file):
             result = validate_against_xsd(xml_path, xsd_file)
             xsd_valid = result.get("is_valid", False)
             xsd_errors = result.get("errors", [])
+            if not xsd_valid and xsd_errors:
+                # Feature 2.4: map each raw error string back to the record
+                # (row) and CSV column it came from for the fix-it view.
+                xsd_error_details = build_error_details(
+                    xml_path, xsd_errors, converter_type
+                )
 
         _checkpoint()
 
@@ -201,6 +209,7 @@ def run_conversion(
             },
             "xsd_valid": xsd_valid,
             "xsd_errors": xsd_errors,
+            "xsd_error_details": xsd_error_details,
             "issues": tracker_data["issues"],
             "cleaning_diff": diffs,
         }

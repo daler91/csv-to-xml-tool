@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .core.auth import require_worker_token
 from .logging_context import LOG_FORMAT, install_job_id_log_factory
-from .routes import health, preview, convert, validate
+from .routes import health, preview, convert, validate, fix
 
 # Tag every log record with the active job id (default "-") so logs are
 # correlatable across the web↔worker boundary (QUAL-5).
@@ -58,6 +58,7 @@ app.include_router(health.router)
 app.include_router(preview.router, dependencies=[Depends(require_worker_token)])
 app.include_router(convert.router, dependencies=[Depends(require_worker_token)])
 app.include_router(validate.router, dependencies=[Depends(require_worker_token)])
+app.include_router(fix.router, dependencies=[Depends(require_worker_token)])
 
 # Log all registered routes at startup
 _registered = []

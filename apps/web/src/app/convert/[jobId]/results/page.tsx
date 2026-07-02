@@ -7,6 +7,7 @@ import { StatusIcon, type StatusKind } from "@/components/status-icon";
 import { DeleteJobButton } from "@/components/delete-job-button";
 import { resolveWithinDataDir } from "@/lib/paths";
 import { RETENTION_DAYS } from "@/lib/limits";
+import type { XsdErrorDetail } from "@/types";
 
 // Inline preview cap. A 50MB <pre> would freeze the tab, so only the
 // head of the file is embedded; the download link serves the rest.
@@ -103,7 +104,11 @@ export default async function ResultsPage({
   const xmlPreview = await readXmlPreview(job.outputFilePath);
   const summary = job.summary as unknown as Record<string, number> | null;
   const issues = (job.issues as unknown as ValidationIssue[]) || [];
-  const xsdErrors = (job.xsdErrors as unknown as string[]) || [];
+  // Legacy jobs stored raw validator strings; newer workers persist
+  // structured XsdErrorDetail objects (Contract B). Both live in the same
+  // Json column, so entries are discriminated by typeof at render time.
+  const xsdErrors =
+    (job.xsdErrors as unknown as (string | XsdErrorDetail)[]) || [];
   const cleaningDiffs =
     (job.cleaningDiffs as unknown as CleaningDiffEntry[]) || [];
   const errors = issues.filter((i) => i.severity === "error");
@@ -253,12 +258,25 @@ export default async function ResultsPage({
               <StatusIcon kind="error" />
               XML failed XSD validation ({xsdErrors.length} errors)
             </p>
-            <ul className="text-xs text-red-700 space-y-1 max-h-40 overflow-y-auto">
-              {xsdErrors.map((err) => (
-                <li key={err} className="font-mono">
-                  {err}
-                </li>
-              ))}
+            <ul className="text-xs text-red-700 space-y-2 max-h-64 overflow-y-auto">
+              {xsdErrors.map((err, index) =>
+                typeof err === "string" ? (
+                  <li key={`${index}-${err}`} className="font-mono">
+                    {err}
+                  </li>
+                ) : (
+                  <li key={`${index}-${err.message}`}>
+                    <p className="font-medium">{xsdErrorHeadline(err)}</p>
+                    <p>{err.friendly_message}</p>
+                    <details className="mt-0.5">
+                      <summary className="cursor-pointer select-none text-gray-500">
+                        Raw validator message
+                      </summary>
+                      <p className="font-mono mt-0.5">{err.message}</p>
+                    </details>
+                  </li>
+                )
+              )}
             </ul>
           </div>
         )}
@@ -323,6 +341,24 @@ export default async function ResultsPage({
       )}
     </main>
   );
+}
+
+/**
+ * "Row 3 — Race (CSV column: Race) — Contact 12345" headline for a
+ * structured XSD error. Every trackable field is nullable, so only the
+ * parts the worker could map back are shown.
+ */
+function xsdErrorHeadline(err: XsdErrorDetail): string {
+  const parts: string[] = [];
+  if (err.row_number !== null) parts.push(`Row ${err.row_number}`);
+  const field = err.field_label ?? err.element;
+  if (field) {
+    parts.push(
+      err.csv_column ? `${field} (CSV column: ${err.csv_column})` : field
+    );
+  }
+  if (err.record_id) parts.push(`Contact ${err.record_id}`);
+  return parts.length > 0 ? parts.join(" — ") : "Validation error";
 }
 
 function computeComparison(

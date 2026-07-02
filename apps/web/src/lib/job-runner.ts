@@ -60,6 +60,15 @@ export async function runJob(jobId: string): Promise<void> {
   const outputFilePath = path.join(outputDir, `${jobId}.xml`);
   await writeFile(outputFilePath, result.xml_content, "utf-8");
 
+  // Prefer the worker's structured per-error details (line/row/field —
+  // Contract B) when validation failed and they're present; fall back to the
+  // raw string list for older workers. Both shapes share the Job.xsdErrors
+  // Json column, so the results page branches on entry type when rendering.
+  const xsdErrors =
+    !result.xsd_valid && result.xsd_error_details?.length
+      ? (result.xsd_error_details as object[])
+      : result.xsd_errors;
+
   // Conditional update: only write "complete" if the job is still converting.
   // If a cancel landed in the race window, updateMany returns count=0 and we
   // discard the result (the file on disk is orphaned but harmless).
@@ -73,7 +82,7 @@ export async function runJob(jobId: string): Promise<void> {
       issues: result.issues as object[],
       cleaningDiffs: result.cleaning_diff as object[],
       xsdValid: result.xsd_valid,
-      xsdErrors: result.xsd_errors,
+      xsdErrors,
       completedAt: new Date(),
     },
   });

@@ -10,6 +10,7 @@ from .base_converter import BaseConverter, EmptyCSVError
 from ..config import (
     BUSINESS_STARTUP_PREPLANNING,
     COUNSELING_FABRICATION_DEFAULTS,
+    EXPORT_COUNTRY_LOOKUP,
     CounselingConfig,
     GeneralConfig,
     ValidationCategory,
@@ -311,17 +312,32 @@ class CounselingConverter(BaseConverter):
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "CounselingSeeking", "Counseling Seeking is required under Part 2 if Client is in Business.")
 
-    def _build_export_countries(self, client_intake, row):
+    def _build_export_countries(self, client_intake, row, record_id):
         """Emit ExportCountries (last element of ClientIntake per the XSD sequence)
         when the CSV provides countries; omitted entirely when absent/blank (never
-        fabricated). The XSD Code enumeration uses full country names, so each
-        value is run through the same country standardization as addresses."""
+        fabricated). The XSD restricts Code to an enumeration of full country
+        names, so each value is run through the same country standardization as
+        addresses and then resolved case-insensitively against that enumeration.
+        Values that don't resolve are omitted (with a warning) rather than
+        emitted, since one enum-invalid Code fails validation for the whole
+        document; if none resolve, the element is omitted entirely."""
         countries = data_cleaning.split_multi_value(row.get('Export Countries', ''))
         if not countries:
             return
-        ec_element = create_element(client_intake, 'ExportCountries')
+        codes = []
         for country in countries:
-            create_element(ec_element, 'Code', data_cleaning.standardize_country_code(country))
+            standardized = data_cleaning.standardize_country_code(country)
+            canonical = EXPORT_COUNTRY_LOOKUP.get(standardized.lower())
+            if canonical:
+                codes.append(canonical)
+            else:
+                self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_VALUE, "Export Countries",
+                    f"Export country '{country}' is not in the SBA country list and was omitted from the XML.")
+        if not codes:
+            return
+        ec_element = create_element(client_intake, 'ExportCountries')
+        for code in codes:
+            create_element(ec_element, 'Code', code)
 
     def _build_client_intake_section(self, parent, row, record_id):
         client_intake = create_element(parent, 'ClientIntake')
@@ -334,7 +350,7 @@ class CounselingConverter(BaseConverter):
             self._build_legal_entity(client_intake, row, record_id)
         self._build_rural_urban(client_intake, row, record_id)
         self._build_counseling_seeking(client_intake, row, record_id, in_business_val)
-        self._build_export_countries(client_intake, row)
+        self._build_export_countries(client_intake, row, record_id)
 
     def _build_counselor_identity(self, counselor_record, row, record_id):
         create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))

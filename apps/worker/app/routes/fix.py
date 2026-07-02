@@ -9,9 +9,7 @@ outcome. Order-fix only — missing elements are never added.
 import asyncio
 import logging
 import os
-import shutil
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
 
 import defusedxml.ElementTree as SafeET
@@ -22,11 +20,16 @@ _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.xml_validator import fix_client_intake_element_order, validate_against_xsd
-from src.xsd_error_mapping import build_error_details
+from src.xml_validator import fix_client_intake_element_order
 
 from ..logging_context import job_id_var
 from ..models.schemas import FixXmlRequest, FixXmlResponse
+from ..services.xsd_validation import (
+    cleanup_staging,
+    read_text,
+    stage_xml_content,
+    validate_with_details,
+)
 from .validate import SCHEMAS_DIR, XSD_MAP
 
 logger = logging.getLogger(__name__)
@@ -37,16 +40,6 @@ router = APIRouter()
 # training-client converter also emits); training (Form 888) XML has no
 # ClientIntake section to repair.
 _COUNSELING_FORMAT_SCHEMA_TYPES = {"counseling", "training-client"}
-
-
-def _write_text(path: str, text: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-
-
-def _read_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
 
 
 def _canonical(xml_text: str) -> bytes | None:
@@ -93,11 +86,8 @@ async def fix_xml(req: FixXmlRequest):
 
     tmp_dir = None
     try:
-        # Stage the XML in a worker-local temp dir (same pattern as /validate-xsd).
-        tmp_dir = await asyncio.to_thread(tempfile.mkdtemp, prefix="fix_")
-        input_path = os.path.join(tmp_dir, "input.xml")
+        tmp_dir, input_path = await stage_xml_content("fix_", req.xml_content)
         fixed_path = os.path.join(tmp_dir, "fixed.xml")
-        await asyncio.to_thread(_write_text, input_path, req.xml_content)
 
         # Order-fix only: never add missing elements (add_missing_elements_flag
         # stays False, matching src/fix_sba_xml.py's original behavior).
@@ -105,7 +95,7 @@ async def fix_xml(req: FixXmlRequest):
             fix_client_intake_element_order, input_path, fixed_path, False
         )
         if fix_ok:
-            fixed_content = await asyncio.to_thread(_read_text, fixed_path)
+            fixed_content = await asyncio.to_thread(read_text, fixed_path)
             changed = _canonical(req.xml_content) != _canonical(fixed_content)
             validate_path = fixed_path
         else:
@@ -115,21 +105,13 @@ async def fix_xml(req: FixXmlRequest):
             changed = False
             validate_path = input_path
 
-        result = await asyncio.to_thread(validate_against_xsd, validate_path, xsd_file)
-        errors = result.get("errors", [])
-        is_valid = result.get("is_valid", False)
-        error_details: list[dict] = []
-        if not is_valid and errors:
-            error_details = await asyncio.to_thread(
-                build_error_details, validate_path, errors, "counseling"
-            )
+        validation = await validate_with_details(
+            validate_path, xsd_file, "counseling"
+        )
         return {
             "changed": changed,
             "fixed_xml_content": fixed_content,
-            "is_valid": is_valid,
-            "errors": errors,
-            "error_count": len(errors),
-            "error_details": error_details,
+            **validation,
         }
     except HTTPException:
         raise
@@ -137,5 +119,4 @@ async def fix_xml(req: FixXmlRequest):
         logger.exception("XML auto-fix failed")
         raise HTTPException(status_code=500, detail="Internal fix error")
     finally:
-        if tmp_dir:
-            await asyncio.to_thread(shutil.rmtree, tmp_dir, ignore_errors=True)
+        await cleanup_staging(tmp_dir)

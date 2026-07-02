@@ -112,4 +112,49 @@ describe("POST /api/validate-xml", () => {
     const res = await POST(validateRequest({ schemaType: "counseling" }));
     expect(res.status).toBe(502);
   });
+
+  it("passes a deterministic worker 400 through as a 400, not a 502", async () => {
+    worker.mockRejectedValue(
+      new Error('Worker error 400: {"detail":"xml_content must not be empty"}')
+    );
+    const res = await POST(validateRequest({ schemaType: "counseling" }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("xml_content must not be empty");
+  });
+
+  it("decodes a UTF-16 upload instead of mangling it as UTF-8", async () => {
+    worker.mockResolvedValue({
+      is_valid: true,
+      errors: [],
+      error_count: 0,
+    } as never);
+
+    const xml = '<?xml version="1.0" encoding="UTF-16"?>\n<Doc>café</Doc>';
+    // UTF-16LE with BOM — the classic legacy-Windows-tool export.
+    const bytes = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(xml, "utf16le"),
+    ]);
+    const form = new FormData();
+    form.append(
+      "file",
+      new File([bytes], "legacy.xml", { type: "application/xml" })
+    );
+    form.append("schemaType", "counseling");
+    const res = await POST(
+      new Request("http://localhost/api/validate-xml", {
+        method: "POST",
+        body: form,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const sent = JSON.parse(String(worker.mock.calls[0]?.[1]?.body));
+    // Correctly decoded (no replacement chars/NULs) and the declaration is
+    // restated as UTF-8 since the content travels on as UTF-8 text.
+    expect(sent.xml_content).toContain("<Doc>café</Doc>");
+    expect(sent.xml_content).toContain('encoding="UTF-8"');
+    expect(sent.xml_content).not.toContain("�");
+  });
 });

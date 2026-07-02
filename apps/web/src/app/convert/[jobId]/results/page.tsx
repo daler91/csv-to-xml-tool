@@ -5,6 +5,7 @@ import Link from "next/link";
 import { open, stat } from "node:fs/promises";
 import { StatusIcon, type StatusKind } from "@/components/status-icon";
 import { DeleteJobButton } from "@/components/delete-job-button";
+import { XsdErrorDetailItem } from "@/components/xsd-error-details";
 import { resolveWithinDataDir } from "@/lib/paths";
 import { RETENTION_DAYS } from "@/lib/limits";
 import type { XsdErrorDetail } from "@/types";
@@ -266,14 +267,7 @@ export default async function ResultsPage({
                   </li>
                 ) : (
                   <li key={`${index}-${err.message}`}>
-                    <p className="font-medium">{xsdErrorHeadline(err)}</p>
-                    <p>{err.friendly_message}</p>
-                    <details className="mt-0.5">
-                      <summary className="cursor-pointer select-none text-gray-500">
-                        Raw validator message
-                      </summary>
-                      <p className="font-mono mt-0.5">{err.message}</p>
-                    </details>
+                    <XsdErrorDetailItem err={err} />
                   </li>
                 )
               )}
@@ -341,24 +335,6 @@ export default async function ResultsPage({
       )}
     </main>
   );
-}
-
-/**
- * "Row 3 — Race (CSV column: Race) — Contact 12345" headline for a
- * structured XSD error. Every trackable field is nullable, so only the
- * parts the worker could map back are shown.
- */
-function xsdErrorHeadline(err: XsdErrorDetail): string {
-  const parts: string[] = [];
-  if (err.row_number !== null) parts.push(`Row ${err.row_number}`);
-  const field = err.field_label ?? err.element;
-  if (field) {
-    parts.push(
-      err.csv_column ? `${field} (CSV column: ${err.csv_column})` : field
-    );
-  }
-  if (err.record_id) parts.push(`Contact ${err.record_id}`);
-  return parts.length > 0 ? parts.join(" — ") : "Validation error";
 }
 
 function computeComparison(

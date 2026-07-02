@@ -16,6 +16,7 @@ import { useState } from "react";
 import { StatusIcon } from "@/components/status-icon";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { XsdErrorDetailList } from "@/components/xsd-error-details";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import type { XsdErrorDetail } from "@/types";
 
@@ -49,45 +50,6 @@ const SCHEMA_OPTIONS = [
     description: "Aggregated training event XML (Form 888 schema).",
   },
 ] as const;
-
-/**
- * "Row 3 — Race (CSV column: Race) — Contact 12345" headline for a
- * structured XSD error. Every trackable field is nullable, so only the
- * parts the worker could map back are shown.
- */
-function xsdErrorHeadline(err: XsdErrorDetail): string {
-  const parts: string[] = [];
-  if (err.row_number !== null) parts.push(`Row ${err.row_number}`);
-  const field = err.field_label ?? err.element;
-  if (field) {
-    parts.push(
-      err.csv_column ? `${field} (CSV column: ${err.csv_column})` : field
-    );
-  }
-  if (err.record_id) parts.push(`Contact ${err.record_id}`);
-  return parts.length > 0 ? parts.join(" — ") : "Validation error";
-}
-
-function ErrorDetailList({
-  details,
-}: Readonly<{ details: XsdErrorDetail[] }>) {
-  return (
-    <ul className="text-xs space-y-2 max-h-64 overflow-y-auto">
-      {details.map((err, index) => (
-        <li key={`${index}-${err.message}`}>
-          <p className="font-medium">{xsdErrorHeadline(err)}</p>
-          <p>{err.friendly_message}</p>
-          <details className="mt-0.5">
-            <summary className="cursor-pointer select-none">
-              Raw validator message
-            </summary>
-            <p className="font-mono mt-0.5">{err.message}</p>
-          </details>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default function ValidatePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -280,7 +242,7 @@ export default function ValidatePage() {
               })`}
             >
               {result.error_details && result.error_details.length > 0 ? (
-                <ErrorDetailList details={result.error_details} />
+                <XsdErrorDetailList details={result.error_details} />
               ) : (
                 <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
                   {result.errors.map((err) => (
@@ -343,7 +305,7 @@ export default function ValidatePage() {
                   } in the data`}
                 >
                   {fixResult.error_details.length > 0 ? (
-                    <ErrorDetailList details={fixResult.error_details} />
+                    <XsdErrorDetailList details={fixResult.error_details} />
                   ) : (
                     <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
                       {fixResult.errors.map((err) => (

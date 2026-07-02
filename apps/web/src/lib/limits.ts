@@ -13,10 +13,8 @@ export const MAX_UPLOAD_BYTES =
 // retention sweep (lib/retention.ts) removes them. The job row and audit
 // trail are kept; only the files are purged.
 //
-// NEXT_PUBLIC_RETENTION_DAYS is read first so the client-side privacy
-// copy on the convert page can state the same number that the server
-// enforces — set both vars together (see .env.example). Defaults to 30.
-export const RETENTION_DAYS =
-  Number(
-    process.env.NEXT_PUBLIC_RETENTION_DAYS ?? process.env.RETENTION_DAYS
-  ) || 30;
+// Server-side runtime value (RETENTION_DAYS env var). The UI copy that
+// mentions it (the convert form) receives it as a prop from a server
+// component, so the browser always shows the number the server enforces.
+// Defaults to 30.
+export const RETENTION_DAYS = Number(process.env.RETENTION_DAYS) || 30;

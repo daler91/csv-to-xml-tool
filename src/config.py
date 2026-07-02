@@ -98,6 +98,27 @@ class CounselingConfig:
         "PartnerSessionNumber": 20
     }
 
+# Columns the counseling converter defaults to a *non-empty* value when the cell
+# is blank (or the column absent) -- i.e. it fabricates data that ships in the
+# federal XML. Maps the exact CSV header the converter reads to the default it
+# emits. This is the canonical copy, shared by the converters (per-row
+# FABRICATED_DEFAULT warnings) and the worker's column_requirements module
+# (file-level missing-column warnings).
+# The "(Meeting)" revenue/profit variants are intentionally excluded: the
+# converter falls back to the base "Gross Revenues/Sales" / "Profits/Losses"
+# columns (already listed), so warning on the variants too would just be noise.
+COUNSELING_FABRICATION_DEFAULTS = {
+    "Gross Revenues/Sales": "0",
+    "Profits/Losses": "0",
+    "SBA Loan Amount": "0",
+    "Non-SBA Loan Amount": "0",
+    "Amount of Equity Capital Received": "0",
+    "Business Ownership - % Female(old)": "0",
+    "Mailing Country": "United States",
+    "Conduct Business Online?": "No",
+    "8(a) Certified?(old)": "No",
+}
+
 # =============================================================================
 # TRAINING REPORT CONFIGURATION (MANAGEMENT TRAINING)
 # =============================================================================
@@ -350,3 +371,4 @@ class ValidationCategory:
     FILE_WRITE = "file_write"
     AMBIGUOUS_DATE = "ambiguous_date"
     CLAMPED_VALUE = "clamped_value"
+    FABRICATED_DEFAULT = "fabricated_default"

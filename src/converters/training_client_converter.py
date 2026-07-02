@@ -23,6 +23,12 @@ class TrainingClientConverter(CounselingConverter):
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.training_client_config = TrainingClientConfig()
+        # The shorter training-client form doesn't collect the fabrication-risk
+        # counseling columns; _preprocess_row intentionally injects DEFAULTS for
+        # them, so a per-row FABRICATED_DEFAULT warning for every injected value
+        # would be a storm about columns the form never had. Only keep warnings
+        # for fabrication-risk fields this converter's own input provides.
+        self.fabrication_warn_fields -= set(self.training_client_config.DEFAULTS)
 
     def _preprocess_row(self, row):
         """Remap training client CSV columns to counseling-format columns."""

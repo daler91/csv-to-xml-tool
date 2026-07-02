@@ -277,6 +277,95 @@ class TestCounselingConverter(unittest.TestCase):
         num = root.find('CounselingRecord/PartnerClientNumber')
         self.assertEqual(num.text, 'C-001')  # not the 'Row_1' fallback
 
+    # --- Per-row blank-cell fabrication warnings (plan 1.3) ---
+
+    def _fabrication_issues(self, field_name=None):
+        """Return recorded fabricated_default issues, optionally for one field."""
+        issues = [i for i in self.validator.issues if i['category'] == 'fabricated_default']
+        if field_name is not None:
+            issues = [i for i in issues if i['field_name'] == field_name]
+        return issues
+
+    def test_blank_gross_revenue_defaults_to_zero_and_warns(self):
+        """A blank Gross Revenues/Sales cell still emits '0' but records a warning."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Gross Revenues/Sales': ''})])
+        gross = root.find('CounselingRecord/ClientIntake/ClientAnnualIncomePart2/GrossRevenues')
+        self.assertEqual(gross.text, '0')
+        issues = self._fabrication_issues('Gross Revenues/Sales')
+        self.assertEqual(len(issues), 1)  # one per (record, field), Part 2/3 deduped
+        self.assertEqual(issues[0]['record_id'], 'C-001')
+        self.assertEqual(issues[0]['severity'], 'warning')
+        self.assertIn("Blank value defaulted to '0'", issues[0]['message'])
+
+    def test_populated_gross_revenue_records_no_fabrication_warning(self):
+        """A populated Gross Revenues/Sales cell records no fabrication warning."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Gross Revenues/Sales': '50000',
+            'Gross Revenues/Sales (Meeting)': '50000',
+        })])
+        gross = root.find('CounselingRecord/ClientIntake/ClientAnnualIncomePart2/GrossRevenues')
+        self.assertEqual(gross.text, '50000')
+        self.assertEqual(self._fabrication_issues('Gross Revenues/Sales'), [])
+
+    def test_blank_mailing_country_warns_once_per_record(self):
+        """A blank Mailing Country fabricates 'United States' in both address
+        sections (Part 1 and Part 3) but records exactly one warning."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Mailing Country': ''})])
+        country = root.find('CounselingRecord/ClientRequest/AddressPart1/Country/Code')
+        self.assertEqual(country.text, 'United States')
+        issues = self._fabrication_issues('Mailing Country')
+        self.assertEqual(len(issues), 1)
+        self.assertIn("Blank value defaulted to 'United States'", issues[0]['message'])
+
+    def test_populated_mailing_country_records_no_fabrication_warning(self):
+        self._convert_and_parse([self._make_valid_row(**{'Mailing Country': 'US'})])
+        self.assertEqual(self._fabrication_issues('Mailing Country'), [])
+
+    def test_blank_loan_amounts_warn_per_field(self):
+        """Blank loan/equity cells each record their own fabrication warning."""
+        self._convert_and_parse([self._make_valid_row(**{
+            'SBA Loan Amount': '',
+            'Non-SBA Loan Amount': '',
+            'Amount of Equity Capital Received': '',
+        })])
+        self.assertEqual(len(self._fabrication_issues('SBA Loan Amount')), 1)
+        self.assertEqual(len(self._fabrication_issues('Non-SBA Loan Amount')), 1)
+        self.assertEqual(len(self._fabrication_issues('Amount of Equity Capital Received')), 1)
+
+    # --- Employee_Owned and ExportCountries emission (plan 1.4) ---
+
+    def test_employee_owned_emitted_when_affirmative(self):
+        root = self._convert_and_parse([self._make_valid_row(**{'Employee Owned': 'Yes'})])
+        eo = root.find('CounselingRecord/ClientIntake/Employee_Owned')
+        self.assertIsNotNone(eo)
+        self.assertEqual(eo.text, 'Yes')
+
+    def test_employee_owned_negative_mapped_to_no(self):
+        root = self._convert_and_parse([self._make_valid_row(**{'Employee Owned': 'false'})])
+        eo = root.find('CounselingRecord/ClientIntake/Employee_Owned')
+        self.assertIsNotNone(eo)
+        self.assertEqual(eo.text, 'No')
+
+    def test_employee_owned_omitted_when_blank_or_absent(self):
+        """No Employee_Owned element (and no fabrication) for blank or absent input."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Employee Owned': ''})])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/Employee_Owned'))
+        # Column absent entirely (the base row has no 'Employee Owned' key)
+        root = self._convert_and_parse([self._make_valid_row()])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/Employee_Owned'))
+
+    def test_export_countries_emitted_and_standardized(self):
+        """Multi-value Export Countries are split and country codes expanded."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Export Countries': 'Belgium; US'})])
+        codes = [e.text for e in root.findall('CounselingRecord/ClientIntake/ExportCountries/Code')]
+        self.assertEqual(codes, ['Belgium', 'United States'])
+
+    def test_export_countries_omitted_when_blank_or_absent(self):
+        root = self._convert_and_parse([self._make_valid_row(**{'Export Countries': ''})])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/ExportCountries'))
+        root = self._convert_and_parse([self._make_valid_row()])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/ExportCountries'))
+
 
 if __name__ == '__main__':
     unittest.main()

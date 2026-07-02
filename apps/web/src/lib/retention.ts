@@ -25,6 +25,18 @@ const MAX_PURGES_PER_SWEEP = 25;
  * Returns the number of jobs whose files were purged.
  */
 export async function purgeExpiredJobFiles(userId: string): Promise<number> {
+  // Fail-open: this is background maintenance piggybacking on read paths —
+  // a sweep failure (e.g. a schema mismatch) must never take the dashboard
+  // down with it. Log and move on; the next read retries.
+  try {
+    return await sweepExpiredJobFiles(userId);
+  } catch (error) {
+    console.error("[retention] purge sweep failed:", error);
+    return 0;
+  }
+}
+
+async function sweepExpiredJobFiles(userId: string): Promise<number> {
   const cutoff = new Date(
     Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000
   );

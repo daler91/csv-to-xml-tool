@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
+
+const DATA_DIR = process.env.DATA_DIR || "/data";
 
 interface ProgressSnapshot {
   processed: number;
@@ -143,5 +147,93 @@ export async function PATCH(
     return NextResponse.json(fresh);
   } catch {
     return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
+  }
+}
+
+// A job the queue may still be working on can't be deleted out from
+// under the runner — cancel it first, then delete.
+const ACTIVE_STATUSES = new Set<JobStatus>(["queued", "converting"]);
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  try {
+    const user = await getRequiredUser();
+    const { jobId } = await params;
+
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId: user.id },
+    });
+
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    if (ACTIVE_STATUSES.has(job.status)) {
+      return NextResponse.json(
+        {
+          error:
+            "This job is still running. Cancel it first, then delete it.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // Files first, row second: if the row delete fails the job still
+    // renders (downloads 404), which is recoverable by retrying —
+    // whereas deleting the row first could orphan files no sweep can
+    // find. Paths are built from the DB-issued id, not the URL param.
+    await rm(path.join(DATA_DIR, "uploads", job.id), {
+      recursive: true,
+      force: true,
+    }).catch(() => {});
+    await rm(path.join(DATA_DIR, "output", job.id), {
+      recursive: true,
+      force: true,
+    }).catch(() => {});
+
+    // Guarded delete: a job that raced into queued/converting since the
+    // read above is left alone. Postgres nulls auditEntry.jobId and any
+    // child job's previousJobId (optional relations -> SET NULL), so the
+    // audit trail and re-upload rows survive.
+    const deleted = await prisma.job.deleteMany({
+      where: {
+        id: jobId,
+        userId: user.id,
+        status: { notIn: Array.from(ACTIVE_STATUSES) },
+      },
+    });
+
+    if (deleted.count === 0) {
+      return NextResponse.json(
+        { error: "This job is still running and can't be deleted." },
+        { status: 409 }
+      );
+    }
+
+    await prisma.auditEntry.create({
+      data: {
+        userId: user.id,
+        action: "job_deleted",
+        metadata: {
+          deletedJobId: job.id,
+          fileName: job.inputFileName,
+          converterType: job.converterType,
+          status: job.status,
+        },
+      },
+    });
+
+    return NextResponse.json({ deleted: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("Delete job error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete job" },
+      { status: 500 }
+    );
   }
 }

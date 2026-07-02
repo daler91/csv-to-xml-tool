@@ -2,7 +2,36 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { open, stat } from "node:fs/promises";
 import { StatusIcon, type StatusKind } from "@/components/status-icon";
+import { DeleteJobButton } from "@/components/delete-job-button";
+import { resolveWithinDataDir } from "@/lib/paths";
+import { RETENTION_DAYS } from "@/lib/limits";
+
+// Inline preview cap. A 50MB <pre> would freeze the tab, so only the
+// head of the file is embedded; the download link serves the rest.
+const XML_PREVIEW_BYTES = 100 * 1024;
+
+async function readXmlPreview(
+  outputFilePath: string | null
+): Promise<{ text: string; truncated: boolean } | null> {
+  if (!outputFilePath) return null;
+  try {
+    const resolved = await resolveWithinDataDir(outputFilePath);
+    const { size } = await stat(/* turbopackIgnore: true */ resolved);
+    const fh = await open(/* turbopackIgnore: true */ resolved, "r");
+    try {
+      const buf = Buffer.alloc(Math.min(size, XML_PREVIEW_BYTES));
+      await fh.read(buf, 0, buf.length, 0);
+      return { text: buf.toString("utf-8"), truncated: size > XML_PREVIEW_BYTES };
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    // Missing/purged file — the preview section simply doesn't render.
+    return null;
+  }
+}
 
 interface ValidationIssue {
   record_id: string;
@@ -71,6 +100,7 @@ export default async function ResultsPage({
     redirect("/dashboard");
   }
 
+  const xmlPreview = await readXmlPreview(job.outputFilePath);
   const summary = job.summary as unknown as Record<string, number> | null;
   const issues = (job.issues as unknown as ValidationIssue[]) || [];
   const xsdErrors = (job.xsdErrors as unknown as string[]) || [];
@@ -146,8 +176,26 @@ export default async function ResultsPage({
           >
             Re-upload
           </Link>
+          <DeleteJobButton
+            jobId={jobId}
+            fileName={job.inputFileName}
+            variant="button"
+            redirectTo="/dashboard"
+          />
         </div>
       </div>
+
+      {/* Retention notice */}
+      {job.filesPurgedAt && (
+        <div className="bg-gray-50 border rounded p-4 mb-6">
+          <p className="text-sm text-gray-600">
+            The uploaded CSV and converted XML for this job were removed on{" "}
+            {new Date(job.filesPurgedAt).toLocaleDateString()} under the{" "}
+            {RETENTION_DAYS}-day retention policy. The results summary below
+            is retained.
+          </p>
+        </div>
+      )}
 
       {/* Summary Cards */}
       {summary && (
@@ -215,6 +263,26 @@ export default async function ResultsPage({
           </div>
         )}
       </div>
+
+      {/* XML output preview */}
+      {xmlPreview && (
+        <details className="bg-white border rounded mb-6">
+          <summary className="px-4 py-3 font-semibold cursor-pointer select-none">
+            Preview XML output
+            {xmlPreview.truncated ? " (first 100 KB)" : ""}
+          </summary>
+          <div className="border-t overflow-x-auto">
+            <pre className="p-4 text-xs font-mono whitespace-pre max-h-96 overflow-y-auto">
+              {xmlPreview.text}
+            </pre>
+          </div>
+          {xmlPreview.truncated && (
+            <p className="px-4 pb-3 text-xs text-gray-500">
+              Preview truncated — download the XML for the complete file.
+            </p>
+          )}
+        </details>
+      )}
 
       {/* Cleaning Diff Link */}
       {cleaningDiffs.length > 0 && (

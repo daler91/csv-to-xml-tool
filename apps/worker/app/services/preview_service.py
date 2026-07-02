@@ -12,6 +12,7 @@ if _SRC_DIR not in sys.path:
 
 from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
 from src.data_cleaning import normalize_header, normalize_row_keys
+from src.data_validation import analyze_data_quality
 
 from ..core.security import DATA_DIR
 from .column_requirements import (
@@ -302,18 +303,16 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
     services no longer share a disk). A leading UTF-8 BOM is stripped so the
     first header isn't corrupted, matching the utf-8-sig read path elsewhere.
     """
-    rows = []
-    headers = []
-    total_rows = 0
-
     reader = csv.DictReader(io.StringIO(csv_content.lstrip("\ufeff")))
     # CONV-2: normalize header whitespace (and the preview row keys) so the
     # mapping UI's matched/missing badges agree with what conversion reads.
     headers = [normalize_header(h) for h in (reader.fieldnames or [])]
-    for i, row in enumerate(reader):
-        total_rows += 1
-        if i < max_rows:
-            rows.append(normalize_row_keys(dict(row)))
+    # Feature 2.5: the parse already walks every row to count total_rows, so
+    # keep the normalized rows and run the data-quality checks over the full
+    # file in the same O(n) pass; only the first max_rows feed the preview table.
+    all_rows = [normalize_row_keys(dict(row)) for row in reader]
+    total_rows = len(all_rows)
+    rows = all_rows[:max_rows]
 
     expected = get_expected_columns(converter_type)
     actual_set = set(headers)
@@ -370,4 +369,8 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
             "field_requirements": field_requirements,
             "field_descriptions": field_descriptions,
         },
+        # Feature 2.5: file-level data-quality report over the FULL row set
+        # (not just the previewed rows) so the user sees conversion-impacting
+        # problems before converting.
+        "data_quality": analyze_data_quality(headers, all_rows, converter_type),
     }

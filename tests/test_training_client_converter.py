@@ -245,6 +245,18 @@ class TestTrainingClientConverter(unittest.TestCase):
         fabricated = [i for i in self.validator.issues if i['category'] == 'fabricated_default']
         self.assertEqual(fabricated, [])
 
+    def test_issue_event_id_from_class_event_id(self):
+        """Issues carry the Class/Event ID as event_id — proves the
+        remap-to-Activity-ID happens before the per-row context is set."""
+        self._convert_and_parse([self._make_valid_row(**{
+            'Class/Event ID': 'EVT-9',
+            'Currently in Business?': 'Yes',
+        })])
+        seeking = [i for i in self.validator.issues if i['field_name'] == 'CounselingSeeking']
+        self.assertEqual(len(seeking), 1)
+        self.assertEqual(seeking[0]['record_id'], '003Pe00000Sxsp4')
+        self.assertEqual(seeking[0]['event_id'], 'EVT-9')
+
 
 if __name__ == '__main__':
     unittest.main()

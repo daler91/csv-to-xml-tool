@@ -37,6 +37,9 @@ async function readXmlPreview(
 
 interface ValidationIssue {
   record_id: string;
+  /** Event/Activity ID of the source row. Absent on jobs converted before
+   *  this field existed; empty string when the row had no Activity ID. */
+  event_id?: string;
   severity: string;
   category: string;
   field_name: string;
@@ -341,6 +344,9 @@ function computeComparison(
   prevIssues: ValidationIssue[],
   currIssues: ValidationIssue[]
 ) {
+  // event_id is deliberately excluded: jobs stored before it existed have no
+  // value, so including it would mark every persistent issue as new+resolved
+  // when comparing across that boundary.
   const key = (i: ValidationIssue) =>
     `${i.record_id}|${i.field_name}|${i.category}`;
 
@@ -521,6 +527,7 @@ function IssueTable({
         <thead>
           <tr className="border-b bg-gray-50">
             <th scope="col" className="text-left px-3 py-2 font-medium">Record</th>
+            <th scope="col" className="text-left px-3 py-2 font-medium">Event ID</th>
             <th scope="col" className="text-left px-3 py-2 font-medium">Category</th>
             <th scope="col" className="text-left px-3 py-2 font-medium">Field</th>
             <th scope="col" className="text-left px-3 py-2 font-medium">Message</th>
@@ -528,8 +535,9 @@ function IssueTable({
         </thead>
         <tbody>
           {displayed.map((issue) => (
-            <tr key={`${issue.record_id}-${issue.field_name}-${issue.category}`} className="border-b">
+            <tr key={`${issue.record_id}-${issue.event_id ?? ""}-${issue.field_name}-${issue.category}`} className="border-b">
               <td className="px-3 py-2 font-mono">{issue.record_id}</td>
+              <td className="px-3 py-2 font-mono">{issue.event_id || "—"}</td>
               <td className="px-3 py-2">{issue.category}</td>
               <td className="px-3 py-2">{issue.field_name}</td>
               <td className="px-3 py-2">{issue.message}</td>

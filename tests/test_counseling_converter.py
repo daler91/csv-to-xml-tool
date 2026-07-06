@@ -443,6 +443,58 @@ class TestCounselingConverter(unittest.TestCase):
         self.assertEqual(codes, ['United Kingdom'])
         self.assertEqual(self._export_country_warnings(), [])
 
+    def test_issue_event_id_distinguishes_events_of_same_contact(self):
+        """Two event rows for one contact hitting the same rule must be
+        distinguishable by event_id (the motivating bug: the errors table
+        showed only the shared Contact ID)."""
+        rows = [
+            self._make_valid_row(**{'Activity ID': 'A-100', 'Currently In Business?': 'Yes'}),
+            self._make_valid_row(**{'Activity ID': 'A-200', 'Currently In Business?': 'Yes'}),
+        ]
+        self._convert_and_parse(rows)
+        seeking = [i for i in self.validator.issues if i['field_name'] == 'CounselingSeeking']
+        self.assertEqual(len(seeking), 2)
+        self.assertEqual({i['record_id'] for i in seeking}, {'C-001'})
+        self.assertEqual({i['event_id'] for i in seeking}, {'A-100', 'A-200'})
+
+    def test_issue_event_id_empty_without_activity_id_column(self):
+        """A CSV lacking the Activity ID column entirely yields empty event ids."""
+        row = self._make_valid_row(**{'Currently In Business?': 'Yes'})
+        del row['Activity ID']
+        self._convert_and_parse([row])
+        seeking = [i for i in self.validator.issues if i['field_name'] == 'CounselingSeeking']
+        self.assertEqual(len(seeking), 1)
+        self.assertEqual(seeking[0]['event_id'], '')
+
+    def test_prevalidation_issue_inherits_event_id(self):
+        """Missing Contact ID falls back to Row_N as record_id, but the event id
+        still pinpoints the source row."""
+        self._convert_and_parse([
+            self._make_valid_row(**{'Contact ID': '', 'Activity ID': 'A-777'}),
+            self._make_valid_row(),  # valid row so the file converts
+        ])
+        missing = [i for i in self.validator.issues if i['message'] == 'Missing required Contact ID.']
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]['record_id'], 'Row_1')
+        self.assertEqual(missing[0]['event_id'], 'A-777')
+
+    def test_file_level_issue_has_empty_event_id(self):
+        """File-level issues (record_id 'file') carry no event id."""
+        from src.converters.base_converter import EmptyCSVError
+        csv_path = self._write_csv([], fieldnames=['Contact ID', 'Activity ID'])
+        xml_path = tempfile.NamedTemporaryFile(suffix='.xml', delete=False).name
+        try:
+            converter = CounselingConverter(self.logger, self.validator)
+            with self.assertRaises(EmptyCSVError):
+                converter.convert(csv_path, xml_path)
+        finally:
+            os.unlink(csv_path)
+            if os.path.exists(xml_path):
+                os.unlink(xml_path)
+        file_issues = [i for i in self.validator.issues if i['record_id'] == 'file']
+        self.assertEqual(len(file_issues), 1)
+        self.assertEqual(file_issues[0]['event_id'], '')
+
 
 if __name__ == '__main__':
     unittest.main()

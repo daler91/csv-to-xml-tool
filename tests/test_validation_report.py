@@ -122,5 +122,69 @@ class TestValidationTracker(unittest.TestCase):
         self.assertIn("Errors by Category", content)
         self.assertIn("Warnings by Category", content)
 
+    def test_add_issue_event_id_defaults_to_empty(self):
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "")
+
+    def test_add_issue_event_id_explicit_kwarg(self):
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg", event_id="EVT-1")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "EVT-1")
+
+    def test_add_issue_event_id_from_context(self):
+        self.tracker.set_current_event_id("EVT-2")
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "EVT-2")
+
+    def test_add_issue_explicit_event_id_overrides_context(self):
+        self.tracker.set_current_event_id("EVT-CTX")
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg", event_id="EVT-EXPLICIT")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "EVT-EXPLICIT")
+
+    def test_add_issue_explicit_empty_event_id_suppresses_context(self):
+        # Explicit '' means "no event id" and must not fall back to context.
+        self.tracker.set_current_event_id("EVT-CTX")
+        self.tracker.add_issue("file", "error", "cat", "Field", "msg", event_id="")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "")
+
+    def test_set_current_event_id_clears_and_strips(self):
+        self.tracker.set_current_event_id("  EVT-3  ")
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg")
+        self.assertEqual(self.tracker.issues[0]['event_id'], "EVT-3")
+
+        self.tracker.set_current_event_id(None)
+        self.tracker.add_issue("REC-2", "error", "cat", "Field", "msg")
+        self.assertEqual(self.tracker.issues[1]['event_id'], "")
+
+        self.tracker.set_current_event_id("EVT-4")
+        self.tracker.set_current_event_id("")
+        self.tracker.add_issue("REC-3", "error", "cat", "Field", "msg")
+        self.assertEqual(self.tracker.issues[2]['event_id'], "")
+
+    def test_save_issues_to_csv_includes_event_id(self):
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg", event_id="EVT-CSV")
+        self.tracker.add_issue("REC-2", "warning", "cat", "Field", "msg2")
+
+        import csv as csv_mod
+        csv_path = self.tracker.save_issues_to_csv(output_dir=self.test_dir)
+        with open(csv_path, newline='') as f:
+            reader = csv_mod.DictReader(f)
+            self.assertEqual(
+                reader.fieldnames,
+                ['record_id', 'event_id', 'severity', 'category', 'field_name', 'message', 'timestamp'])
+            rows = list(reader)
+        self.assertEqual(rows[0]['event_id'], "EVT-CSV")
+        self.assertEqual(rows[1]['event_id'], "")
+
+    def test_generate_html_report_includes_event_id(self):
+        self.tracker.record_processed(success=True)
+        self.tracker.add_issue("REC-1", "error", "cat", "Field", "msg", event_id="EVT-HTML")
+
+        report_path = self.tracker.generate_html_report(output_dir=self.test_dir)
+        with open(report_path, 'r') as f:
+            content = f.read()
+
+        self.assertIn("<th>Event ID</th>", content)
+        self.assertIn("<td>EVT-HTML</td>", content)
+
 if __name__ == '__main__':
     unittest.main()

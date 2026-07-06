@@ -24,23 +24,40 @@ class ValidationTracker:
         self.successful_records = 0
         self.failed_records = 0
         self.current_record_id = None
+        self.current_event_id = None
 
     def set_current_record_id(self, record_id: str) -> None:
         self.current_record_id = record_id
-    
-    def add_issue(self, record_id: str, severity: str, category: str, field_name: str, message: str) -> None:
+
+    def set_current_event_id(self, event_id) -> None:
+        """Row-scoped default event id applied to subsequently added issues.
+        Pass None or '' to clear (e.g. after the row loop, so file-level
+        issues never inherit the last row's event id)."""
+        cleaned = str(event_id).strip() if event_id is not None else ""
+        self.current_event_id = cleaned or None
+
+    def add_issue(self, record_id: str, severity: str, category: str, field_name: str, message: str,
+                  event_id: str | None = None) -> None:
         """
         Add a validation issue.
-        
+
         Args:
             record_id: ID of the record with the issue
             severity: Issue severity (error, warning)
             category: Issue category (e.g., missing_data, invalid_format)
             field_name: Field with the issue
             message: Description of the issue
+            event_id: Event/Activity ID of the source row. None (default) falls
+                back to the current row context set via set_current_event_id;
+                an explicit '' means "no event id, do not fall back".
         """
+        if event_id is not None:
+            resolved_event_id = str(event_id).strip()
+        else:
+            resolved_event_id = self.current_event_id or ""
         issue = {
             'record_id': record_id,
+            'event_id': resolved_event_id,
             'severity': severity,
             'category': category,
             'field_name': field_name,
@@ -139,12 +156,12 @@ class ValidationTracker:
         csv_file = self._confine_report_file(output_dir, f"validation_issues_{timestamp}.csv")
         
         # Define CSV columns
-        fieldnames = ['record_id', 'severity', 'category', 'field_name', 'message', 'timestamp']
-        
+        fieldnames = ['record_id', 'event_id', 'severity', 'category', 'field_name', 'message', 'timestamp']
+
         # Write issues to CSV
         try:
             with open(csv_file, 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(f, fieldnames=fieldnames, restval='')
                 writer.writeheader()
                 for issue in self.issues:
                     writer.writerow(issue)
@@ -227,6 +244,7 @@ class ValidationTracker:
     <table>
         <tr>
             <th>Record ID</th>
+            <th>Event ID</th>
             <th>Severity</th>
             <th>Category</th>
             <th>Field</th>
@@ -241,6 +259,7 @@ class ValidationTracker:
             severity_class = "error" if issue['severity'] == 'error' else "warning"
             parts.append(f"""        <tr>
             <td>{issue['record_id']}</td>
+            <td>{issue.get('event_id', '')}</td>
             <td class="{severity_class}">{issue['severity'].upper()}</td>
             <td>{issue['category']}</td>
             <td>{issue['field_name']}</td>

@@ -89,6 +89,9 @@ class CounselingConverter(BaseConverter):
         for row_index, row in enumerate(rows, 1):
             row = self._preprocess_row(row)
             record_id = row.get('Contact ID', f"Row_{row_index}")
+            # Set before validate_counseling_record so pre-validation issues
+            # (including missing-Contact-ID "Row_N" ones) carry the event id.
+            self.validator.set_current_event_id(row.get('Activity ID', ''))
             # Reset per row so duplicate Contact IDs still warn independently.
             self._fabrication_warned.clear()
 
@@ -121,6 +124,9 @@ class CounselingConverter(BaseConverter):
 
         # Final tick so the bar ends at 100% regardless of batch size.
         self._report_progress(total_rows, total_rows)
+
+        # File-level issues below must not inherit the last row's event id.
+        self.validator.set_current_event_id(None)
 
         try:
             tree = ET.ElementTree(root)

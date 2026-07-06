@@ -79,6 +79,7 @@ class TrainingConverter(BaseConverter):
         """Build a single ManagementTrainingRecord element."""
         first_record = group_df.iloc[0]
         self.validator.set_current_record_id(str(event_id))
+        self.validator.set_current_event_id(str(event_id))
 
         record = create_element(root, 'ManagementTrainingRecord')
         create_element(record, 'PartnerTrainingNumber', str(event_id))
@@ -161,12 +162,15 @@ class TrainingConverter(BaseConverter):
                 self.validator.record_processed(success=True)
             except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
-                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}")
+                self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}", event_id=str(event_id))
                 self.validator.record_processed(success=False)
 
             self._maybe_report_progress(i, total_events, every=5)
 
         self._report_progress(total_events, total_events)
+
+        # File-level issues below must not inherit the last event's id.
+        self.validator.set_current_event_id(None)
 
         self._write_xml_output(root, output_path)
 

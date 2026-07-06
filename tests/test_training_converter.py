@@ -302,6 +302,15 @@ class TestTrainingConverter(unittest.TestCase):
         num = root.find('ManagementTrainingRecord/PartnerTrainingNumber')
         self.assertEqual(num.text, 'EVT-001')
 
+    def test_issue_event_id_matches_record_id(self):
+        """Training issues are keyed by event id; event_id mirrors record_id so
+        the Event ID column has one uniform meaning across formats."""
+        self._convert_and_parse([self._make_training_row(**{'Training Topic': 'Basket Weaving'})])
+        topic_warnings = [i for i in self.validator.issues if i['field_name'] == 'TrainingTopic']
+        self.assertEqual(len(topic_warnings), 1)
+        self.assertEqual(topic_warnings[0]['record_id'], 'EVT-001')
+        self.assertEqual(topic_warnings[0]['event_id'], 'EVT-001')
+
 
 if __name__ == '__main__':
     unittest.main()

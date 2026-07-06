@@ -88,6 +88,9 @@ export interface ConvertResponse {
 
 export interface ValidationIssue {
   record_id: string;
+  /** Event/Activity ID of the source row. Absent on jobs converted before
+   *  this field existed; empty string when the row had no Activity ID. */
+  event_id?: string;
   severity: "error" | "warning";
   category: string;
   field_name: string;

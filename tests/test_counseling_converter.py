@@ -228,6 +228,21 @@ class TestCounselingConverter(unittest.TestCase):
         le = root.find('CounselingRecord/ClientIntake/LegalEntity')
         self.assertIsNone(le)
 
+    def test_in_business_missing_details_still_errors(self):
+        """Counseling rows keep the strict behavior: 'Yes' with no legal entity
+        or counseling seeking stays 'Yes' and raises both required-field errors
+        (only the training-client converter downgrades to 'No')."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Currently In Business?': 'Yes',
+        })])
+        cib = root.find('CounselingRecord/ClientIntake/CurrentlyInBusiness')
+        self.assertEqual(cib.text, 'Yes')
+        error_fields = {i['field_name'] for i in self.validator.issues if i['severity'] == 'error'}
+        self.assertIn('LegalEntity', error_fields)
+        self.assertIn('CounselingSeeking', error_fields)
+        downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
+        self.assertEqual(downgraded, [])
+
     def test_session_type_validation(self):
         """Invalid session type should be defaulted and tracked."""
         root = self._convert_and_parse([self._make_valid_row(**{

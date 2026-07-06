@@ -38,6 +38,12 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
 
+    def _resolve_in_business(self, in_business_val, row, record_id):
+        """Hook for subclasses to adjust the normalized in-business status before
+        it is emitted and used to gate the in-business-only sections. Returns the
+        value unchanged by default."""
+        return in_business_val
+
     def _warn_fabricated_default(self, record_id, field, default_value, element_label):
         """Record a FABRICATED_DEFAULT warning when a blank/missing cell is replaced
         by a non-empty default that ships in the XML. One warning per (record, field),
@@ -214,6 +220,7 @@ class CounselingConverter(BaseConverter):
         """Build business status, ownership, employees, and income fields. Returns in_business_val."""
         in_business_raw = row.get('Currently In Business?', '').strip()
         in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
+        in_business_val = self._resolve_in_business(in_business_val, row, record_id)
         create_element(client_intake, 'CurrentlyInBusiness', in_business_val)
 
         exporting_raw = row.get('Are you currently exporting?(old)', '').strip()

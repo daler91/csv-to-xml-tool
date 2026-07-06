@@ -166,3 +166,33 @@ def test_training_client_data_quality_maps_columns_before_analysis():
     # The training-client form intentionally injects defaults for the
     # counseling fabrication-risk columns, so no blank_* checks appear.
     assert not any(k.startswith("blank_") for k in checks)
+
+
+def test_training_client_data_quality_flags_in_business_downgrade():
+    csv = (
+        "Class/Event ID,Contact ID,Last Name,Start Date,Currently in Business?\n"
+        "E-1,C-1,Smith,2025-01-15,Yes\n"   # downgraded at conversion -> counted
+        "E-1,C-2,Jones,2025-01-15,No\n"    # not in business -> not counted
+        "E-1,,Brown,2025-01-15,Yes\n"      # missing Contact ID -> row skipped, not counted
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "training-client"))
+
+    downgrade = checks["in_business_downgraded"]
+    assert downgrade["count"] == 1
+    assert downgrade["severity"] == "warning"
+    # Reports the user's own header, not the internal counseling name.
+    assert downgrade["column"] == "Currently in Business?"
+    assert "not in business" in downgrade["detail"]
+
+
+def test_training_client_data_quality_no_downgrade_when_details_supplied():
+    # A CSV that passes through the counseling business-detail columns keeps
+    # its in-business clients, so the downgrade check must not appear.
+    csv = (
+        "Class/Event ID,Contact ID,Last Name,Start Date,Currently in Business?,"
+        "Legal Entity of Business,Nature of the Counseling Seeking?\n"
+        "E-1,C-1,Smith,2025-01-15,Yes,LLC,Business Start-up/Preplanning\n"
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "training-client"))
+
+    assert "in_business_downgraded" not in checks

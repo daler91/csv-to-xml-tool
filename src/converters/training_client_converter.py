@@ -8,7 +8,8 @@ CounselingInformation XML.
 """
 
 from .counseling_converter import CounselingConverter
-from ..config import TrainingClientConfig
+from ..config import TrainingClientConfig, ValidationCategory
+from .. import data_cleaning
 
 
 class TrainingClientConverter(CounselingConverter):
@@ -41,3 +42,26 @@ class TrainingClientConverter(CounselingConverter):
             remapped[target_col] = csv_val
 
         return remapped
+
+    def _resolve_in_business(self, in_business_val, row, record_id):
+        """The training-client form asks 'Currently in Business?' but doesn't
+        collect the business details (legal entity, counseling sought) that are
+        conditionally required for in-business clients. Keep 'Yes' only when the
+        CSV actually supplies them; otherwise record the client as not in
+        business, with one warning."""
+        if in_business_val != 'Yes':
+            return in_business_val
+        has_legal_entity = bool(
+            data_cleaning.split_multi_value(row.get('Legal Entity of Business', ''))
+            or (row.get('Other legal entity (specify)') or '').strip())
+        has_counseling_seeking = bool(
+            data_cleaning.split_multi_value(row.get('Nature of the Counseling Seeking?', '')))
+        if has_legal_entity and has_counseling_seeking:
+            return in_business_val
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.DOWNGRADED_VALUE, "CurrentlyInBusiness",
+            "Client answered 'Yes' to Currently in Business, but the training form doesn't "
+            "collect the business details (legal entity, counseling sought) required for "
+            "in-business clients, so this client is recorded as not in business in the "
+            "federal XML.")
+        return 'No'

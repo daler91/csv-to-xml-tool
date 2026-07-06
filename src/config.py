@@ -626,3 +626,7 @@ class ValidationCategory:
     AMBIGUOUS_DATE = "ambiguous_date"
     CLAMPED_VALUE = "clamped_value"
     FABRICATED_DEFAULT = "fabricated_default"
+    # An explicitly provided value was overridden because the form doesn't
+    # collect the supporting data it requires (vs FABRICATED_DEFAULT, which
+    # covers a blank cell replaced by a default).
+    DOWNGRADED_VALUE = "downgraded_value"

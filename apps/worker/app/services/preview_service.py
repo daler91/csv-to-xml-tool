@@ -196,7 +196,9 @@ TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
         "description": "Attendee military status.",
     },
     "Currently in Business?": {
-        "description": "Whether the attendee currently operates a business.",
+        "description": "Whether the attendee currently operates a business. Because the "
+        "training form doesn't collect the business details required for in-business "
+        "clients, 'Yes' answers without those details are recorded as 'No' in the XML.",
     },
 }
 

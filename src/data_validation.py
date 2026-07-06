@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from .data_cleaning import (
     clean_phone_number, format_date, is_ambiguous_date, is_empty,
-    standardize_country_code, standardize_state_name
+    split_multi_value, standardize_country_code, standardize_state_name
 )
 from .config import (
     COUNSELING_FABRICATION_DEFAULTS,
@@ -307,6 +307,36 @@ def analyze_training_client_quality(headers: list[str], csv_rows: list[dict[str,
     }
     checks.extend(_counseling_quality_checks(
         mapped_headers, mapped_rows, fabrication_defaults, reverse_mapping))
+
+    # Mirrors TrainingClientConverter._resolve_in_business: an in-business 'Yes'
+    # without the conditionally-required business details (which the training
+    # form doesn't collect) is recorded as 'No' at conversion. Only the exact
+    # string 'Yes' counts — anything else already defaults to 'No'.
+    contact_col = CounselingConfig.REQUIRED_FIELDS[0]
+    in_business_downgraded = 0
+    for row in mapped_rows:
+        if is_empty(row.get(contact_col)):
+            continue  # row is skipped whole at conversion; never reaches the downgrade
+        if (row.get('Currently In Business?') or '').strip() != 'Yes':
+            continue
+        has_legal_entity = bool(
+            split_multi_value(row.get('Legal Entity of Business', ''))
+            or (row.get('Other legal entity (specify)') or '').strip())
+        has_counseling_seeking = bool(
+            split_multi_value(row.get('Nature of the Counseling Seeking?', '')))
+        if not (has_legal_entity and has_counseling_seeking):
+            in_business_downgraded += 1
+
+    if in_business_downgraded:
+        in_business_src = reverse_mapping.get('Currently In Business?', 'Currently In Business?')
+        checks.append(_quality_check(
+            "in_business_downgraded",
+            f"Rows with '{in_business_src}' = 'Yes' but no business details",
+            in_business_downgraded, "warning",
+            "The training form doesn't collect the business details (legal entity, "
+            "counseling sought) required for in-business clients, so these clients "
+            "are recorded as not in business in the federal XML.",
+            in_business_src))
     return checks
 
 

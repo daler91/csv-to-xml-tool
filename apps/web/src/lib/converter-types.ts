@@ -47,7 +47,9 @@ export const CONVERTER_TYPES: readonly ConverterTypeMeta[] = [
     value: "training-client",
     label: "Training Client (Form 641)",
     description:
-      "Per-attendee rows from a training event, exported in the Form 641 schema.",
+      "Per-attendee rows from a training event, exported in the Form 641 schema. "
+      + "Attendees marked in business are recorded as not in business unless the "
+      + "CSV also carries the required business details.",
     sample: "/samples/training-client-sample.csv",
     formName: "Form 641",
   },

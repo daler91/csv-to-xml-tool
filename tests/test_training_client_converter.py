@@ -158,10 +158,44 @@ class TestTrainingClientConverter(unittest.TestCase):
         self.assertEqual(intake.find('Ethnicity').text, 'Non Hispanic or Latino')
 
     def test_currently_in_business_remapped(self):
-        """Test that 'Currently in Business?' (lowercase) maps correctly."""
+        """'Currently in Business?' (lowercase) maps correctly, and 'Yes' survives
+        when the CSV passes through the required business-detail columns."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Currently in Business?': 'Yes',
+            'Legal Entity of Business': 'LLC',
+            'Nature of the Counseling Seeking?': 'Business Start-up/Preplanning',
+        })])
+        intake = root.find('CounselingRecord/ClientIntake')
+        self.assertEqual(intake.find('CurrentlyInBusiness').text, 'Yes')
+        self.assertEqual(intake.find('LegalEntity/Code').text, 'LLC')
+        self.assertIsNotNone(intake.find('CounselingSeeking'))
+        downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
+        self.assertEqual(downgraded, [])
+
+    def test_in_business_without_details_downgraded_to_no(self):
+        """A 'Yes' row without business details is recorded as not in business:
+        one downgrade warning, no LegalEntity element, and no errors."""
         root = self._convert_and_parse([self._make_valid_row(**{'Currently in Business?': 'Yes'})])
+        intake = root.find('CounselingRecord/ClientIntake')
+        self.assertEqual(intake.find('CurrentlyInBusiness').text, 'No')
+        self.assertIsNone(intake.find('LegalEntity'))
+        errors = [i for i in self.validator.issues if i['severity'] == 'error']
+        self.assertEqual(errors, [])
+        downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
+        self.assertEqual(len(downgraded), 1)
+        self.assertEqual(downgraded[0]['field_name'], 'CurrentlyInBusiness')
+
+    def test_in_business_with_partial_details_still_downgraded(self):
+        """Legal entity alone isn't enough — counseling seeking is also required
+        for an in-business client, so the row is still downgraded."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Currently in Business?': 'Yes',
+            'Legal Entity of Business': 'LLC',
+        })])
         cib = root.find('CounselingRecord/ClientIntake/CurrentlyInBusiness')
-        self.assertEqual(cib.text, 'Yes')
+        self.assertEqual(cib.text, 'No')
+        downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
+        self.assertEqual(len(downgraded), 1)
 
     def test_defaults_applied_financial(self):
         """Test that financial fields default to 0."""
@@ -252,10 +286,11 @@ class TestTrainingClientConverter(unittest.TestCase):
             'Class/Event ID': 'EVT-9',
             'Currently in Business?': 'Yes',
         })])
-        seeking = [i for i in self.validator.issues if i['field_name'] == 'CounselingSeeking']
-        self.assertEqual(len(seeking), 1)
-        self.assertEqual(seeking[0]['record_id'], '003Pe00000Sxsp4')
-        self.assertEqual(seeking[0]['event_id'], 'EVT-9')
+        downgraded = [i for i in self.validator.issues if i['field_name'] == 'CurrentlyInBusiness']
+        self.assertEqual(len(downgraded), 1)
+        self.assertEqual(downgraded[0]['severity'], 'warning')
+        self.assertEqual(downgraded[0]['record_id'], '003Pe00000Sxsp4')
+        self.assertEqual(downgraded[0]['event_id'], 'EVT-9')
 
 
 if __name__ == '__main__':

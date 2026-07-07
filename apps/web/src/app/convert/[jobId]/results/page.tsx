@@ -8,7 +8,12 @@ import { DeleteJobButton } from "@/components/delete-job-button";
 import { XsdErrorDetailItem } from "@/components/xsd-error-details";
 import { resolveWithinDataDir } from "@/lib/paths";
 import { RETENTION_DAYS } from "@/lib/limits";
-import type { XsdErrorDetail } from "@/types";
+import type {
+  CleaningDiffEntry,
+  ValidationIssue,
+  XsdErrorDetail,
+} from "@/types";
+import { computeComparison } from "./comparison";
 
 // Inline preview cap. A 50MB <pre> would freeze the tab, so only the
 // head of the file is embedded; the download link serves the rest.
@@ -33,26 +38,6 @@ async function readXmlPreview(
     // Missing/purged file — the preview section simply doesn't render.
     return null;
   }
-}
-
-interface ValidationIssue {
-  record_id: string;
-  /** Event/Activity ID of the source row. Absent on jobs converted before
-   *  this field existed; empty string when the row had no Activity ID. */
-  event_id?: string;
-  severity: string;
-  category: string;
-  field_name: string;
-  message: string;
-}
-
-interface CleaningDiffEntry {
-  row: number;
-  record_id: string;
-  field: string;
-  original: string;
-  cleaned: string;
-  cleaning_type: string;
 }
 
 type ComparisonView = "resolved" | "new" | "persistent";
@@ -338,26 +323,6 @@ export default async function ResultsPage({
       )}
     </main>
   );
-}
-
-function computeComparison(
-  prevIssues: ValidationIssue[],
-  currIssues: ValidationIssue[]
-) {
-  // event_id is deliberately excluded: jobs stored before it existed have no
-  // value, so including it would mark every persistent issue as new+resolved
-  // when comparing across that boundary.
-  const key = (i: ValidationIssue) =>
-    `${i.record_id}|${i.field_name}|${i.category}`;
-
-  const prevSet = new Set(prevIssues.map(key));
-  const currSet = new Set(currIssues.map(key));
-
-  return {
-    resolved: prevIssues.filter((i) => !currSet.has(key(i))),
-    newIssues: currIssues.filter((i) => !prevSet.has(key(i))),
-    persistent: currIssues.filter((i) => prevSet.has(key(i))),
-  };
 }
 
 function issuesForView(

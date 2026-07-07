@@ -510,6 +510,36 @@ class TestCounselingConverter(unittest.TestCase):
         self.assertEqual(len(file_issues), 1)
         self.assertEqual(file_issues[0]['event_id'], '')
 
+    def test_file_write_issue_does_not_inherit_last_rows_event_id(self):
+        """The post-loop context clear: a FILE_WRITE issue raised after the row
+        loop must not carry the last processed row's Activity ID."""
+        csv_path = self._write_csv([self._make_valid_row(**{'Activity ID': 'A-321'})])
+        # Parent directory does not exist, so tree.write raises OSError after
+        # the loop has run with 'A-321' as the row context.
+        xml_path = os.path.join(tempfile.mkdtemp(), 'no_such_dir', 'out.xml')
+        try:
+            converter = CounselingConverter(self.logger, self.validator)
+            with self.assertRaises(OSError):
+                converter.convert(csv_path, xml_path)
+        finally:
+            os.unlink(csv_path)
+        write_issues = [i for i in self.validator.issues if i['category'] == 'file_write']
+        self.assertEqual(len(write_issues), 1)
+        self.assertEqual(write_issues[0]['record_id'], 'file')
+        self.assertEqual(write_issues[0]['event_id'], '')
+
+    def test_processing_error_issue_inherits_event_id(self):
+        """A mid-row crash recorded as PROCESSING_ERROR carries the row's
+        Activity ID via the tracker context."""
+        from unittest.mock import patch
+        with patch.object(CounselingConverter, '_build_counselor_record_section',
+                          side_effect=ValueError('boom')):
+            self._convert_and_parse([self._make_valid_row(**{'Activity ID': 'A-500'})])
+        processing = [i for i in self.validator.issues if i['category'] == 'processing_error']
+        self.assertEqual(len(processing), 1)
+        self.assertEqual(processing[0]['record_id'], 'C-001')
+        self.assertEqual(processing[0]['event_id'], 'A-500')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -292,6 +292,26 @@ class TestTrainingClientConverter(unittest.TestCase):
         self.assertEqual(downgraded[0]['record_id'], '003Pe00000Sxsp4')
         self.assertEqual(downgraded[0]['event_id'], 'EVT-9')
 
+    def test_blank_event_id_does_not_leak_previous_rows(self):
+        """A row with a blank Class/Event ID clears the context — its issues
+        must carry '' rather than the preceding row's event id."""
+        rows = [
+            self._make_valid_row(**{
+                'Contact ID': 'C-001', 'Class/Event ID': 'EVT-1',
+                'Currently in Business?': 'Yes',
+            }),
+            self._make_valid_row(**{
+                'Contact ID': 'C-002', 'Class/Event ID': '',
+                'Currently in Business?': 'Yes', 'First Name': 'Robin',
+            }),
+        ]
+        self._convert_and_parse(rows)
+        downgraded = {i['record_id']: i for i in self.validator.issues
+                      if i['field_name'] == 'CurrentlyInBusiness'}
+        self.assertEqual(set(downgraded), {'C-001', 'C-002'})
+        self.assertEqual(downgraded['C-001']['event_id'], 'EVT-1')
+        self.assertEqual(downgraded['C-002']['event_id'], '')
+
 
 if __name__ == '__main__':
     unittest.main()

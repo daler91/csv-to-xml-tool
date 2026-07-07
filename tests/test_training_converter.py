@@ -311,6 +311,13 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(topic_warnings[0]['record_id'], 'EVT-001')
         self.assertEqual(topic_warnings[0]['event_id'], 'EVT-001')
 
+    def test_event_id_context_cleared_after_convert(self):
+        """The post-loop clear: issues added after convert() (e.g. by the
+        calling service) must not inherit the last event's id. The clearing has
+        no issue-visible effect inside convert() itself, so pin the state."""
+        self._convert_and_parse([self._make_training_row()])
+        self.assertIsNone(self.validator.current_event_id)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -174,8 +174,10 @@ export default function HelpPage() {
           </li>
           <li>
             <strong>Errors &amp; Warnings tables</strong> — Per-record
-            issues with the field name, category, and a description
-            of what went wrong.
+            issues with the event/activity ID of the failing row
+            (shown as &ldquo;—&rdquo; when the upload has no Activity
+            ID or the job predates the column), the field name,
+            category, and a description of what went wrong.
           </li>
         </ul>
         <p>

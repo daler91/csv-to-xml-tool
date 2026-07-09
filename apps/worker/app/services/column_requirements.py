@@ -47,7 +47,9 @@ TRAINING_REQUIRED = {"Class/Event ID"}
 TRAINING_CONDITIONAL: set[str] = set()
 
 TRAINING_CLIENT_REQUIRED = {"Class/Event ID", "Contact ID"}
-TRAINING_CLIENT_CONDITIONAL: set[str] = set()
+TRAINING_CLIENT_CONDITIONAL = {
+    "Member ID",  # per-attendee session id; falls back to Class/Event ID when absent
+}
 
 # Columns the counseling converter silently defaults to a *non-empty* value when the
 # column is absent -- i.e. it fabricates data that ships in the federal XML. The

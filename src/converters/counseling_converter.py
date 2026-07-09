@@ -44,6 +44,11 @@ class CounselingConverter(BaseConverter):
         value unchanged by default."""
         return in_business_val
 
+    def _partner_session_number(self, row):
+        """Hook for subclasses to choose the PartnerSessionNumber value.
+        Defaults to the Activity ID."""
+        return row.get('Activity ID', '')
+
     def _warn_fabricated_default(self, record_id, field, default_value, element_label):
         """Record a FABRICATED_DEFAULT warning when a blank/missing cell is replaced
         by a non-empty default that ships in the XML. One warning per (record, field),
@@ -366,7 +371,7 @@ class CounselingConverter(BaseConverter):
         self._build_export_countries(client_intake, row, record_id)
 
     def _build_counselor_identity(self, counselor_record, row, record_id):
-        create_element(counselor_record, 'PartnerSessionNumber', row.get('Activity ID', ''))
+        create_element(counselor_record, 'PartnerSessionNumber', self._partner_session_number(row))
 
         funding_source = row.get('Funding Source', '').strip()
         if funding_source:
@@ -533,6 +538,8 @@ class CounselingConverter(BaseConverter):
             row.get('Other (Referred Client to)', '').strip(), 'Other')
 
         self._build_session_details(counselor_record, row, record_id)
+        # Unused here; lets subclasses append trailing elements (e.g. TrainingSession).
+        return counselor_record
 
 
     def _build_address(self, parent, element_name, row, record_id):

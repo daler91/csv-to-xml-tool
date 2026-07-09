@@ -113,11 +113,17 @@ class TestTrainingClientConverter(unittest.TestCase):
         company = root.find('CounselingRecord/ClientIntake/CompanyName')
         self.assertEqual(company.text, 'Test Corp')
 
-    def test_column_remapping_session_id(self):
-        """Test that Class/Event ID maps to PartnerSessionNumber."""
-        root = self._convert_and_parse([self._make_valid_row(**{'Class/Event ID': 'EVT-123'})])
+    def test_partner_session_number_uses_member_id(self):
+        """PartnerSessionNumber is the per-attendee Member ID, not the shared event id."""
+        root = self._convert_and_parse([self._make_valid_row()])
         session_num = root.find('CounselingRecord/CounselorRecord/PartnerSessionNumber')
-        self.assertEqual(session_num.text, 'EVT-123')
+        self.assertEqual(session_num.text, '00vPe00000Pn89L')
+
+    def test_partner_session_number_falls_back_to_event_id(self):
+        """Without a Member ID, PartnerSessionNumber falls back to the Class/Event ID."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Member ID': ''})])
+        session_num = root.find('CounselingRecord/CounselorRecord/PartnerSessionNumber')
+        self.assertEqual(session_num.text, '701Pe00000vtCVy')
 
     def test_column_remapping_counselor_name(self):
         """Test that Class Teacher maps to CounselorName."""
@@ -131,11 +137,87 @@ class TestTrainingClientConverter(unittest.TestCase):
         date = root.find('CounselingRecord/CounselorRecord/DateCounseled')
         self.assertEqual(date.text, '2026-01-15')
 
-    def test_column_remapping_session_type(self):
-        """Test that Class/Event Type maps to SessionType."""
+    def test_session_type_forced_to_training(self):
+        """Every training-member record is a Training session regardless of the
+        Class/Event Type delivery format, with no invalid-value warning."""
         root = self._convert_and_parse([self._make_valid_row(**{'Class/Event Type': 'Online'})])
         session_type = root.find('CounselingRecord/CounselorRecord/SessionType')
-        self.assertEqual(session_type.text, 'Online')
+        self.assertEqual(session_type.text, 'Training')
+        session_type_issues = [i for i in self.validator.issues if i['field_name'] == 'SessionType']
+        self.assertEqual(session_type_issues, [])
+
+    def test_contact_hours_not_bumped_for_training(self):
+        """Training sessions don't require contact hours, so all hours stay 0."""
+        root = self._convert_and_parse([self._make_valid_row()])
+        hours = root.find('CounselingRecord/CounselorRecord/CounselingHours')
+        self.assertEqual(hours.find('Contact').text, '0')
+        self.assertEqual(hours.find('Prepare').text, '0')
+        self.assertEqual(hours.find('Travel').text, '0')
+
+    def test_training_session_block(self):
+        """The TrainingSession block is emitted as the last CounselorRecord child,
+        carrying the start date, the event id, and the fixed attendee/hours values."""
+        root = self._convert_and_parse([self._make_valid_row()])
+        counselor_record = root.find('CounselingRecord/CounselorRecord')
+        self.assertEqual(list(counselor_record)[-1].tag, 'TrainingSession')
+        ts = counselor_record.find('TrainingSession')
+        self.assertEqual(ts.find('DateTrainingStarted').text, '2026-01-15')
+        self.assertEqual(ts.find('PartnerTrainingNumber').text, '701Pe00000vtCVy')
+        self.assertEqual(ts.find('EmployeesTrained').text, '1')
+        self.assertEqual(ts.find('HoursTrained').text, '1.5')
+        self.assertEqual(
+            [child.tag for child in ts],
+            ['DateTrainingStarted', 'PartnerTrainingNumber', 'EmployeesTrained', 'HoursTrained'])
+
+    def test_training_session_omits_blank_date_and_event_id(self):
+        """Blank Start Date / Class/Event ID are omitted from TrainingSession
+        rather than emitted empty (both are xs:date/String20 optional elements)."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Class/Event ID': '',
+            'Start Date': '',
+        })])
+        ts = root.find('CounselingRecord/CounselorRecord/TrainingSession')
+        self.assertIsNone(ts.find('DateTrainingStarted'))
+        self.assertIsNone(ts.find('PartnerTrainingNumber'))
+        self.assertEqual(ts.find('EmployeesTrained').text, '1')
+        self.assertEqual(ts.find('HoursTrained').text, '1.5')
+
+    def test_training_topic_maps_to_seeking_and_provided(self):
+        """The event's Training Topic is recorded as the counseling sought and provided."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Training Topic': 'Buy/Sell Business'})])
+        seeking = root.find('CounselingRecord/ClientIntake/CounselingSeeking/Code')
+        provided = root.find('CounselingRecord/CounselorRecord/CounselingProvided/Code')
+        self.assertEqual(seeking.text, 'Buy/Sell Business')
+        self.assertEqual(provided.text, 'Buy/Sell Business')
+
+    def test_blank_training_topic_keeps_defaults(self):
+        """Blank topic: CounselingSeeking omitted, CounselingProvided keeps its default."""
+        root = self._convert_and_parse([self._make_valid_row()])
+        self.assertIsNone(root.find('CounselingRecord/ClientIntake/CounselingSeeking'))
+        provided = root.find('CounselingRecord/CounselorRecord/CounselingProvided/Code')
+        self.assertEqual(provided.text, 'Business Start-up/Preplanning')
+
+    def test_explicit_counseling_columns_beat_training_topic(self):
+        """A counseling-format column in the raw CSV wins over the Training Topic."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Training Topic': 'Marketing',
+            'Nature of the Counseling Seeking?': 'Business Plan',
+        })])
+        seeking = root.find('CounselingRecord/ClientIntake/CounselingSeeking/Code')
+        self.assertEqual(seeking.text, 'Business Plan')
+
+    def test_training_topic_counts_as_counseling_seeking_for_in_business(self):
+        """A topic satisfies the counseling-seeking half of the in-business details,
+        so 'Yes' with a legal entity and a topic is not downgraded."""
+        root = self._convert_and_parse([self._make_valid_row(**{
+            'Currently in Business?': 'Yes',
+            'Legal Entity of Business': 'LLC',
+            'Training Topic': 'Marketing',
+        })])
+        cib = root.find('CounselingRecord/ClientIntake/CurrentlyInBusiness')
+        self.assertEqual(cib.text, 'Yes')
+        downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
+        self.assertEqual(downgraded, [])
 
     def test_passthrough_columns(self):
         """Test that columns matching counseling format pass through unchanged."""
@@ -239,7 +321,6 @@ class TestTrainingClientConverter(unittest.TestCase):
     def test_training_only_columns_ignored(self):
         """Training-only columns should not cause errors or appear in XML."""
         row = self._make_valid_row(**{
-            'Training Topic': 'Technology',
             'Member Type': 'Contact',
             'Class/Event Name': 'Business Basics Workshop',
         })

@@ -196,3 +196,28 @@ def test_training_client_data_quality_no_downgrade_when_details_supplied():
     checks = _checks_by_key(read_csv_preview(csv, "training-client"))
 
     assert "in_business_downgraded" not in checks
+
+
+def test_training_client_topic_satisfies_counseling_seeking():
+    # The converter records the Training Topic as the counseling sought, so a
+    # topic plus a legal entity keeps the client in business — no downgrade.
+    csv = (
+        "Class/Event ID,Contact ID,Last Name,Start Date,Currently in Business?,"
+        "Legal Entity of Business,Training Topic\n"
+        "E-1,C-1,Smith,2025-01-15,Yes,LLC,Marketing/Sales\n"
+        "E-1,C-2,Jones,2025-01-15,Yes,,Marketing/Sales\n"  # no legal entity -> still downgraded
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "training-client"))
+
+    assert checks["in_business_downgraded"]["count"] == 1
+
+
+def test_training_client_member_id_is_conditional():
+    csv = (
+        "Class/Event ID,Contact ID,Last Name,Start Date\n"
+        "E-1,C-1,Smith,2025-01-15\n"
+    )
+    status = read_csv_preview(csv, "training-client")["column_status"]
+
+    assert status["field_requirements"].get("Member ID") == "conditional"
+    assert status["field_requirements"].get("Class/Event ID") == "required"

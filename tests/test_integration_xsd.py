@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.config import EXPORT_COUNTRY_CODES
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
+from src.converters.training_client_converter import TrainingClientConverter
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
 
@@ -133,6 +134,45 @@ def _make_training_row(**overrides):
         'Veteran Status': 'No military service',
         'Currently in Business?': 'Yes',
         'Disabilities': 'No',
+    }
+    base.update(overrides)
+    return base
+
+
+def _make_training_client_row(**overrides):
+    """Return a minimal valid training-client (per-attendee Form 641) row dict."""
+    base = {
+        'Class/Event ID': '701Pe00000vtCVy',
+        'Contact ID': '003Pe00000Sxsp4',
+        'Member ID': '00vPe00000Pn89L',
+        'First Name': 'Jane',
+        'Last Name': 'Doe',
+        'Member Type': 'Contact',
+        'Member Status': 'Responded',
+        'Company': 'Doe Enterprises',
+        'Phone': '5155551234',
+        'Email': 'jane@example.com',
+        'Currently in Business?': 'No',
+        'Ethnicity': 'Non Hispanic or Latino',
+        'Race': 'White',
+        'Disabilities': 'No',
+        'Gender': 'Female',
+        'Military Status': 'No military service',
+        'Training Topic': 'Marketing/Sales',
+        'Class/Event Type': 'In-Person',
+        'Funding Source': '',
+        'Class Teacher': 'Mike Smith',
+        # Not on the real training-member export: the blank default emits an
+        # empty <ClientSignature><Date/> that strict XSD validation rejects
+        # (pre-existing, shared with counseling). Supplied here so these tests
+        # isolate the TrainingSession block.
+        'Client Signature - Date': '2025-04-08',
+        'Street': '2210 Grand Ave',
+        'city': 'Des Moines',
+        'State': 'IA',
+        'Zip code': '50312',
+        'Start Date': '2025-04-08',
+        'Class/Event Name': 'Marketing Basics Workshop',
     }
     base.update(overrides)
     return base
@@ -302,6 +342,57 @@ class TestTrainingXSDValidation(unittest.TestCase):
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, TRAINING_XSD)
             self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+        finally:
+            os.unlink(xml_path)
+
+
+@unittest.skipUnless(
+    os.path.exists(COUNSELING_XSD),
+    f"Counseling XSD not found at {COUNSELING_XSD}"
+)
+class TestTrainingClientXSDValidation(unittest.TestCase):
+    """Training-client output is Form 641 counseling-format XML; these tests pin
+    the TrainingSession block's position and child order against the real XSD."""
+
+    def setUp(self):
+        self.logger = ConversionLogger("test_xsd_training_client", log_to_file=False).logger
+        self.validator = ValidationTracker()
+
+    def _convert(self, rows):
+        csv_path = _write_csv(rows)
+        xml_path = tempfile.NamedTemporaryFile(suffix='.xml', delete=False).name
+        try:
+            converter = TrainingClientConverter(self.logger, self.validator)
+            converter.convert(csv_path, xml_path)
+            return xml_path
+        finally:
+            os.unlink(csv_path)
+
+    def test_attendee_records_validate_against_xsd(self):
+        """Per-attendee records with the TrainingSession block are XSD-compliant."""
+        rows = [
+            _make_training_client_row(),
+            _make_training_client_row(**{
+                'Contact ID': '003Pe00000Sxsp5',
+                'Member ID': '00vPe00000Pn89M',
+                'First Name': 'Luis',
+                'Gender': 'Male',
+            }),
+        ]
+        xml_path = self._convert(rows)
+        try:
+            is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
+        finally:
+            os.unlink(xml_path)
+
+    def test_record_without_member_id_or_topic_validates(self):
+        """The fallback paths (no Member ID, blank topic) also produce valid XML."""
+        rows = [_make_training_client_row(**{'Member ID': '', 'Training Topic': ''})]
+        xml_path = self._convert(rows)
+        try:
+            is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 

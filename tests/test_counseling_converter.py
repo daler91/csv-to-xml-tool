@@ -510,6 +510,15 @@ class TestCounselingConverter(unittest.TestCase):
         self.assertEqual(len(file_issues), 1)
         self.assertEqual(file_issues[0]['event_id'], '')
 
+    def test_counseling_output_unaffected_by_training_client_hooks(self):
+        """The training-client subclass hooks must not change counseling output:
+        PartnerSessionNumber still comes from Activity ID and no TrainingSession
+        block is emitted."""
+        root = self._convert_and_parse([self._make_valid_row(**{'Activity ID': 'A-123'})])
+        counselor_record = root.find('CounselingRecord/CounselorRecord')
+        self.assertEqual(counselor_record.find('PartnerSessionNumber').text, 'A-123')
+        self.assertIsNone(counselor_record.find('TrainingSession'))
+
 
 if __name__ == '__main__':
     unittest.main()

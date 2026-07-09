@@ -10,6 +10,7 @@ CounselingInformation XML.
 from .counseling_converter import CounselingConverter
 from ..config import TrainingClientConfig, ValidationCategory
 from .. import data_cleaning
+from ..xml_utils import create_element
 
 
 class TrainingClientConverter(CounselingConverter):
@@ -41,7 +42,41 @@ class TrainingClientConverter(CounselingConverter):
             target_col = self.training_client_config.COLUMN_MAPPING.get(csv_col, csv_col)
             remapped[target_col] = csv_val
 
+        # The event's Training Topic is what the attendee sought and received;
+        # an explicit counseling-format column in the CSV still wins.
+        topic = (row.get('Training Topic') or '').strip()
+        if topic:
+            if not (row.get('Nature of the Counseling Seeking?') or '').strip():
+                remapped['Nature of the Counseling Seeking?'] = topic
+            if not (row.get('Services Provided') or '').strip():
+                remapped['Services Provided'] = topic
+
         return remapped
+
+    def _partner_session_number(self, row):
+        """Per-attendee campaign-member id; falls back to the event id (the
+        remapped Class/Event ID) when the CSV has no Member ID."""
+        member_id = (row.get('Member ID') or '').strip()
+        return member_id or super()._partner_session_number(row)
+
+    def _build_counselor_record_section(self, parent, row, record_id):
+        counselor_record = super()._build_counselor_record_section(parent, row, record_id)
+        self._build_training_session(counselor_record, row)
+        return counselor_record
+
+    def _build_training_session(self, counselor_record, row):
+        """TrainingSession is the last child of CounselorRecord in the XSD
+        sequence. Child order: DateTrainingStarted, PartnerTrainingNumber,
+        EmployeesTrained, HoursTrained (all optional)."""
+        training_session = create_element(counselor_record, 'TrainingSession')
+        date_started = data_cleaning.format_date(row.get('Date', ''))  # remapped 'Start Date'
+        if date_started:
+            create_element(training_session, 'DateTrainingStarted', date_started)
+        event_id = (row.get('Activity ID') or '').strip()  # remapped 'Class/Event ID'
+        if event_id:
+            create_element(training_session, 'PartnerTrainingNumber', event_id)
+        create_element(training_session, 'EmployeesTrained', self.training_client_config.EMPLOYEES_TRAINED)
+        create_element(training_session, 'HoursTrained', self.training_client_config.HOURS_TRAINED)
 
     def _resolve_in_business(self, in_business_val, row, record_id):
         """The training-client form asks 'Currently in Business?' but doesn't

@@ -323,7 +323,10 @@ def analyze_training_client_quality(headers: list[str], csv_rows: list[dict[str,
             split_multi_value(row.get('Legal Entity of Business', ''))
             or (row.get('Other legal entity (specify)') or '').strip())
         has_counseling_seeking = bool(
-            split_multi_value(row.get('Nature of the Counseling Seeking?', '')))
+            split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
+            # The converter records the Training Topic as the counseling sought,
+            # so a topic satisfies the counseling-seeking requirement too.
+            or (row.get('Training Topic') or '').strip())
         if not (has_legal_entity and has_counseling_seeking):
             in_business_downgraded += 1
 

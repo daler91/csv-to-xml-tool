@@ -142,10 +142,24 @@ _TRAINING_ELEMENT_FIELDS = {
     "Ethnicity": ("Ethnicity", "Ethnicity"),
 }
 
+# Training-client output shares the counseling XML shape, but a few elements
+# come from different CSV columns (per-attendee ids) or from constants the
+# converter injects (csv_column None drops the "(CSV column ...)" fragment in
+# friendly messages).
+_TRAINING_CLIENT_ELEMENT_FIELDS = {
+    **_COUNSELING_ELEMENT_FIELDS,
+    "PartnerSessionNumber": ("Member ID", "Member ID"),
+    "SessionType": ("Session Type", None),  # always 'Training'
+    "DateTrainingStarted": ("Start Date", "Start Date"),
+    "PartnerTrainingNumber": ("Class/Event ID", "Class/Event ID"),
+    "EmployeesTrained": ("Employees Trained", None),  # constant: one attendee per row
+    "HoursTrained": ("Training Hours", None),  # constant per-session hours
+}
+
 _ELEMENT_FIELD_MAPS = {
     "counseling": _COUNSELING_ELEMENT_FIELDS,
     "training": _TRAINING_ELEMENT_FIELDS,
-    "training-client": _COUNSELING_ELEMENT_FIELDS,
+    "training-client": _TRAINING_CLIENT_ELEMENT_FIELDS,
 }
 
 # "Line 20: <validator message>" — the format validate_against_xsd emits.

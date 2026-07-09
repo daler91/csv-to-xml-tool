@@ -209,3 +209,59 @@ def test_training_client_uses_counseling_record_shape():
     assert detail["row_number"] == 2
     assert detail["record_id"] == "C-002"
     assert "Contact C-002" in detail["friendly_message"]
+
+
+TRAINING_CLIENT_XML = """<?xml version='1.0' encoding='utf-8'?>
+<CounselingInformation>
+  <CounselingRecord>
+    <PartnerClientNumber>003Pe00000Sxsp4</PartnerClientNumber>
+    <CounselorRecord>
+      <PartnerSessionNumber>THIS-ID-IS-LONGER-THAN-TWENTY-CHARS</PartnerSessionNumber>
+      <TrainingSession>
+        <DateTrainingStarted>bogus</DateTrainingStarted>
+        <PartnerTrainingNumber>701Pe00000vtCVy</PartnerTrainingNumber>
+        <EmployeesTrained>1</EmployeesTrained>
+        <HoursTrained>1.5</HoursTrained>
+      </TrainingSession>
+    </CounselorRecord>
+  </CounselingRecord>
+</CounselingInformation>
+"""
+
+
+def test_training_client_session_number_maps_to_member_id():
+    line = _line_of(TRAINING_CLIENT_XML, "<PartnerSessionNumber>")
+    error = f"Line {line}: Element 'PartnerSessionNumber': value too long."
+    detail = _one_detail(TRAINING_CLIENT_XML, error, schema_type="training-client")
+
+    assert detail["field_label"] == "Member ID"
+    assert detail["csv_column"] == "Member ID"
+    assert "(CSV column 'Member ID')" in detail["friendly_message"]
+
+
+def test_training_client_training_session_fields_map_to_sources():
+    line = _line_of(TRAINING_CLIENT_XML, "<DateTrainingStarted>bogus</DateTrainingStarted>")
+    error = f"Line {line}: Element 'DateTrainingStarted': 'bogus' is not a valid xs:date."
+    detail = _one_detail(TRAINING_CLIENT_XML, error, schema_type="training-client")
+
+    assert detail["field_label"] == "Start Date"
+    assert detail["csv_column"] == "Start Date"
+
+    # Converter-injected constants have no CSV column; the friendly message
+    # drops the "(CSV column ...)" fragment.
+    line = _line_of(TRAINING_CLIENT_XML, "<HoursTrained>")
+    error = f"Line {line}: Element 'HoursTrained': bad value."
+    detail = _one_detail(TRAINING_CLIENT_XML, error, schema_type="training-client")
+
+    assert detail["field_label"] == "Training Hours"
+    assert detail["csv_column"] is None
+    assert "CSV column" not in detail["friendly_message"]
+
+
+def test_counseling_session_number_still_maps_to_activity_id():
+    line = _line_of(TRAINING_CLIENT_XML, "<PartnerSessionNumber>")
+    error = f"Line {line}: Element 'PartnerSessionNumber': value too long."
+    detail = _one_detail(TRAINING_CLIENT_XML, error, schema_type="counseling")
+
+    assert detail["field_label"] == "Activity ID"
+    assert detail["csv_column"] == "Activity ID"

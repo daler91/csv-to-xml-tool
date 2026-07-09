@@ -549,9 +549,13 @@ class TrainingClientConfig:
         'Class/Event ID': 'Activity ID',
         'Class Teacher': 'Name of Counselor',
         'Start Date': 'Date',
-        'Class/Event Type': 'Type of Session',
         'Currently in Business?': 'Currently In Business?',
     }
+
+    # TrainingSession values: each CSV row is one attendee, so one person is
+    # trained per record, and hours trained are a fixed per-session value.
+    EMPLOYEES_TRAINED = '1'
+    HOURS_TRAINED = '1.5'
 
     # Default values for counseling columns absent from the training client CSV
     DEFAULTS = {
@@ -601,6 +605,10 @@ class TrainingClientConfig:
         'Other (Referred Client to)': '',
         'Language(s) Used': 'English',
         'Language(s) Used (Other)': '',
+        # Every training-member record is a Training session ('Class/Event Type'
+        # values like 'In-Person' are not valid Form 641 session types). Training
+        # is in NO_CONTACT_HOUR_SESSION_TYPES, so contact hours also stay 0.
+        'Type of Session': 'Training',
         'Duration (hours)': '0',
         'Prep Hours': '0',
         'Travel Hours': '0',

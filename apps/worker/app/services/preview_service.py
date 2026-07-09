@@ -174,11 +174,20 @@ TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
     _COL_CONTACT_ID: {
         "description": "Salesforce Contact ID for the individual attendee. Must be unique within the event.",
     },
+    "Member ID": {
+        "description": "Salesforce campaign-member ID for this attendee's participation "
+        "in the event. Becomes the session identifier (PartnerSessionNumber) in the XML.",
+        "conditional_rule": "When absent or blank, the Class/Event ID is used as the "
+        "session identifier instead, so all attendees of an event share one session number.",
+    },
     "Training Topic": {
-        "description": "Topic area of the training (Business Start-up, Marketing, etc.).",
+        "description": "Topic area of the training (Business Start-up, Marketing, etc.). "
+        "Recorded as the counseling sought and provided for each attendee.",
     },
     "Class/Event Type": {
-        "description": "Delivery format of the training (In-Person, Online, Hybrid).",
+        "description": "Delivery format of the training (In-Person, Online, Hybrid). "
+        "Not carried into the Form 641 XML — training-client sessions are always "
+        "recorded with session type 'Training'.",
     },
     "Start Date": {
         "description": "Date the training session started. Accepts common formats; normalized to YYYY-MM-DD.",

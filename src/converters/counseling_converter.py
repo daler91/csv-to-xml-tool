@@ -39,6 +39,18 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
 
+    def _mapped(self, row, mapping_key, default=''):
+        """Read a column by its CounselingConfig.COLUMN_MAPPING key.
+
+        Used for the Part 3 impact fields, whose fallback chain ("(Meeting)"
+        column, else the intake column) is declared once in config instead of
+        being repeated at each call site. Delegates to _first_present so the
+        blank-vs-absent semantics below are the same either way.
+        """
+        return self._first_present(
+            row, *self.config.headers_for(mapping_key), default=default
+        )
+
     @staticmethod
     def _first_present(row, *keys, default=''):
         """First non-blank value among `keys`, else `default`.
@@ -497,12 +509,12 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
         create_element(counselor_record, 'CurrentlyExporting', self.general_config.DEFAULT_BUSINESS_STATUS)
 
-        business_start_date = data_cleaning.format_date(self._first_present(row, 'Business Start Date', 'Date Started (Meeting)'))
+        business_start_date = data_cleaning.format_date(self._mapped(row, 'business_start_date'))
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
-        total_employees = data_cleaning.clean_numeric(self._first_present(row, 'Total No. of Employees (Meeting)', 'Total Number of Employees', default='0'))
+        total_employees = data_cleaning.clean_numeric(self._mapped(row, 'total_employees_part3', default='0'))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
 
@@ -510,8 +522,8 @@ class CounselingConverter(BaseConverter):
         if exporting_employees2 and float(exporting_employees2) > 0:
             create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
 
-        gross_rev_part3 = data_cleaning.clean_numeric(self._first_present(row, 'Gross Revenues/Sales (Meeting)', 'Gross Revenues/Sales'))
-        profit_loss_part3 = data_cleaning.clean_numeric(self._first_present(row, 'Profit & Loss (Meeting)', 'Profits/Losses'))
+        gross_rev_part3 = data_cleaning.clean_numeric(self._mapped(row, 'gross_revenues_part3'))
+        profit_loss_part3 = data_cleaning.clean_numeric(self._mapped(row, 'profit_loss_part3'))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
         # No fabrication warnings here for gross revenue / profit-loss: they are
         # keyed on the base columns (the "(Meeting)" variants are intentionally

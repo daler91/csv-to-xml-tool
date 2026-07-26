@@ -29,18 +29,23 @@ pytest.importorskip("fastapi")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.services.preview_service import COUNSELING_EXPECTED, get_expected_columns
-from src.config import COUNSELING_FABRICATION_DEFAULTS
+from src.config import COUNSELING_FABRICATION_DEFAULTS, CounselingConfig
 
 _CONVERTER = pathlib.Path(__file__).parent.parent / "src" / "converters" / "counseling_converter.py"
 
 
 def _headers_read_by_converter() -> set[str]:
-    """Every CSV header literal the counseling converter reads.
+    """Every CSV header the counseling converter reads.
 
-    Covers both access shapes: `row.get('Header', ...)` and
-    `self._first_present(row, 'A', 'B', ...)`. The second matters — four
-    "(Meeting)" columns are reachable only that way, so a scan that looked at
-    `row.get` alone would miss them.
+    Covers three access shapes:
+
+    * ``row.get('Header', ...)`` — the bulk of them, still literals.
+    * ``self._first_present(row, 'A', 'B', ...)`` — kept because the helper is
+      still public API and callable with bare literals.
+    * ``self._mapped(row, 'key')`` — resolved through
+      ``CounselingConfig.COLUMN_MAPPING``. The four Part 3 impact fields are
+      reachable *only* this way, so a scan that stopped at literals would report
+      five real headers as unread and fail in the opposite direction.
     """
     tree = ast.parse(_CONVERTER.read_text())
     headers: set[str] = set()
@@ -55,6 +60,14 @@ def _headers_read_by_converter() -> set[str]:
             for arg in node.args[1:]:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     headers.add(arg.value)
+        elif node.func.attr == "_mapped" and len(node.args) >= 2:
+            key = node.args[1]
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                assert key.value in CounselingConfig.COLUMN_MAPPING, (
+                    f"_mapped() called with {key.value!r}, which is not a "
+                    "CounselingConfig.COLUMN_MAPPING key — it would raise at runtime"
+                )
+                headers.update(CounselingConfig.headers_for(key.value))
     return headers
 
 

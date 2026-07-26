@@ -10,7 +10,7 @@ _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.config import TrainingConfig
+from src.config import CounselingConfig, TrainingConfig
 from src.data_cleaning import normalize_header, normalize_row_keys
 from src.data_validation import analyze_data_quality
 
@@ -231,52 +231,18 @@ def _build_field_requirements(
     return result
 
 
-# Expected columns extracted from converter source code.
+# Derived from CounselingConfig.COLUMN_MAPPING rather than hand-maintained.
 #
-# These MUST match the header literals CounselingConverter actually reads.
-# Three of them had drifted to a spelling without the "(old)" suffix, which is
-# worse than cosmetic: the mapping page then reports the user's real column as
-# "extra" and the never-read one as "missing", the fuzzy suggester (cutoff 0.6)
-# proposes renaming the real column to the missing name, and
-# conversion_service._sanitize_column_mapping *accepts* that rename because the
-# target is in this list. Accepting the suggestion renamed away the column the
-# converter needed. tests/test_expected_columns.py pins this list against the
-# converter source so it cannot drift again.
-COUNSELING_EXPECTED = [
-    _COL_CONTACT_ID, "LocationCode", _COL_LAST_NAME, _COL_FIRST_NAME, "Middle Name",
-    "Email", "Contact: Phone", "Contact: Secondary Phone",
-    "Mailing Street", "Mailing City", "Mailing State/Province",
-    "Mailing Zip/Postal Code", "Mailing Country",
-    "Agree to Impact Survey", "Client Signature - Date", "Client Signature(On File)",
-    "Race", "Ethnicity:", "Gender", "Disability", "Veteran Status",
-    "Branch Of Service", "What Prompted you to contact us?",
-    "Internet (specify)", "InternetUsage",
-    "Currently In Business?", "Are you currently exporting?(old)",
-    "Account Name", "Type of Business",
-    "Business Ownership - % Female(old)", "Conduct Business Online?",
-    "8(a) Certified?(old)", "Employee Owned", "Total Number of Employees",
-    "Number of Employees in Exporting Business",
-    "Gross Revenues/Sales", "Profits/Losses",
-    "Legal Entity of Business", "Other legal entity (specify)",
-    "Rural_vs_Urban", "FIPS_Code",
-    "Nature of the Counseling Seeking?",
-    "Nature of the Counseling Seeking - Other Detail",
-    "Export Countries",
-    "Activity ID", "Funding Source", "Verified To Be In Business",
-    "Reportable Impact", "Reportable Impact Date",
-    "Business Start Date", "Date Started (Meeting)",
-    "Total No. of Employees (Meeting)",
-    "Gross Revenues/Sales (Meeting)", "Profit & Loss (Meeting)",
-    "SBA Loan Amount", "Non-SBA Loan Amount",
-    "Amount of Equity Capital Received",
-    "Certifications (SDB, HUBZONE, etc)", "Other Certifications",
-    "SBA Financial Assistance", "Other SBA Financial Assistance",
-    "Services Provided", "Other Counseling Provided",
-    "Referred Client to", "Other (Referred Client to)",
-    "Type of Session", "Language(s) Used", "Language(s) Used (Other)",
-    "Date", "Name of Counselor", "Duration (hours)",
-    "Prep Hours", "Travel Hours", "Comments",
-]
+# This list must match the header literals CounselingConverter actually reads.
+# When it was a separate list, three entries drifted to a spelling without the
+# "(old)" suffix, which is worse than cosmetic: the mapping page then reports the
+# user's real column as "extra" and the never-read one as "missing", the fuzzy
+# suggester (cutoff 0.6) proposes renaming the real column to the missing name,
+# and conversion_service._sanitize_column_mapping *accepts* that rename because
+# the target is in this list. Accepting the suggestion renamed away the column
+# the converter needed. tests/test_expected_columns.py pins the config against
+# the converter source so it cannot drift again.
+COUNSELING_EXPECTED = CounselingConfig.expected_columns()
 
 # Training expected columns are derived from TrainingConfig.COLUMN_MAPPING at call
 # time by get_expected_columns() below (returning the human header names, not the

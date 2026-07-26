@@ -35,7 +35,12 @@ class TrainingConverter(BaseConverter):
         return default
 
     def _read_and_validate_csv(self, input_path):
-        """Read CSV, validate columns and rows. Returns (event_groups, event_id_col) or (None, None)."""
+        """Read CSV, validate columns and rows. Returns (event_groups, event_id_col).
+
+        Raises EmptyCSVError when there is nothing convertible -- an empty CSV, a
+        missing event-ID column, or no row carrying a usable event ID -- so the
+        caller can never write a success with no output file.
+        """
         try:
             # CONV-2: explicit utf-8-sig + string dtype (both were missing) and
             # normalize header whitespace so lookups match the other read paths.
@@ -56,12 +61,17 @@ class TrainingConverter(BaseConverter):
         if not event_id_col or event_id_col not in df.columns:
             self.logger.error(f"Required column '{event_id_col}' not found in the CSV.")
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, event_id_col, "Event ID column is missing.")
-            return None, None
+            raise EmptyCSVError(f"Required column '{event_id_col}' is missing from the CSV.")
 
         valid_rows = [row for index, row in df.iterrows() if data_validation.validate_training_record(row, index, self.validator)]
         if not valid_rows:
+            # Must raise, not return: a silent return left convert() writing no
+            # file at all while main.py still logged "Conversion process
+            # completed" and exited 0. Same contract as the empty-CSV case above.
             self.logger.error("No valid rows found in the CSV to process.")
-            return None, None
+            self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, event_id_col,
+                                     "No rows had a usable Class/Event ID, so there is nothing to convert.")
+            raise EmptyCSVError("No rows had a usable Class/Event ID to convert.")
 
         df_valid = pd.DataFrame(valid_rows)
         event_groups = df_valid.groupby(event_id_col)
@@ -141,8 +151,6 @@ class TrainingConverter(BaseConverter):
         self.logger.info(f"Starting conversion of training data: {input_path}")
 
         event_groups, event_id_col = self._read_and_validate_csv(input_path)
-        if event_groups is None:
-            return
 
         root = ET.Element('ManagementTrainingReport')
         root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')

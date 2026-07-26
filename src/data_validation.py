@@ -86,7 +86,12 @@ def validate_training_record(row: dict[str, str], row_index: int, validator: Val
     event_id_col = TrainingConfig.COLUMN_MAPPING['event_id']
     record_id = row.get(event_id_col)
 
-    if not record_id:
+    # is_empty (not a bare falsiness test): the training CSV is read with
+    # dtype=str, so a blank cell arrives as float('nan'), which is *truthy*.
+    # A bare `if not record_id` let those rows pass validation and they were
+    # then silently dropped by groupby(), which discards NaN keys -- the row
+    # vanished from the XML with no issue recorded anywhere.
+    if is_empty(record_id):
         record_id = f"Row_{row_index}"
         validator.add_issue(record_id, "error", VC.MISSING_REQUIRED, event_id_col, "Missing required Class/Event ID.")
         return False

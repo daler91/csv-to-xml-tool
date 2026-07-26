@@ -279,8 +279,24 @@ class TestCleanPhoneNumber(unittest.TestCase):
     def test_clean_phone_number_with_letters(self):
         from src.data_cleaning import clean_phone_number
         self.assertEqual(clean_phone_number("123-456-7890 ext 123"), "1234567890")  # truncated to 10
-        self.assertEqual(clean_phone_number("1-800-FLOWERS"), "1800")
+        # Vanity numbers lose their letters and fall short of 10 digits, so they
+        # are rejected rather than emitted as a partial number (see below).
+        self.assertEqual(clean_phone_number("1-800-FLOWERS"), "")
         self.assertEqual(clean_phone_number("aBcDeFg"), "")
+
+    def test_clean_phone_number_rejects_short_numbers(self):
+        """The XSD constrains phone numbers to [0-9]{10}.
+
+        A short number used to be returned as-is, which emitted e.g.
+        <Primary>5550101</Primary> and failed validation for the whole document.
+        Anything that can't be normalized to exactly 10 digits is now dropped.
+        """
+        from src.data_cleaning import clean_phone_number
+        self.assertEqual(clean_phone_number("555-0101"), "")
+        self.assertEqual(clean_phone_number("5550101"), "")
+        self.assertEqual(clean_phone_number("123"), "")
+        self.assertEqual(clean_phone_number("123456789"), "")   # 9 digits
+        self.assertEqual(clean_phone_number("1234567890"), "1234567890")  # exactly 10 still passes
 
     def test_clean_phone_number_empty_none_nan(self):
         from src.data_cleaning import clean_phone_number

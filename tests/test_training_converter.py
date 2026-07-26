@@ -9,6 +9,7 @@ import pandas as pd
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.converters.base_converter import EmptyCSVError
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
@@ -124,11 +125,37 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(fmt.text, 'Online')
 
     def test_missing_event_id_skips_record(self):
+        """A row with a blank event ID is dropped; valid siblings still convert.
+
+        The CSV is read with dtype=str, so a blank cell arrives as float('nan'),
+        which is truthy -- this row used to pass validation and then get silently
+        discarded by groupby(), producing no record and no recorded issue.
+        """
+        bad = self._make_training_row()
+        bad['Class/Event ID'] = ''
+        good = self._make_training_row()
+        good['Class/Event ID'] = 'EVT-002'
+        root = self._convert_and_parse([bad, good])
+
+        records = root.findall('ManagementTrainingRecord')
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].find('PartnerTrainingNumber').text, 'EVT-002')
+        # The dropped row must be auditable, not silent.
+        self.assertTrue(
+            any('Class/Event ID' in issue.get('field_name', '') for issue in self.validator.issues),
+            f"expected a recorded issue for the blank event ID, got {self.validator.issues}",
+        )
+
+    def test_all_rows_missing_event_id_raises(self):
+        """No usable event ID anywhere means nothing is convertible.
+
+        Previously this returned silently: no XML file was written, yet the CLI
+        logged "Conversion process completed" and exited 0.
+        """
         row = self._make_training_row()
         row['Class/Event ID'] = ''
-        root = self._convert_and_parse([row])
-        records = root.findall('ManagementTrainingRecord')
-        self.assertEqual(len(records), 0)
+        with self.assertRaises(EmptyCSVError):
+            self._convert_and_parse([row])
 
     def test_default_location_when_missing(self):
         """When location fields are empty, default location is used."""

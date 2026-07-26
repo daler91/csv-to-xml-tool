@@ -11,13 +11,14 @@ from ..config import (
     BUSINESS_STARTUP_PREPLANNING,
     COUNSELING_FABRICATION_DEFAULTS,
     EXPORT_COUNTRY_LOOKUP,
+    VALID_FUNDING_SOURCES,
     CounselingConfig,
     GeneralConfig,
     ValidationCategory,
 )
 from .. import data_cleaning
 from .. import data_validation
-from ..xml_utils import create_element
+from ..xml_utils import create_element, emit_optional
 
 class CounselingConverter(BaseConverter):
     """
@@ -156,13 +157,19 @@ class CounselingConverter(BaseConverter):
         client_name = create_element(client_request, 'ClientNamePart1')
         create_element(client_name, 'Last', row.get('Last Name', ''))
         create_element(client_name, 'First', row.get('First Name', ''))
-        create_element(client_name, 'Middle', row.get('Middle Name', ''))
-        create_element(client_request, 'Email', row.get('Email', ''))
+        emit_optional(client_name, 'Middle', row.get('Middle Name', ''))
+        # Email is minOccurs="0" but pattern-constrained (EmailType), so a blank
+        # cell must omit the element rather than emit <Email/>.
+        emit_optional(client_request, 'Email', row.get('Email', ''))
         self._build_phone(client_request, 'PhonePart1', row)
         self._build_address(client_request, 'AddressPart1', row, record_id)
-        create_element(client_request, 'SurveyAgreement', row.get('Agree to Impact Survey', 'No'))
+        # SurveyAgreement is required and YesNoType, so it can't be omitted:
+        # a blank cell falls back to 'No'. `or` (not the .get default) so a
+        # present-but-empty cell is treated the same as a missing column.
+        create_element(client_request, 'SurveyAgreement',
+                       (row.get('Agree to Impact Survey') or '').strip() or 'No')
         signature = create_element(client_request, 'ClientSignature')
-        create_element(signature, 'Date', data_cleaning.format_date(row.get('Client Signature - Date', '')))
+        emit_optional(signature, 'Date', data_cleaning.format_date(row.get('Client Signature - Date', '')))
         signature_onfile = row.get('Client Signature(On File)', 'No')
         create_element(signature, 'OnFile', 'Yes' if signature_onfile in ['1', 1] else 'No')
 
@@ -177,22 +184,37 @@ class CounselingConverter(BaseConverter):
             self.validator.add_issue(record_id, "warning", ValidationCategory.MISSING_FIELD, "Race", "Race missing, defaulted to 'Prefer not to say'.")
 
     def _build_demographics(self, client_intake, row):
-        ethnicity_csv = row.get('Ethnicity:', '').strip()
-        if ethnicity_csv:
-            create_element(client_intake, 'Ethnicity', ethnicity_csv)
+        # Each of these is an XSD enumeration, so the raw CSV label has to be
+        # mapped before it is emitted -- Salesforce exports "Not Hispanic or
+        # Latino", which is not a member of the schema's enum.
+        self._emit_mapped_enum(client_intake, 'Ethnicity', row.get('Ethnicity:', ''),
+                               data_cleaning.map_ethnicity_to_xsd, row)
+        self._emit_mapped_enum(client_intake, 'Sex', row.get('Gender', ''),
+                               data_cleaning.map_gender_to_sex, row)
+        self._emit_mapped_enum(client_intake, 'Disability', row.get('Disability', ''),
+                               data_cleaning.map_disability_to_xsd, row)
 
-        sex_value = data_cleaning.map_gender_to_sex(row.get('Gender', ''))
-        if sex_value:
-            create_element(client_intake, 'Sex', sex_value)
+    def _emit_mapped_enum(self, parent, element_name, raw_value, mapper, row):
+        """Emit an enumerated element via `mapper`, omitting it when unmappable.
 
-        disability_csv = row.get('Disability', '').strip()
-        if disability_csv:
-            create_element(client_intake, 'Disability', disability_csv)
+        An unrecognized value is dropped rather than passed through: one
+        enum-invalid element fails validation for the entire document, and every
+        element using this path is minOccurs="0".
+        """
+        mapped = mapper(raw_value)
+        emit_optional(parent, element_name, mapped)
+        return mapped
 
     def _build_military_status(self, client_intake, row, record_id):
-        military_status_csv = row.get('Veteran Status', '').strip()
-        if military_status_csv:
-            create_element(client_intake, 'MilitaryStatus', military_status_csv)
+        military_status_raw = row.get('Veteran Status', '').strip()
+        military_status_csv = data_cleaning.map_military_status_to_xsd(military_status_raw)
+        if military_status_raw and not military_status_csv:
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.INVALID_VALUE, "Veteran Status",
+                f"Veteran Status '{military_status_raw}' is not a recognized military "
+                f"status and was omitted from the XML.",
+            )
+        emit_optional(client_intake, 'MilitaryStatus', military_status_csv)
 
         non_military_statuses = ['prefer not to say', 'no military service', '']
         if military_status_csv and military_status_csv.lower() not in non_military_statuses:
@@ -252,11 +274,14 @@ class CounselingConverter(BaseConverter):
             )
         create_element(bo_element, 'Female', female_ownership_val)
 
-        conducting_online = row.get('Conduct Business Online?', self.general_config.DEFAULT_BUSINESS_STATUS)
+        # Both of these are YesNoType (strictly Yes/No), so a present-but-blank
+        # cell has to fall back to the default the same way a missing column
+        # does -- `.get(key, default)` alone would leave '' and fail the enum.
+        conducting_online = (row.get('Conduct Business Online?') or '').strip() or self.general_config.DEFAULT_BUSINESS_STATUS
         if data_cleaning.is_empty(row.get('Conduct Business Online?')) and conducting_online:
             self._warn_fabricated_default(record_id, 'Conduct Business Online?', conducting_online, 'Conducting Business Online')
         create_element(client_intake, 'ConductingBusinessOnline', conducting_online)
-        certified_8a = row.get('8(a) Certified?(old)', self.general_config.DEFAULT_BUSINESS_STATUS)
+        certified_8a = (row.get('8(a) Certified?(old)') or '').strip() or self.general_config.DEFAULT_BUSINESS_STATUS
         if data_cleaning.is_empty(row.get('8(a) Certified?(old)')) and certified_8a:
             self._warn_fabricated_default(record_id, '8(a) Certified?(old)', certified_8a, '8(a) Certified')
         create_element(client_intake, 'ClientIntake_Certified8a', certified_8a)
@@ -304,7 +329,7 @@ class CounselingConverter(BaseConverter):
             create_element(le_element, 'Other', le_other)
 
     def _build_rural_urban(self, client_intake, row, record_id):
-        rural_urban_val = row.get('Rural_vs_Urban', self.config.DEFAULT_URBAN_RURAL)
+        rural_urban_val = (row.get('Rural_vs_Urban') or '').strip() or self.config.DEFAULT_URBAN_RURAL
         create_element(client_intake, 'Rural_vs_Urban', rural_urban_val)
 
         if rural_urban_val.lower() in ['rural', 'urban']:
@@ -314,17 +339,40 @@ class CounselingConverter(BaseConverter):
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "FIPS_Code", f"FIPS Code required for Rural/Urban status '{rural_urban_val}' but is missing.")
 
+    def _cap_single_code(self, codes, record_id, element_label, csv_field):
+        """Trim a multi-value code list to the one Code the XSD allows.
+
+        Salesforce joins multi-selects with ';' and split_multi_value expands
+        them, but CounselingSeeking/Code and CounselingProvided/Code are both
+        maxOccurs="1" -- emitting two makes the *whole document* invalid. Keep
+        the first and record the dropped values so the loss stays auditable
+        rather than silent.
+        """
+        if len(codes) <= 1:
+            return codes
+        dropped = codes[1:]
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.DOWNGRADED_VALUE, csv_field,
+            f"{element_label} accepts only one code; kept '{codes[0]}' and dropped "
+            f"{', '.join(repr(c) for c in dropped)}.",
+        )
+        return codes[:1]
+
     def _build_counseling_seeking(self, client_intake, row, record_id, in_business_val):
         cs_codes = data_cleaning.split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
         cs_other = row.get('Nature of the Counseling Seeking - Other Detail', '').strip()
         if cs_codes or cs_other:
             cs_element = create_element(client_intake, 'CounselingSeeking')
+            cs_codes = self._cap_single_code(cs_codes, record_id, 'CounselingSeeking',
+                                             'Nature of the Counseling Seeking?')
+            # Checked after capping: if 'Other' was dropped, its detail text is
+            # no longer required.
             is_other_present = any(c.lower() == 'other' for c in cs_codes)
             for code in cs_codes:
                 create_element(cs_element, 'Code', code)
             if is_other_present and not cs_other:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "CounselingSeeking/Other", "CounselingSeeking is 'Other' but detail text is missing.")
-            create_element(cs_element, 'Other', cs_other)
+            emit_optional(cs_element, 'Other', cs_other)
 
         if in_business_val == 'Yes' and not cs_codes:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
@@ -373,16 +421,32 @@ class CounselingConverter(BaseConverter):
     def _build_counselor_identity(self, counselor_record, row, record_id):
         create_element(counselor_record, 'PartnerSessionNumber', self._partner_session_number(row))
 
+        # FundingSource is an XSD enumeration of SBA disaster/program codes. A
+        # partner's own funding label ("Federal", "CORE") is not in it, so an
+        # unrecognized value must be omitted rather than emitted verbatim.
         funding_source = row.get('Funding Source', '').strip()
         if funding_source:
-            create_element(counselor_record, 'FundingSource', funding_source)
+            emit_optional(counselor_record, 'FundingSource',
+                          self._resolve_funding_source(funding_source, record_id))
+
+    def _resolve_funding_source(self, funding_source, record_id):
+        """Return the funding source iff it matches the XSD enumeration, else ''."""
+        cleaned = str(funding_source).strip()
+        for valid_source in VALID_FUNDING_SOURCES:
+            if valid_source.lower() == cleaned.lower():
+                return valid_source
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.INVALID_VALUE, "Funding Source",
+            f"Funding Source '{cleaned}' is not a recognized SBA funding code; omitted from the XML.",
+        )
+        return ""
 
         counselor_name_part3 = create_element(counselor_record, 'ClientNamePart3')
         create_element(counselor_name_part3, 'Last', row.get('Last Name', ''))
         create_element(counselor_name_part3, 'First', row.get('First Name', ''))
-        create_element(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
+        emit_optional(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
 
-        create_element(counselor_record, 'Email', row.get('Email', ''))
+        emit_optional(counselor_record, 'Email', row.get('Email', ''))
         self._build_phone(counselor_record, 'PhonePart3', row)
         self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
@@ -461,7 +525,12 @@ class CounselingConverter(BaseConverter):
 
     def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
-        provided_codes = data_cleaning.split_multi_value(row.get('Services Provided', BUSINESS_STARTUP_PREPLANNING))
+        # `or` rather than the .get default so a present-but-blank cell also
+        # falls back -- CounselingProvided requires at least one Code.
+        provided_codes = data_cleaning.split_multi_value(
+            (row.get('Services Provided') or '').strip() or BUSINESS_STARTUP_PREPLANNING)
+        provided_codes = self._cap_single_code(provided_codes, record_id, 'CounselingProvided',
+                                               'Services Provided')
         has_other_code = any(c.strip().lower() == 'other' for c in provided_codes)
         provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
         cp_other = row.get('Other Counseling Provided', '').strip()
@@ -481,12 +550,16 @@ class CounselingConverter(BaseConverter):
             session_type = self.config.DEFAULT_SESSION_TYPE
         create_element(counselor_record, 'SessionType', session_type)
 
-        lang_element = create_element(counselor_record, 'Language')
-        for code in data_cleaning.split_multi_value(row.get('Language(s) Used', self.general_config.DEFAULT_LANGUAGE)):
-            create_element(lang_element, 'Code', code)
+        # Language requires at least one Code child, so a blank cell falls back
+        # to the default language rather than producing an empty <Language/>.
+        lang_codes = data_cleaning.split_multi_value(
+            (row.get('Language(s) Used') or '').strip() or self.general_config.DEFAULT_LANGUAGE)
         lang_other = row.get('Language(s) Used (Other)', '').strip()
-        if lang_other:
-            create_element(lang_element, 'Other', lang_other)
+        if lang_codes or lang_other:
+            lang_element = create_element(counselor_record, 'Language')
+            for code in lang_codes:
+                create_element(lang_element, 'Code', code)
+            emit_optional(lang_element, 'Other', lang_other)
 
         date_raw = row.get('Date', '')
         date_counseled = data_cleaning.format_date(date_raw)
@@ -506,12 +579,14 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'CounselorName', counselor_name)
 
         ch_element = create_element(counselor_record, 'CounselingHours')
-        contact_val = data_cleaning.clean_numeric(row.get('Duration (hours)', '0'))
+        # All three are minOccurs="0" over xs:decimal, so an unparseable or blank
+        # value must omit the element -- <Contact/> is not a valid decimal.
+        contact_val = data_cleaning.clean_numeric((row.get('Duration (hours)') or '0'))
         if session_type not in self.config.NO_CONTACT_HOUR_SESSION_TYPES and float(contact_val or 0) <= 0:
             contact_val = "0.5"
-        create_element(ch_element, 'Contact', contact_val)
-        create_element(ch_element, 'Prepare', data_cleaning.clean_numeric(row.get('Prep Hours', '0')))
-        create_element(ch_element, 'Travel', data_cleaning.clean_numeric(row.get('Travel Hours', '0')))
+        emit_optional(ch_element, 'Contact', contact_val)
+        emit_optional(ch_element, 'Prepare', data_cleaning.clean_numeric((row.get('Prep Hours') or '0')))
+        emit_optional(ch_element, 'Travel', data_cleaning.clean_numeric((row.get('Travel Hours') or '0')))
 
         counselor_notes = data_cleaning.truncate_counselor_notes(row.get('Comments', ''), self.config.MAX_FIELD_LENGTHS["CounselorNotes"])
         if counselor_notes:
@@ -544,16 +619,19 @@ class CounselingConverter(BaseConverter):
 
     def _build_address(self, parent, element_name, row, record_id):
         address = create_element(parent, element_name)
-        create_element(address, 'Street1', row.get('Mailing Street', ''))
-        create_element(address, 'Street2', '')
-        create_element(address, 'City', row.get('Mailing City', ''))
-        create_element(address, 'State', data_cleaning.standardize_state_name(row.get('Mailing State/Province', '')))
+        # Every child here is minOccurs="0", and State/ZipCode carry an
+        # enumeration and a \d{5} pattern respectively -- so a blank cell must
+        # omit the element, not emit an empty one (which fails validation).
+        emit_optional(address, 'Street1', row.get('Mailing Street', ''))
+        emit_optional(address, 'Street2', '')
+        emit_optional(address, 'City', row.get('Mailing City', ''))
+        emit_optional(address, 'State', data_cleaning.standardize_state_name(row.get('Mailing State/Province', '')))
         zip_full = str(row.get('Mailing Zip/Postal Code', '')).strip()
         zip_5digit_match = re.match(r'^\d{5}', zip_full)
         zip_5digit = zip_5digit_match.group(0) if zip_5digit_match else ''
         if not zip_5digit and zip_full:
             self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_FORMAT, "Mailing Zip/Postal Code", f"Could not parse 5-digit ZIP from '{zip_full}'.")
-        create_element(address, 'ZipCode', zip_5digit)
+        emit_optional(address, 'ZipCode', zip_5digit)
         # Zip4Code requires exactly 4 digits per XSD - only emit if we have it
         zip4_match = re.match(r'^\d{5}-(\d{4})', zip_full)
         if zip4_match:

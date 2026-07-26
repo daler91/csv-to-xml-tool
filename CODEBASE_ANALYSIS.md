@@ -98,20 +98,27 @@ Worth stating plainly, because the findings list that follows is long.
 
 The tool's single job is producing XSD-valid federal XML. It does not reliably do that.
 
-### 1.1 The shipped sample CSVs produce schema-invalid XML — `[OPEN]`
+### 1.1 The shipped sample CSVs produce schema-invalid XML — `[FIXED]`
+
+> Fixed by the Tier 1 remediation. All three samples now validate clean, guarded by
+> `TestShippedSamplesValidate` in `tests/test_integration_xsd.py`. The original findings are
+> preserved below for context.
 
 Running all three samples — the ones linked from the landing page and the dashboard empty state —
 through the CLI and validating against the bundled XSDs:
 
-| Sample | Result |
-|---|---|
-| `training-sample.csv` | **PASS** |
-| `counseling-sample.csv` | **FAIL — 13 errors** |
-| `training-client-sample.csv` | **FAIL — 28 errors** |
+| Sample | Was | Now |
+|---|---|---|
+| `training-sample.csv` | PASS | **PASS** |
+| `counseling-sample.csv` | FAIL — 13 errors | **PASS** |
+| `training-client-sample.csv` | FAIL — 28 errors | **PASS** |
 
-A first-time user following the README gets an invalid file. Root causes are 1.2–1.5.
+A first-time user following the README used to get an invalid file. Root causes were 1.2–1.5.
 
-### 1.2 Multi-value Salesforce fields emit invalid XML — `[OPEN]`
+### 1.2 Multi-value Salesforce fields emit invalid XML — `[FIXED]`
+
+> Fixed: `_cap_single_code` keeps the first code and records a `DOWNGRADED_VALUE` issue for the
+> rest, so the loss is auditable rather than silent.
 
 The README advertises: *"Correctly handles and splits multi-value fields from Salesforce
 (e.g. `Race` or `Services Provided`)."* Tested directly:
@@ -127,7 +134,12 @@ Services Provided = "Business Plan;Customer Relations"
 README names and wrong for the second. `counseling_converter.py:323,468` loop unconditionally.
 Not caught because `test_integration_xsd.py:242` passes only a single code.
 
-### 1.3 Empty optional elements are emitted and fail their facets — `[OPEN]`
+### 1.3 Empty optional elements are emitted and fail their facets — `[FIXED]`
+
+> Fixed: `emit_optional()` in `src/xml_utils.py` is now the single path for facet-constrained
+> optional elements. `SurveyAgreement` is `minOccurs="1"`, so it falls back to `No` rather than
+> being omitted. The `test_integration_xsd.py` fixture workaround noted below was removed, which
+> is what lets the suite catch this class of bug.
 
 `_build_address` emits `ZipCode` unconditionally; a blank cell yields `<ZipCode/>`, which fails
 `\d{5}`. **The correct guard sits on the very next line** — `Zip4Code` is emitted only when matched,
@@ -142,7 +154,12 @@ correctly — the pattern exists in the file, it just wasn't applied consistentl
 `test_integration_xsd.py:159-162` **acknowledges one of these bugs in a comment and routes the
 fixture around it** rather than asserting it.
 
-### 1.4 Enum values pass through unnormalized — `[OPEN]`
+### 1.4 Enum values pass through unnormalized — `[FIXED]`
+
+> Fixed: `map_ethnicity_to_xsd`, `map_disability_to_xsd`, and `map_military_status_to_xsd` in
+> `src/data_cleaning.py`; unmappable values are omitted with a warning rather than emitted.
+> `FundingSource` had the same shape — the `VALID_FUNDING_SOURCES` list existed and was used by
+> the training converter but not the counseling one; it is now shared at module level.
 
 `_build_demographics` (`counseling_converter.py:179-190`) writes CSV text straight into
 `Ethnicity`, `Disability`, and `MilitaryStatus`:
@@ -157,7 +174,10 @@ explicitly calls out the "Not Hispanic" trap — but it is only wired into the t
 *counting* logic, never into element emission. Meanwhile `Sex` on line 184 *is* normalized via
 `map_gender_to_sex`. The inconsistency lives inside a single 12-line method.
 
-### 1.5 `clean_phone_number` has no lower bound — `[OPEN]`
+### 1.5 `clean_phone_number` has no lower bound — `[FIXED]`
+
+> Fixed: anything that can't be normalized to exactly 10 digits now returns `""` and the element
+> is omitted.
 
 `data_cleaning.py:202` truncates to 10 digits but never rejects shorter input, so `5550101`
 (7 digits) is emitted and fails the `[0-9]{10}` pattern. The docstring claims it "normalizes to
@@ -184,7 +204,13 @@ In a multi-tenant web app with open signup, this means every other organization'
 silently stamped with this organization's location code and partner code, and any unparseable date
 becomes 2023-12-12.
 
-### 1.7 Silent data loss in the training converter — `[OPEN]`
+### 1.7 Silent data loss in the training converter — `[FIXED]` (blank-ID + silent-success); `[OPEN]` (aggregation)
+
+> Fixed: `validate_training_record` now uses `is_empty()`, so NaN event IDs are rejected and
+> recorded instead of being dropped by `groupby()`; `_read_and_validate_csv` raises `EmptyCSVError`
+> instead of returning `(None, None)`, so a conversion can no longer "succeed" with no output file.
+> **Still open:** demographics counting rows rather than distinct people, and event-level fields
+> being taken from an arbitrary `iloc[0]`.
 
 - **Blank event IDs vanish with zero warnings.** `pd.read_csv(dtype=str)` makes blank cells `NaN`
   (a float), and `validate_training_record` tests `if not record_id:` — but `not float('nan')` is

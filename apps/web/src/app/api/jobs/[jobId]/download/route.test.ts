@@ -64,3 +64,35 @@ describe("GET /api/jobs/[jobId]/download", () => {
     );
   });
 });
+
+describe("GET /api/jobs/[jobId]/download — expired files", () => {
+  it("returns 410 with an expired flag once retention has purged the output", async () => {
+    // schema.prisma documents the intent -- "The row (and its audit trail)
+    // survives; downloads show 'expired'" -- but this returned a flat 404, so
+    // an aged-out file was indistinguishable from one that never existed.
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      userId: TEST_USER.id,
+      inputFileName: "in.csv",
+      outputFilePath: null,
+      filesPurgedAt: new Date(),
+    } as never);
+
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(410);
+    await expect(res.json()).resolves.toMatchObject({ expired: true });
+  });
+
+  it("still returns 404 when there is simply no output yet", async () => {
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      userId: TEST_USER.id,
+      inputFileName: "in.csv",
+      outputFilePath: null,
+      filesPurgedAt: null,
+    } as never);
+
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(404);
+  });
+});

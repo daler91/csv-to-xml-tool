@@ -346,7 +346,20 @@ several are availability- or DoS-grade.
 
 ## Tier 4 — Correctness & robustness
 
-All `[OPEN]`.
+Status: `[FIXED]` except where noted.
+
+> **Fixed in the Tier 4 pass:** the `defusedxml` `SubElement` crash (it exports the parsing API but
+> deliberately not the tree-building API, so `--add-missing` raised `AttributeError` that escaped
+> the caller's `except`); the Windows-broken `startswith(os.sep)` check, now `os.path.isabs`; the
+> `/data-evil` prefix bypass, now a shared `_is_within` with a separator suffix; the `(Meeting)`
+> fallbacks via `_first_present` (`row.get(a, row.get(b))` is not a fallback — the inner get is a
+> *default argument*, consulted only when `a` is absent entirely); `Client Signature(On File)` now
+> via `is_affirmative`; ragged rows fixed at the shared `normalize_row_keys` choke point so preview
+> and diff benefit too; the training demographics element order, now pinned by a test that derives
+> the expected order **from the schema**; and the web-side purged-file (410) and wedged-job
+> (enqueue rollback) cases, plus the unguarded `totalRows` write that reset the reaper's clock.
+>
+> **Still open:** SIGTERM does not drain in-flight jobs, and the 60s sweep interval is never cleared.
 
 - **`--add-missing` crashes.** `xml_validator.py:128` calls `ET.SubElement`, but line 7 imports
   `defusedxml.ElementTree`, which **does not export `SubElement`** (verified). The resulting

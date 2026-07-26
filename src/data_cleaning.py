@@ -299,8 +299,20 @@ def normalize_row_keys(row: dict) -> dict:
 
     If two headers collapse to the same normalized name the later column wins
     (dict semantics); callers that care about collisions compare header counts.
+
+    None values are coerced to "". csv.DictReader fills missing fields with None
+    when a row has fewer cells than the header, and consumers call .strip() on
+    the result -- an AttributeError there was caught by the per-record handler
+    and dropped the whole record with an opaque "processing error", so one short
+    row silently cost a full counseling record. A ragged row now behaves the
+    same as one with blank cells. The restkey entry (extra trailing cells, keyed
+    None) is dropped for the same reason: normalize_header can't take a None key.
     """
-    return {normalize_header(key): value for key, value in row.items()}
+    return {
+        normalize_header(key): ("" if value is None else value)
+        for key, value in row.items()
+        if key is not None
+    }
 
 
 def clean_whitespace(text: str | None) -> str:

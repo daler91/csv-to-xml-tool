@@ -23,6 +23,18 @@ export async function GET(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    // Retention blanks inputFilePath on expiry; readFile("") threw ENOENT and
+    // produced a generic 500 rather than telling the user the file was gone.
+    if (job.filesPurgedAt || !job.inputFilePath) {
+      return NextResponse.json(
+        {
+          error:
+            "The uploaded file for this job has expired and been removed. Upload it again to preview.",
+        },
+        { status: 410 }
+      );
+    }
+
     // SEC-1: enforce the upload size cap server-side before sending to the worker.
     const csvContent = await readFile(job.inputFilePath, "utf-8");
     if (Buffer.byteLength(csvContent, "utf-8") > MAX_UPLOAD_BYTES) {
@@ -48,12 +60,14 @@ export async function GET(
     // preview of a cancelled/complete/error job would otherwise
     // revive it; conditional updateMany closes that loophole.
     //
-    // We always persist totalRows (even on cancelled jobs) because
-    // the dashboard and audit views want an accurate row count
-    // regardless of status. Splitting into two updateMany calls
-    // keeps the status transition tight.
+    // We persist totalRows even on terminal jobs because the dashboard and
+    // audit views want an accurate row count regardless of status — but NOT on
+    // queued/converting ones. Any write bumps updatedAt, and the stuck-job
+    // reaper (lib/job-reaper.ts) measures staleness from updatedAt on exactly
+    // those two states; an unguarded write here silently reset that clock and
+    // let a genuinely stuck job run past its deadline.
     await prisma.job.updateMany({
-      where: { id: jobId },
+      where: { id: jobId, status: { notIn: ["queued", "converting"] } },
       data: { totalRows: preview.total_rows },
     });
     await prisma.job.updateMany({

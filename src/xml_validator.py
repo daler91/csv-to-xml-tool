@@ -4,6 +4,7 @@ This module helps validate and fix common XML structure issues.
 """
 
 import os
+import xml.etree.ElementTree as UnsafeET
 import defusedxml.ElementTree as ET
 from lxml import etree
 
@@ -32,6 +33,16 @@ def _setup_sys_path():
 
 # ConversionLogger is imported lazily in main() to avoid breaking package imports
 
+def _is_within(path, base):
+    """True when `path` is `base` or sits underneath it.
+
+    The separator suffix matters: a bare ``startswith(base)`` also accepts
+    sibling directories that merely share a prefix, so ``/data-evil/x.xml``
+    passed as being inside ``/data``. Mirrors src/path_safety.resolve_within.
+    """
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
+
+
 def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
     """Resolve and validate file paths against traversal. Returns (xml_path, xsd_path) or an error dict."""
     xml_file = os.path.realpath(xml_file)
@@ -40,9 +51,13 @@ def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
         _data_dir_env = os.environ.get("DATA_DIR", "")
         if _data_dir_env:
             _data_dir = os.path.realpath(_data_dir_env)
-            if not xml_file.startswith(_data_dir):
+            if not _is_within(xml_file, _data_dir):
                 return {"is_valid": False, "errors": ["Invalid XML file path"]}
-    if not xsd_file.startswith(os.sep):
+    # os.path.isabs, not startswith(os.sep): on Windows a realpath'd path looks
+    # like "C:\\...", which does not start with a separator, so this check
+    # rejected *every* schema and made validation fail on the one platform
+    # run.bat/setup.bat exist to serve.
+    if not os.path.isabs(xsd_file):
         return {"is_valid": False, "errors": ["Invalid XSD file path"]}
     return xml_file, xsd_file
 
@@ -125,7 +140,15 @@ def add_missing_required_elements(client_intake, record_id):
     for tag, default_value in required_elements.items():
         if client_intake.find(tag) is None:
             logger.info(f"Record {record_id}: Adding missing required element '{tag}' with default '{default_value}'")
-            ET.SubElement(client_intake, tag).text = default_value
+            # UnsafeET, not ET: defusedxml.ElementTree exports only the parsing
+            # entry points (parse, fromstring, XMLParser, ...) and deliberately
+            # not the tree-*building* API, so `ET.SubElement` raised
+            # AttributeError -- and it escaped the caller's
+            # `except (OSError, ET.ParseError)`, so --add-missing crashed
+            # outright. Constructing an element on an already-parsed tree is a
+            # write, not a parse, so the hardened parser is not what's wanted
+            # here; the document was already parsed safely by defusedxml above.
+            UnsafeET.SubElement(client_intake, tag).text = default_value
             elements_added = True
     return elements_added
 

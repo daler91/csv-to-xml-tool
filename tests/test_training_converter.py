@@ -9,6 +9,7 @@ import pandas as pd
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.converters.base_converter import EmptyCSVError
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
@@ -124,11 +125,82 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(fmt.text, 'Online')
 
     def test_missing_event_id_skips_record(self):
+        """A row with a blank event ID is dropped; valid siblings still convert.
+
+        The CSV is read with dtype=str, so a blank cell arrives as float('nan'),
+        which is truthy -- this row used to pass validation and then get silently
+        discarded by groupby(), producing no record and no recorded issue.
+        """
+        bad = self._make_training_row()
+        bad['Class/Event ID'] = ''
+        good = self._make_training_row()
+        good['Class/Event ID'] = 'EVT-002'
+        root = self._convert_and_parse([bad, good])
+
+        records = root.findall('ManagementTrainingRecord')
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].find('PartnerTrainingNumber').text, 'EVT-002')
+        # The dropped row must be auditable, not silent.
+        self.assertTrue(
+            any('Class/Event ID' in issue.get('field_name', '') for issue in self.validator.issues),
+            f"expected a recorded issue for the blank event ID, got {self.validator.issues}",
+        )
+
+    def _fabrication_issues(self):
+        return [i for i in self.validator.issues if i['category'] == 'fabricated_default']
+
+    def test_configured_defaults_are_reported_once(self):
+        """Values with no CSV column behind them ship in every record.
+
+        They are constants of this deployment (location code, partner code,
+        session count, hours, fees, language) that land in a federal filing, so
+        they get one file-level warning -- once, not once per event.
+        """
+        self._convert_and_parse([
+            self._make_training_row(**{'Class/Event ID': 'EVT-001'}),
+            self._make_training_row(**{'Class/Event ID': 'EVT-002'}),
+        ])
+        constant_issues = [i for i in self._fabrication_issues()
+                           if i['field_name'] == 'configured_defaults']
+        self.assertEqual(len(constant_issues), 1, "expected exactly one file-level warning")
+        message = constant_issues[0]['message']
+        for expected in ('249003', "Women's Business Center", 'LocationCode'):
+            self.assertIn(expected, message)
+
+    def test_default_location_is_flagged_as_fabricated(self):
+        """Falling back to the configured location must be visible in the report."""
+        self._convert_and_parse([self._make_training_row(**{
+            'City': '', 'State/Province': '', 'Zip/Postal Code': '',
+        })])
+        self.assertTrue(
+            any(i['field_name'] == 'Class/Event Location' for i in self._fabrication_issues()),
+            f"expected a fabricated-location warning, got {self._fabrication_issues()}",
+        )
+
+    def test_unparseable_start_date_is_flagged_as_fabricated(self):
+        """A blank/unparseable date becomes a fixed past date -- say so."""
+        self._convert_and_parse([self._make_training_row(**{'Start Date': ''})])
+        date_issues = [i for i in self._fabrication_issues() if i['field_name'] == 'Start Date']
+        self.assertTrue(date_issues, f"expected a start-date warning, got {self._fabrication_issues()}")
+        self.assertIn('2023-12-12', date_issues[0]['message'])
+
+    def test_supplied_values_are_not_flagged(self):
+        """A row that supplies its own values gets no per-event fabrication noise."""
+        self._convert_and_parse([self._make_training_row()])
+        per_event = [i for i in self._fabrication_issues()
+                     if i['field_name'] != 'configured_defaults']
+        self.assertEqual(per_event, [], f"unexpected fabrication warnings: {per_event}")
+
+    def test_all_rows_missing_event_id_raises(self):
+        """No usable event ID anywhere means nothing is convertible.
+
+        Previously this returned silently: no XML file was written, yet the CLI
+        logged "Conversion process completed" and exited 0.
+        """
         row = self._make_training_row()
         row['Class/Event ID'] = ''
-        root = self._convert_and_parse([row])
-        records = root.findall('ManagementTrainingRecord')
-        self.assertEqual(len(records), 0)
+        with self.assertRaises(EmptyCSVError):
+            self._convert_and_parse([row])
 
     def test_default_location_when_missing(self):
         """When location fields are empty, default location is used."""

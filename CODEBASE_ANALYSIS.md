@@ -98,20 +98,27 @@ Worth stating plainly, because the findings list that follows is long.
 
 The tool's single job is producing XSD-valid federal XML. It does not reliably do that.
 
-### 1.1 The shipped sample CSVs produce schema-invalid XML — `[OPEN]`
+### 1.1 The shipped sample CSVs produce schema-invalid XML — `[FIXED]`
+
+> Fixed by the Tier 1 remediation. All three samples now validate clean, guarded by
+> `TestShippedSamplesValidate` in `tests/test_integration_xsd.py`. The original findings are
+> preserved below for context.
 
 Running all three samples — the ones linked from the landing page and the dashboard empty state —
 through the CLI and validating against the bundled XSDs:
 
-| Sample | Result |
-|---|---|
-| `training-sample.csv` | **PASS** |
-| `counseling-sample.csv` | **FAIL — 13 errors** |
-| `training-client-sample.csv` | **FAIL — 28 errors** |
+| Sample | Was | Now |
+|---|---|---|
+| `training-sample.csv` | PASS | **PASS** |
+| `counseling-sample.csv` | FAIL — 13 errors | **PASS** |
+| `training-client-sample.csv` | FAIL — 28 errors | **PASS** |
 
-A first-time user following the README gets an invalid file. Root causes are 1.2–1.5.
+A first-time user following the README used to get an invalid file. Root causes were 1.2–1.5.
 
-### 1.2 Multi-value Salesforce fields emit invalid XML — `[OPEN]`
+### 1.2 Multi-value Salesforce fields emit invalid XML — `[FIXED]`
+
+> Fixed: `_cap_single_code` keeps the first code and records a `DOWNGRADED_VALUE` issue for the
+> rest, so the loss is auditable rather than silent.
 
 The README advertises: *"Correctly handles and splits multi-value fields from Salesforce
 (e.g. `Race` or `Services Provided`)."* Tested directly:
@@ -127,7 +134,12 @@ Services Provided = "Business Plan;Customer Relations"
 README names and wrong for the second. `counseling_converter.py:323,468` loop unconditionally.
 Not caught because `test_integration_xsd.py:242` passes only a single code.
 
-### 1.3 Empty optional elements are emitted and fail their facets — `[OPEN]`
+### 1.3 Empty optional elements are emitted and fail their facets — `[FIXED]`
+
+> Fixed: `emit_optional()` in `src/xml_utils.py` is now the single path for facet-constrained
+> optional elements. `SurveyAgreement` is `minOccurs="1"`, so it falls back to `No` rather than
+> being omitted. The `test_integration_xsd.py` fixture workaround noted below was removed, which
+> is what lets the suite catch this class of bug.
 
 `_build_address` emits `ZipCode` unconditionally; a blank cell yields `<ZipCode/>`, which fails
 `\d{5}`. **The correct guard sits on the very next line** — `Zip4Code` is emitted only when matched,
@@ -142,7 +154,12 @@ correctly — the pattern exists in the file, it just wasn't applied consistentl
 `test_integration_xsd.py:159-162` **acknowledges one of these bugs in a comment and routes the
 fixture around it** rather than asserting it.
 
-### 1.4 Enum values pass through unnormalized — `[OPEN]`
+### 1.4 Enum values pass through unnormalized — `[FIXED]`
+
+> Fixed: `map_ethnicity_to_xsd`, `map_disability_to_xsd`, and `map_military_status_to_xsd` in
+> `src/data_cleaning.py`; unmappable values are omitted with a warning rather than emitted.
+> `FundingSource` had the same shape — the `VALID_FUNDING_SOURCES` list existed and was used by
+> the training converter but not the counseling one; it is now shared at module level.
 
 `_build_demographics` (`counseling_converter.py:179-190`) writes CSV text straight into
 `Ethnicity`, `Disability`, and `MilitaryStatus`:
@@ -157,13 +174,28 @@ explicitly calls out the "Not Hispanic" trap — but it is only wired into the t
 *counting* logic, never into element emission. Meanwhile `Sex` on line 184 *is* normalized via
 `map_gender_to_sex`. The inconsistency lives inside a single 12-line method.
 
-### 1.5 `clean_phone_number` has no lower bound — `[OPEN]`
+### 1.5 `clean_phone_number` has no lower bound — `[FIXED]`
+
+> Fixed: anything that can't be normalized to exactly 10 digits now returns `""` and the element
+> is omitted.
 
 `data_cleaning.py:202` truncates to 10 digits but never rejects shorter input, so `5550101`
 (7 digits) is emitted and fails the `[0-9]{10}` pattern. The docstring claims it "normalizes to
 10 digits."
 
-### 1.6 Single-tenant values are stamped into every filing — `[OPEN]` — **most severe**
+### 1.6 Single-tenant values are stamped into every filing — `[FIXED]` by decision — **most severe**
+
+> **Resolved as a deliberate scope decision, not a code change: this is a single-organization
+> tool, so the constants are correct for it and stay in `config.py`.** What changed is that they
+> are no longer invisible — `_warn_constant_defaults()` records one file-level
+> `FABRICATED_DEFAULT` warning per conversion naming every value emitted from configuration
+> (location code, partner code, sessions, hours, fees, language), and per-event warnings now fire
+> when a blank cell falls back to the configured location, event title, or start date. The
+> training path previously emitted all of these with no warning at all, unlike the counseling path.
+>
+> **This decision does not survive the tool becoming multi-tenant.** If a second organization ever
+> uses the same deployment, the analysis below applies again in full and tenant identity has to
+> move into per-user settings.
 
 `src/config.py` hardcodes one organization's identity:
 
@@ -184,7 +216,13 @@ In a multi-tenant web app with open signup, this means every other organization'
 silently stamped with this organization's location code and partner code, and any unparseable date
 becomes 2023-12-12.
 
-### 1.7 Silent data loss in the training converter — `[OPEN]`
+### 1.7 Silent data loss in the training converter — `[FIXED]` (blank-ID + silent-success); `[OPEN]` (aggregation)
+
+> Fixed: `validate_training_record` now uses `is_empty()`, so NaN event IDs are rejected and
+> recorded instead of being dropped by `groupby()`; `_read_and_validate_csv` raises `EmptyCSVError`
+> instead of returning `(None, None)`, so a conversion can no longer "succeed" with no output file.
+> **Still open:** demographics counting rows rather than distinct people, and event-level fields
+> being taken from an arbitrary `iloc[0]`.
 
 - **Blank event IDs vanish with zero warnings.** `pd.read_csv(dtype=str)` makes blank cells `NaN`
   (a float), and `validate_training_record` tests `if not record_id:` — but `not float('nan')` is
@@ -201,17 +239,30 @@ becomes 2023-12-12.
 
 ## Tier 2 — Deployment integrity
 
-### 2.1 `SCHEMAS_DIR` default is wrong in *every* layout — `[OPEN]`
+### 2.1 `SCHEMAS_DIR` default is wrong in *every* layout — `[FIXED]`
 
-`conversion_service.py:37` and `validate.py:18` both build the default with three `..`:
+> **Correction to this finding as originally written.** It claimed "no single `..` count fixes both
+> layouts — this needs a real anchor, not an off-by-one correction." That was wrong: it missed that
+> **`apps/worker/schemas` is a git-tracked symlink** (mode `120000`) to `../../schemas`, which makes
+> **two** `..` resolve correctly in both layouts (repo → symlink → `<root>/schemas`; Docker →
+> `/app/schemas`). It was a plain off-by-one — 3 `..` where 2 was intended — and the symlink exists
+> precisely to make the 2-dot form work. The *impact* below was accurate; only the diagnosis of the
+> fix was wrong.
+>
+> Fixed in `apps/worker/app/core/paths.py`: `default_schemas_dir()` tries the 2-`..` path then falls
+> back to walking up for a `schemas/` directory holding both XSDs (a Windows checkout without
+> symlink support turns the symlink into a plain text file). `XSD_MAP` is deduplicated there too.
+> `SCHEMAS_DIR` stays a module-level name in each consumer — 16 tests monkeypatch it, and `fix.py`'s
+> re-import is a separate binding patched independently. A `lifespan` hook now refuses to start when
+> the schemas are absent, `/health` reports a `schemas` check, and
+> `tests/test_worker_schema_paths.py` covers the default **without** monkeypatching.
 
-| Layout | Resolves to | Exists | Would need |
-|---|---|---|---|
-| Repo | `apps/schemas` | ✗ | 4 × `..` |
-| Docker (`/app/app/services`) | `/schemas` | ✗ | 2 × `..` |
+`conversion_service.py:37` and `validate.py:18` both built the default with three `..`:
 
-**No single `..` count fixes both** — this needs a real anchor (walk up for `schemas/`, or fail fast
-at startup), not an off-by-one correction.
+| Layout | Resolved to | Existed |
+|---|---|---|
+| Repo | `apps/schemas` | ✗ |
+| Docker (`/app/app/services`) | `/schemas` | ✗ |
 
 It works today only because `docker-compose.yml:27` sets the variable explicitly.
 `apps/worker/railway.toml` sets **no environment variables at all**, and `SCHEMAS_DIR` is absent
@@ -224,7 +275,11 @@ not (`test_worker_content_routes.py:293`) asserts `is_valid is False` and **pass
 reason** — not because the document violates the schema, but because the XSD file could not be
 opened.
 
-### 2.2 The documented local-dev path cannot work — `[OPEN]`
+### 2.2 The documented local-dev path cannot work — `[FIXED]`
+
+> Fixed: `docker-compose.yml` now builds web with `context: .` + `dockerfile: apps/web/Dockerfile`,
+> matching the worker service and Railway. A `docker-build` CI job builds both images and runs
+> `docker compose up -d --wait`, so this cannot silently regress again.
 
 `docker-compose.yml:3` sets `build: ./apps/web`, but `apps/web/Dockerfile:3,9` uses
 `COPY apps/web/…`, which is repo-root-relative. Under the compose context those resolve to
@@ -232,7 +287,16 @@ opened.
 `COPY`. It works on Railway only because `apps/web/railway.toml` builds from the repo root.
 CI never builds either image, which is why this went unnoticed.
 
-### 2.3 Other deployment gaps — `[OPEN]`
+### 2.3 Other deployment gaps — `[FIXED]` (most); `[OPEN]` (Redis persistence)
+
+> Fixed: the `curl` healthcheck is now a stdlib Python probe that reads the body (and both images
+> gained a `HEALTHCHECK`); web's `depends_on` for worker is now `service_healthy`; `migrate.js` exits
+> non-zero and the Dockerfile CMD uses `&&`, so a failed migration can no longer boot a serving app;
+> the dead `startCommand` is gone from `apps/web/railway.toml`, leaving the Dockerfile CMD as the
+> single source of truth; both images run as a non-root user with `DATA_DIR` owned by that user; and
+> a repo-root `.dockerignore` now exists.
+> **Still open:** Redis has no persistence volume, so a restart drops queued jobs until the reaper
+> catches them.
 
 - The worker healthcheck shells out to `curl`, which is **not installed in `python:3.12-slim`** —
   the check is permanently red.

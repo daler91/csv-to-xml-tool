@@ -203,12 +203,16 @@ def clean_phone_number(phone: str | None) -> str:
     """
     Removes all non-numeric characters from a phone number and normalizes to 10 digits.
     Strips leading country code '1' from 11-digit numbers.
-    Returns empty string if phone is None or empty.
+    Returns empty string if phone is None, empty, or cannot be normalized to
+    exactly 10 digits -- the XSD constrains phone numbers to [0-9]{10}, so a
+    short number like "555-0101" has to be dropped rather than emitted as a
+    7-digit value that fails validation for the whole document.
 
     Examples:
         "(123) 456-7890" -> "1234567890"
         "123.456.7890" -> "1234567890"
         "+1 (123) 456-7890" -> "1234567890"
+        "555-0101" -> ""
     """
     if is_empty(phone):
         return ""
@@ -217,7 +221,8 @@ def clean_phone_number(phone: str | None) -> str:
     # Strip leading US country code
     if len(digits) == PHONE_WITH_COUNTRY_CODE_DIGITS and digits.startswith('1'):
         digits = digits[1:]
-    return digits[:PHONE_NUMBER_DIGITS]
+    digits = digits[:PHONE_NUMBER_DIGITS]
+    return digits if len(digits) == PHONE_NUMBER_DIGITS else ""
 
 def format_date(date_str: str | None, input_formats: list[str] | None = None, default_return: str = "") -> str:
     """
@@ -431,6 +436,79 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
         if any(kw in v for kw in keywords):
             categories.add(category)
     return categories
+
+
+# The three functions below map free-text CSV values onto the exact enumerations
+# the counseling XSD accepts. Salesforce exports the *label*, not the schema
+# token -- "Not Hispanic or Latino" and "No" (for Veteran Status) are both
+# routine exports and both fail validation verbatim. Each returns "" when the
+# value can't be mapped, which the caller treats as "omit the element" (all
+# three are minOccurs="0") rather than emitting something invalid.
+
+def map_ethnicity_to_xsd(value: str | None) -> str:
+    """Map an ethnicity value onto the XSD enumeration.
+
+    Delegates the hispanic/non-hispanic decision to classify_ethnicity so the
+    "Not Hispanic or Latino" trap is handled in exactly one place.
+    """
+    if is_empty(value):
+        return ""
+    if "prefer not" in str(value).strip().lower():
+        return "Prefer not to say"
+    bucket = classify_ethnicity(value)
+    if bucket == "hispanic":
+        return "Hispanic or Latino"
+    if bucket == "non_hispanic":
+        return "Non Hispanic or Latino"
+    return ""
+
+
+def map_disability_to_xsd(value: str | None) -> str:
+    """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to say)."""
+    if is_empty(value):
+        return ""
+    if "prefer not" in str(value).strip().lower():
+        return "Prefer not to say"
+    if is_affirmative(value):
+        return "Yes"
+    if is_negative(value):
+        return "No"
+    return ""
+
+
+# Ordered longest-intent-first: "service disabled veteran" must win over the
+# bare "veteran" substring, and "spouse" must win before either.
+_MILITARY_STATUS_XSD_RULES = (
+    ("prefer not", "Prefer not to say"),
+    ("spouse", "Spouse of Military Member"),
+    ("service disabled", "Service Disabled Veteran"),
+    ("service-disabled", "Service Disabled Veteran"),
+    ("national guard", "Member of National Guard"),
+    ("reserve", "Member of the Reserve"),
+    ("active duty", "Active Duty"),
+    ("no military", "No military service"),
+    ("veteran", "Veteran"),
+)
+
+
+def map_military_status_to_xsd(value: str | None) -> str:
+    """Map a military/veteran-status value onto the XSD enumeration.
+
+    A bare "No" (how Salesforce exports a "Veteran Status" checkbox) means the
+    client has no military service, so it maps to "No military service" rather
+    than being dropped.
+    """
+    if is_empty(value):
+        return ""
+    v = str(value).strip().lower()
+    for needle, mapped in _MILITARY_STATUS_XSD_RULES:
+        if needle in v:
+            return mapped
+    if is_negative(value) or v in {"none", "n/a", "na"}:
+        return "No military service"
+    if is_affirmative(value):
+        return "Veteran"
+    return ""
 
 
 def clean_numeric(value: str | int | float | None) -> str:

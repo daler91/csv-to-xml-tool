@@ -1,0 +1,42 @@
+# Both images build with the repo root as context, so everything here is sent to
+# the daemon unless excluded. Keep this in sync with what the Dockerfiles COPY:
+# src/, schemas/, apps/worker/app/, apps/web/.
+
+.git
+.github
+.gitignore
+
+# Installed inside the image; shipping the host copy is slow and can be wrong
+# for the image's platform.
+node_modules
+**/node_modules
+apps/web/.next
+
+# Python build/test artifacts
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+venv
+.venv
+
+# Local runtime output, never part of an image
+logs
+reports
+output
+uploads
+data
+.env
+.env.local
+*.log
+
+# Docs and dev-only files
+*.md
+!README.md
+docker-compose.yml
+patch_tests.diff
+setup.bat
+run.bat

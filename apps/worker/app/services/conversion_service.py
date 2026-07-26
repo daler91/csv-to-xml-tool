@@ -21,6 +21,7 @@ from src.xml_validator import validate_against_xsd
 from src.xsd_error_mapping import build_error_details
 from src.config import ValidationCategory
 
+from ..core.paths import XSD_MAP, default_schemas_dir
 from .cancellation import ConversionCancelledError
 from .diff_service import generate_cleaning_diff
 from .preview_service import get_expected_columns
@@ -34,13 +35,9 @@ from .column_requirements import (
 # service doesn't need to import from src/converters/.
 ProgressCallback = Callable[[int, int], None]
 
-SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "..", "schemas"))
-
-XSD_MAP = {
-    "counseling": "SBA_NEXUS_Counseling-2-14.xsd",
-    "training": "SBA_NEXUS_Training-2-25-2025.xsd",
-    "training-client": "SBA_NEXUS_Counseling-2-14.xsd",
-}
+# Module-level by design: tests monkeypatch this attribute (see core/paths.py
+# for why the default is computed rather than hardcoded).
+SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", default_schemas_dir())
 
 CONVERTER_MAP = {
     "counseling": CounselingConverter,

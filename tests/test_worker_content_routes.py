@@ -300,6 +300,11 @@ def test_validate_xsd_requires_worker_token(monkeypatch):
     from app.core import auth as worker_auth
 
     monkeypatch.setattr(worker_auth, "WORKER_AUTH_TOKEN", "test-token")
+    # Point at the real schemas. Without this the assertion below passed for the
+    # wrong reason: the XSD couldn't be opened, so validate_against_xsd returned
+    # is_valid=False with the opaque error "Validation error" -- the test would
+    # have passed just as happily with the schemas directory deleted.
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
     payload = json.dumps(
         {"job_id": "jobV", "xml_content": "<a/>", "schema_type": "counseling"}
     ).encode()
@@ -320,6 +325,8 @@ def test_validate_xsd_requires_worker_token(monkeypatch):
     assert status == 200
     result = json.loads(body)
     assert result["is_valid"] is False  # <a/> is well-formed but violates the XSD
+    # Prove it failed on the schema, not on a missing file.
+    assert result["errors"] != ["Validation error"], result["errors"]
 
 
 def test_convert_ignores_stale_event_id_mapping(monkeypatch):

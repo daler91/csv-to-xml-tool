@@ -106,6 +106,131 @@ class CounselingConfig:
     """Configuration specific to the Counseling (Form 641) XML conversion."""
     REQUIRED_FIELDS = ["Contact ID"]
 
+    # Every CSV header the counseling converter reads, keyed by a stable internal
+    # name. This is the single source for the counseling header vocabulary:
+    # preview_service's expected-column list, xsd_error_mapping's element->field
+    # table and diff_service's cleaning map are all checked against it, and
+    # tests/test_expected_columns.py pins it against the converter source itself.
+    #
+    # Those lists were previously four hand-maintained mirrors that had already
+    # disagreed: three columns drifted to a spelling without the "(old)" suffix,
+    # which made the mapping page offer a rename that deleted a column the
+    # converter needed.
+    #
+    # A value is either a header string, or a list for the four Part 3 impact
+    # fields that fall back to their intake counterpart when the "(Meeting)"
+    # column is blank (see _first_present in counseling_converter.py).
+    #
+    # NOTE: unlike TrainingConfig.COLUMN_MAPPING, a list here is NOT a set of
+    # aliases for one column -- 'Total Number of Employees', 'Gross Revenues/Sales'
+    # and 'Profits/Losses' are each *also* read on their own as the intake
+    # snapshot. Deriving expected columns by taking only the first entry, the way
+    # the training derivation does, would silently drop three real columns and
+    # recreate the drift bug. Use expected_columns() below, which unions them.
+    COLUMN_MAPPING = {
+        # Identity and contact
+        "contact_id": 'Contact ID',
+        "location_code": 'LocationCode',
+        "last_name": 'Last Name',
+        "first_name": 'First Name',
+        "middle_name": 'Middle Name',
+        "email": 'Email',
+        "contact_phone": 'Contact: Phone',
+        "contact_secondary_phone": 'Contact: Secondary Phone',
+        "mailing_street": 'Mailing Street',
+        "mailing_city": 'Mailing City',
+        "mailing_state_province": 'Mailing State/Province',
+        "mailing_zip_postal_code": 'Mailing Zip/Postal Code',
+        "mailing_country": 'Mailing Country',
+        "agree_to_impact_survey": 'Agree to Impact Survey',
+        "client_signature_date": 'Client Signature - Date',
+        "client_signature_on_file": 'Client Signature(On File)',
+        # Demographics
+        "race": 'Race',
+        "ethnicity": 'Ethnicity:',          # trailing colon is in the real CSV header
+        "gender": 'Gender',
+        "disability": 'Disability',
+        "veteran_status": 'Veteran Status',
+        "branch_of_service": 'Branch Of Service',
+        "what_prompted_contact": 'What Prompted you to contact us?',
+        "internet_specify": 'Internet (specify)',
+        "internet_usage": 'InternetUsage',
+        # Business profile (intake snapshot)
+        "currently_in_business": 'Currently In Business?',
+        "currently_exporting": 'Are you currently exporting?(old)',
+        "account_name": 'Account Name',
+        "type_of_business": 'Type of Business',
+        "business_ownership_female": 'Business Ownership - % Female(old)',
+        "conduct_business_online": 'Conduct Business Online?',
+        "certified_8a": '8(a) Certified?(old)',
+        "employee_owned": 'Employee Owned',
+        "total_employees_intake": 'Total Number of Employees',
+        "employees_in_exporting_business": 'Number of Employees in Exporting Business',
+        "gross_revenues_intake": 'Gross Revenues/Sales',
+        "profits_losses_intake": 'Profits/Losses',
+        "legal_entity": 'Legal Entity of Business',
+        "other_legal_entity": 'Other legal entity (specify)',
+        "rural_vs_urban": 'Rural_vs_Urban',
+        "fips_code": 'FIPS_Code',
+        "counseling_seeking": 'Nature of the Counseling Seeking?',
+        "counseling_seeking_other": 'Nature of the Counseling Seeking - Other Detail',
+        "export_countries": 'Export Countries',
+        # Session / activity
+        "activity_id": 'Activity ID',
+        "funding_source": 'Funding Source',
+        "verified_in_business": 'Verified To Be In Business',
+        "reportable_impact": 'Reportable Impact',
+        "reportable_impact_date": 'Reportable Impact Date',
+        # Part 3 impact -- each falls back to its intake counterpart when blank
+        "business_start_date": ['Business Start Date', 'Date Started (Meeting)'],
+        "total_employees_part3": ['Total No. of Employees (Meeting)', 'Total Number of Employees'],
+        "gross_revenues_part3": ['Gross Revenues/Sales (Meeting)', 'Gross Revenues/Sales'],
+        "profit_loss_part3": ['Profit & Loss (Meeting)', 'Profits/Losses'],
+        "sba_loan_amount": 'SBA Loan Amount',
+        "non_sba_loan_amount": 'Non-SBA Loan Amount',
+        "equity_capital_received": 'Amount of Equity Capital Received',
+        "certifications": 'Certifications (SDB, HUBZONE, etc)',
+        "other_certifications": 'Other Certifications',
+        "sba_financial_assistance": 'SBA Financial Assistance',
+        "other_sba_financial_assistance": 'Other SBA Financial Assistance',
+        # Counseling delivered
+        "services_provided": 'Services Provided',
+        "other_counseling_provided": 'Other Counseling Provided',
+        "referred_client_to": 'Referred Client to',
+        "other_referred_client_to": 'Other (Referred Client to)',
+        "type_of_session": 'Type of Session',
+        "languages_used": 'Language(s) Used',
+        "languages_used_other": 'Language(s) Used (Other)',
+        "session_date": 'Date',
+        "name_of_counselor": 'Name of Counselor',
+        "duration_hours": 'Duration (hours)',
+        "prep_hours": 'Prep Hours',
+        "travel_hours": 'Travel Hours',
+        "comments": 'Comments',
+    }
+
+    @classmethod
+    def expected_columns(cls) -> list[str]:
+        """Every header in COLUMN_MAPPING, de-duplicated, declaration order kept.
+
+        Unions the fallback lists rather than taking the first entry: the
+        fallbacks are real columns read elsewhere in their own right, so
+        dropping them would report a user's genuine column as "extra" and offer
+        a rename that deletes it.
+        """
+        headers: list[str] = []
+        for value in cls.COLUMN_MAPPING.values():
+            for header in ([value] if isinstance(value, str) else value):
+                if header not in headers:
+                    headers.append(header)
+        return headers
+
+    @classmethod
+    def headers_for(cls, key: str) -> list[str]:
+        """The header(s) for one mapping key, in fallback order."""
+        value = cls.COLUMN_MAPPING[key]
+        return [value] if isinstance(value, str) else list(value)
+
     # Correct XSD element order for ClientIntake section
     CLIENT_INTAKE_ELEMENT_ORDER = [
         'Race', 'Ethnicity', 'Sex', 'Disability', 'MilitaryStatus',

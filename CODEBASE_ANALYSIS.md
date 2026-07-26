@@ -438,10 +438,29 @@ the output is byte-identical.
 
 The template-method `convert()` and the shared registry remain open.
 
-### 5.2 No column mapping in the counseling converter
+### 5.2 No column mapping in the counseling converter — [PARTIALLY FIXED]
 
 ~90 hardcoded header string literals inside `row.get(...)` calls. Three mutually incompatible
 mapping styles across the three converters.
+
+**`CounselingConfig.COLUMN_MAPPING` now exists and is the single source for the header vocabulary.**
+All 74 headers are declared once; `preview_service.COUNSELING_EXPECTED` is derived from it
+(`expected_columns()`), and the four other structures keyed by counseling columns —
+`xsd_error_mapping._COUNSELING_ELEMENT_FIELDS`, `diff_service.COUNSELING_CLEANING_MAP`, the
+`column_requirements` tier sets and `COUNSELING_FIELD_METADATA` — are pinned to it by test. They all
+agreed once the 5.1 fix landed; the tests are what stop them drifting apart again.
+
+One thing the design had to get right: **counseling's lists are not aliases.** `TrainingConfig`
+derives its expected columns as `alts[0]`, which is correct there because a list means "several
+spellings of one column". In counseling the Part 3 impact fields fall back to their intake
+counterpart, and `Total Number of Employees`, `Gross Revenues/Sales` and `Profits/Losses` are each
+*also* read on their own. Applying the `alts[0]` rule would have dropped three real columns from the
+expected list and recreated the exact rename-away bug 5.1 fixed. `expected_columns()` unions
+instead, and a test states the trap explicitly.
+
+The converter still reads through header literals for the other 70 columns; only the four fallback
+chains go through the config (via `_mapped`). Routing the remaining `row.get` calls through the
+mapping is the rest of this finding.
 
 ### 5.3 Dead code
 

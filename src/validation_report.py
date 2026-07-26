@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """
 Validation reporting for CSV to XML conversion.
 This module tracks validation issues and generates reports.
 """
+
+from __future__ import annotations
 
 import csv
 import html
@@ -48,7 +48,6 @@ class ValidationTracker:
         self.issue_counts = defaultdict(Counter)
         self.total_records = 0
         self.successful_records = 0
-        self.failed_records = 0
         self.current_record_id = None
         self.current_event_id = None
 

@@ -39,6 +39,27 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
 
+    @staticmethod
+    def _first_present(row, *keys, default=''):
+        """First non-blank value among `keys`, else `default`.
+
+        Written because `row.get(a, row.get(b, default))` does NOT express
+        "a, falling back to b": the inner get is the *default argument*, so it
+        is only consulted when column `a` is absent entirely. When `a` exists
+        but the cell is blank, `''` wins and `b` is never read -- the opposite
+        of the intended fallback, and exactly the case that arises when a
+        Salesforce export includes a "(Meeting)" column that isn't filled in
+        for every row.
+        """
+        for key in keys:
+            value = row.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return default
+
     def _resolve_in_business(self, in_business_val, row, record_id):
         """Hook for subclasses to adjust the normalized in-business status before
         it is emitted and used to gate the in-business-only sections. Returns the
@@ -170,8 +191,14 @@ class CounselingConverter(BaseConverter):
                        (row.get('Agree to Impact Survey') or '').strip() or 'No')
         signature = create_element(client_request, 'ClientSignature')
         emit_optional(signature, 'Date', data_cleaning.format_date(row.get('Client Signature - Date', '')))
-        signature_onfile = row.get('Client Signature(On File)', 'No')
-        create_element(signature, 'OnFile', 'Yes' if signature_onfile in ['1', 1] else 'No')
+        # is_affirmative, not `in ['1', 1]`: a checkbox exported as "Yes"/"true"/"Y"
+        # was silently recorded as "No" in a federal filing. The helper is already
+        # used for the other yes/no columns in this file.
+        signature_onfile = row.get('Client Signature(On File)', '')
+        create_element(
+            signature, 'OnFile',
+            'Yes' if data_cleaning.is_affirmative(signature_onfile) else 'No',
+        )
 
     def _build_race(self, client_intake, row, record_id):
         race_element = create_element(client_intake, 'Race')
@@ -470,12 +497,12 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
         create_element(counselor_record, 'CurrentlyExporting', self.general_config.DEFAULT_BUSINESS_STATUS)
 
-        business_start_date = data_cleaning.format_date(row.get('Business Start Date', '')) or data_cleaning.format_date(row.get('Date Started (Meeting)', ''))
+        business_start_date = data_cleaning.format_date(self._first_present(row, 'Business Start Date', 'Date Started (Meeting)'))
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
-        total_employees = data_cleaning.clean_numeric(row.get('Total No. of Employees (Meeting)', row.get('Total Number of Employees', '0')))
+        total_employees = data_cleaning.clean_numeric(self._first_present(row, 'Total No. of Employees (Meeting)', 'Total Number of Employees', default='0'))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
 
@@ -483,8 +510,8 @@ class CounselingConverter(BaseConverter):
         if exporting_employees2 and float(exporting_employees2) > 0:
             create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
 
-        gross_rev_part3 = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales (Meeting)', row.get('Gross Revenues/Sales', '')))
-        profit_loss_part3 = data_cleaning.clean_numeric(row.get('Profit & Loss (Meeting)', row.get('Profits/Losses', '')))
+        gross_rev_part3 = data_cleaning.clean_numeric(self._first_present(row, 'Gross Revenues/Sales (Meeting)', 'Gross Revenues/Sales'))
+        profit_loss_part3 = data_cleaning.clean_numeric(self._first_present(row, 'Profit & Loss (Meeting)', 'Profits/Losses'))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
         # No fabrication warnings here for gross revenue / profit-loss: they are
         # keyed on the base columns (the "(Meeting)" variants are intentionally

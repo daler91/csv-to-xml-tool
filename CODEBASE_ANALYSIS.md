@@ -346,7 +346,20 @@ several are availability- or DoS-grade.
 
 ## Tier 4 — Correctness & robustness
 
-All `[OPEN]`.
+Status: `[FIXED]` except where noted.
+
+> **Fixed in the Tier 4 pass:** the `defusedxml` `SubElement` crash (it exports the parsing API but
+> deliberately not the tree-building API, so `--add-missing` raised `AttributeError` that escaped
+> the caller's `except`); the Windows-broken `startswith(os.sep)` check, now `os.path.isabs`; the
+> `/data-evil` prefix bypass, now a shared `_is_within` with a separator suffix; the `(Meeting)`
+> fallbacks via `_first_present` (`row.get(a, row.get(b))` is not a fallback — the inner get is a
+> *default argument*, consulted only when `a` is absent entirely); `Client Signature(On File)` now
+> via `is_affirmative`; ragged rows fixed at the shared `normalize_row_keys` choke point so preview
+> and diff benefit too; the training demographics element order, now pinned by a test that derives
+> the expected order **from the schema**; and the web-side purged-file (410) and wedged-job
+> (enqueue rollback) cases, plus the unguarded `totalRows` write that reset the reaper's clock.
+>
+> **Still open:** SIGTERM does not drain in-flight jobs, and the 60s sweep interval is never cleared.
 
 - **`--add-missing` crashes.** `xml_validator.py:128` calls `ET.SubElement`, but line 7 imports
   `defusedxml.ElementTree`, which **does not export `SubElement`** (verified). The resulting
@@ -383,7 +396,26 @@ All `[OPEN]`.
 
 ## Tier 5 — Architecture, quality, docs
 
-All `[OPEN]`.
+Status: mixed — see each item.
+
+> **Fixed in the Tier 5 pass:** 5.3 dead code (`check_element_order` with its two contradictory
+> implementations, the `analyze_*_csv` pair written for a `--analyze-only` flag that doesn't exist,
+> `ValidationTracker.failed_records`, the worker's never-called `sanitize_id`/`sanitize_filename`,
+> `components/ui/card.tsx`, the unused `@auth/prisma-adapter`, and the stale `patch_tests.diff`);
+> 5.4 (`from __future__` moved below the docstrings in all five modules, so `__doc__` is populated
+> again; the import-time global logger that cleared handlers is gone; the fiscal-year cutoff is now
+> computed per call instead of frozen at import, which mattered for a long-lived worker crossing
+> October 1); and 5.7 docs — `ARCHITECTURE_REVIEW.md` now carries per-finding status markers and a
+> banner stating plainly that it is a historical record with stale citations, `TECHNICAL_DEBT.md`
+> #3/#11/#19 are refreshed, and the README covers the third converter, the real module list and
+> `SBA_OUTPUT_BASE`.
+>
+> **Still open:** 5.1 (the inverted converter abstraction and the two CSV engines) and 5.2 (no
+> column mapping in the counseling converter) — both are large refactors of code that now has real
+> test coverage but no strong behavioural contract, and are worth scoping deliberately rather than
+> doing opportunistically. 5.5 is partial: ruff is in CI, but there is still no formatter, no type
+> checker and no ESLint. 5.6 (web duplication, `results/page.tsx` at 685 LOC, the dual
+> schema/migrate.js source of truth, the stale audit action labels) is untouched.
 
 ### 5.1 The converter abstraction is inverted
 

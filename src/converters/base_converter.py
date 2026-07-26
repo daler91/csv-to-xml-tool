@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Defines the base class for all data converters.
 
@@ -8,6 +6,8 @@ for all converter implementations. Each converter must handle its own specific
 logic for reading, processing, and writing data, but must conform to the
 `convert` method signature defined here.
 """
+
+from __future__ import annotations
 
 import abc
 import logging

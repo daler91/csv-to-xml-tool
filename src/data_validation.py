@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """
 Data validation module for CSV to XML conversion.
 This module contains functions for validating data before XML conversion.
 """
+
+from __future__ import annotations
 
 import re
 
@@ -16,6 +16,7 @@ from .data_cleaning import (
 )
 from .config import (
     COUNSELING_FABRICATION_DEFAULTS,
+    fiscal_year_start,
     ValidationCategory as VC, CounselingConfig, TrainingConfig, TrainingClientConfig,
 )
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 
 def validate_counseling_date(date_str: str) -> bool:
     """
-    Validates that the counseling date is not before MIN_COUNSELING_DATE.
+    Validates that the counseling date is not before the current fiscal-year start.
 
     Args:
         date_str: A date string in YYYY-MM-DD format
@@ -38,7 +39,7 @@ def validate_counseling_date(date_str: str) -> bool:
 
     try:
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        min_date = datetime.strptime(CounselingConfig.MIN_COUNSELING_DATE, "%Y-%m-%d")
+        min_date = datetime.strptime(fiscal_year_start(), "%Y-%m-%d")
         return date_obj >= min_date
     except ValueError:
         return False
@@ -69,7 +70,7 @@ def validate_counseling_record(row: dict[str, str], row_index: int, validator: V
         if not formatted_date:
             validator.add_issue(record_id, "warning", VC.INVALID_FORMAT, "Date Counseled", f"Invalid date format: {counseling_date}")
         elif not validate_counseling_date(formatted_date):
-            validator.add_issue(record_id, "warning", VC.INVALID_DATE, "Date Counseled", f"Date {formatted_date} is before minimum of {CounselingConfig.MIN_COUNSELING_DATE}")
+            validator.add_issue(record_id, "warning", VC.INVALID_DATE, "Date Counseled", f"Date {formatted_date} is before minimum of {fiscal_year_start()}")
 
     return True # Return simple True/False, issues are tracked in the validator
 
@@ -97,43 +98,6 @@ def validate_training_record(row: dict[str, str], row_index: int, validator: Val
 
     validator.set_current_record_id(record_id)
     return True
-
-# =============================================================================
-# ANALYSIS FUNCTIONS (for --analyze-only mode)
-# =============================================================================
-
-def analyze_counseling_csv(csv_rows: list[dict[str, str]]) -> dict[str, int]:
-    """
-    Analyzes CSV data from a counseling report for potential issues.
-    """
-    analysis = {
-        'row_count': len(csv_rows),
-        'missing_contact_id': 0,
-        'missing_names': 0,
-        'invalid_dates': 0,
-    }
-    for row in csv_rows:
-        if not row.get(CounselingConfig.REQUIRED_FIELDS[0]):
-            analysis['missing_contact_id'] += 1
-        if not row.get('Last Name') or not row.get('First Name'):
-            analysis['missing_names'] += 1
-        if row.get('Date') and not format_date(row.get('Date')):
-            analysis['invalid_dates'] += 1
-    return analysis
-
-def analyze_training_csv(csv_rows: list[dict[str, str]]) -> dict[str, int]:
-    """
-    Analyzes CSV data from a training report for potential issues.
-    """
-    analysis = {
-        'row_count': len(csv_rows),
-        'missing_event_id': 0,
-    }
-    event_id_col = TrainingConfig.COLUMN_MAPPING['event_id']
-    for row in csv_rows:
-        if not row.get(event_id_col):
-            analysis['missing_event_id'] += 1
-    return analysis
 
 # =============================================================================
 # DATA-QUALITY REPORT (feature 2.5, worker /preview "data_quality" payload)

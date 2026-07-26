@@ -83,3 +83,48 @@ describe("POST /api/jobs/[jobId]/start", () => {
     expect(enqueue).toHaveBeenCalledWith("j1");
   });
 });
+
+describe("POST /api/jobs/[jobId]/start — expired and unavailable cases", () => {
+  it("returns 410 when the upload has been purged by retention", async () => {
+    // Retention blanks inputFilePath and stamps filesPurgedAt. A job can still
+    // be in a startable state at that point, and stat("") threw ENOENT -> 500.
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      userId: TEST_USER.id,
+      status: "previewed",
+      inputFilePath: "",
+      filesPurgedAt: new Date(),
+    } as never);
+
+    const res = await POST(req(), jobParams("j1"));
+    expect(res.status).toBe(410);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("expired"),
+    });
+    expect(statMock).not.toHaveBeenCalled();
+    expect(db.job.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rolls the status back when the queue push fails", async () => {
+    // The row is already "queued" by this point, so without a rollback a retry
+    // hits the startable-status gate and 409s — the job sat wedged until the
+    // reaper failed it a full deadline later, with no explanation.
+    enqueue.mockRejectedValue(new Error("redis down"));
+
+    const res = await POST(req(), jobParams("j1"));
+    expect(res.status).toBe(503);
+
+    const rollback = db.job.updateMany.mock.calls.at(-1)?.[0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+    expect(rollback.where).toMatchObject({ id: "j1", status: "queued" });
+    expect(rollback.data).toEqual({ status: "uploaded" });
+  });
+
+  it("does not roll back on a successful enqueue", async () => {
+    const res = await POST(req(), jobParams("j1"));
+    expect(res.status).toBe(202);
+    expect(db.job.updateMany).toHaveBeenCalledTimes(1);
+  });
+});

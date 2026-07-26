@@ -31,8 +31,14 @@ MULTI_VALUE_DELIMITER = ";"
 BUSINESS_STARTUP_PREPLANNING = "Business Start-up/Preplanning"
 
 
-def _fiscal_year_start():
-    """Compute the start of the current SBA fiscal year (October 1)."""
+def fiscal_year_start():
+    """Start of the *current* SBA fiscal year (October 1), as YYYY-MM-DD.
+
+    Call this rather than caching the result. It used to be frozen into
+    CounselingConfig.MIN_COUNSELING_DATE at import time, so a long-lived
+    process (the worker is a persistent service) kept the previous fiscal
+    year's cutoff after October 1 and stopped flagging dates it should have.
+    """
     today = date.today()
     year = today.year if today.month >= FISCAL_YEAR_START_MONTH else today.year - 1
     return f"{year}-{FISCAL_YEAR_START_MONTH:02d}-01"
@@ -113,7 +119,8 @@ class CounselingConfig:
     ]
     DEFAULT_SESSION_TYPE = "Telephone"
     DEFAULT_URBAN_RURAL = "Undetermined"
-    MIN_COUNSELING_DATE = _fiscal_year_start()
+    # No MIN_COUNSELING_DATE constant: call config.fiscal_year_start() so the
+    # cutoff follows the calendar instead of the process start time.
 
     # List of session types that don't require contact hours
     NO_CONTACT_HOUR_SESSION_TYPES = [

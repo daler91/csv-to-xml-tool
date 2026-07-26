@@ -42,6 +42,20 @@ export async function POST(
       );
     }
 
+    // Retention blanks inputFilePath when it purges the upload, and a job can
+    // still be in a startable state at that point (the sweep only excludes
+    // queued/converting). Without this, stat("") threw ENOENT and the user got
+    // an opaque 500 instead of being told the file had expired.
+    if (job.filesPurgedAt || !job.inputFilePath) {
+      return NextResponse.json(
+        {
+          error:
+            "The uploaded file for this job has expired and been removed. Upload it again to convert.",
+        },
+        { status: 410 }
+      );
+    }
+
     // SEC-1: re-enforce the upload size cap server-side. The conversion itself
     // now happens later in the queue consumer, but the cap is cheap to check
     // here before we commit the job to the queue.
@@ -78,10 +92,29 @@ export async function POST(
       );
     }
 
-    // The job is durably "queued" in the DB; enqueue it for the consumer. If this
-    // push fails (Redis down), the job stays "queued" and the reaper fails it
-    // after the deadline rather than leaving it stranded.
-    await enqueueJob(jobId);
+    // The job is durably "queued" in the DB; enqueue it for the consumer.
+    //
+    // If the push fails (Redis down) the row is already "queued", so a retry
+    // hits the STARTABLE_STATUSES gate above and 409s — the job used to sit
+    // wedged until the reaper failed it a full REAP_DEADLINE_MS later (1 hour
+    // by default) with no explanation. Roll the status back so the user can
+    // simply try again.
+    try {
+      await enqueueJob(jobId);
+    } catch (enqueueError) {
+      await prisma.job.updateMany({
+        where: { id: jobId, userId: user.id, status: "queued" },
+        data: { status: job.status },
+      });
+      console.error("Failed to enqueue job", jobId, enqueueError);
+      return NextResponse.json(
+        {
+          error:
+            "Couldn't queue the conversion just now. Please try again in a moment.",
+        },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({ status: "queued" }, { status: 202 });
   } catch (error) {

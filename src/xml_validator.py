@@ -4,6 +4,7 @@ This module helps validate and fix common XML structure issues.
 """
 
 import os
+import xml.etree.ElementTree as UnsafeET
 import defusedxml.ElementTree as ET
 from lxml import etree
 
@@ -32,6 +33,16 @@ def _setup_sys_path():
 
 # ConversionLogger is imported lazily in main() to avoid breaking package imports
 
+def _is_within(path, base):
+    """True when `path` is `base` or sits underneath it.
+
+    The separator suffix matters: a bare ``startswith(base)`` also accepts
+    sibling directories that merely share a prefix, so ``/data-evil/x.xml``
+    passed as being inside ``/data``. Mirrors src/path_safety.resolve_within.
+    """
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
+
+
 def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
     """Resolve and validate file paths against traversal. Returns (xml_path, xsd_path) or an error dict."""
     xml_file = os.path.realpath(xml_file)
@@ -40,9 +51,13 @@ def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
         _data_dir_env = os.environ.get("DATA_DIR", "")
         if _data_dir_env:
             _data_dir = os.path.realpath(_data_dir_env)
-            if not xml_file.startswith(_data_dir):
+            if not _is_within(xml_file, _data_dir):
                 return {"is_valid": False, "errors": ["Invalid XML file path"]}
-    if not xsd_file.startswith(os.sep):
+    # os.path.isabs, not startswith(os.sep): on Windows a realpath'd path looks
+    # like "C:\\...", which does not start with a separator, so this check
+    # rejected *every* schema and made validation fail on the one platform
+    # run.bat/setup.bat exist to serve.
+    if not os.path.isabs(xsd_file):
         return {"is_valid": False, "errors": ["Invalid XSD file path"]}
     return xml_file, xsd_file
 
@@ -125,7 +140,15 @@ def add_missing_required_elements(client_intake, record_id):
     for tag, default_value in required_elements.items():
         if client_intake.find(tag) is None:
             logger.info(f"Record {record_id}: Adding missing required element '{tag}' with default '{default_value}'")
-            ET.SubElement(client_intake, tag).text = default_value
+            # UnsafeET, not ET: defusedxml.ElementTree exports only the parsing
+            # entry points (parse, fromstring, XMLParser, ...) and deliberately
+            # not the tree-*building* API, so `ET.SubElement` raised
+            # AttributeError -- and it escaped the caller's
+            # `except (OSError, ET.ParseError)`, so --add-missing crashed
+            # outright. Constructing an element on an already-parsed tree is a
+            # write, not a parse, so the hardened parser is not what's wanted
+            # here; the document was already parsed safely by defusedxml above.
+            UnsafeET.SubElement(client_intake, tag).text = default_value
             elements_added = True
     return elements_added
 
@@ -213,65 +236,6 @@ def reorder_elements(parent, element_order):
     for tag in elements:
         if tag not in element_order:
             _append_elements(parent, elements, tag)
-
-def check_element_order(parent, element_order):
-    """
-    Check if elements are in the correct order.
-
-    Args:
-        parent: Parent element
-        element_order: List of element names in the correct order
-
-    Returns:
-        Boolean indicating if there are ordering issues
-    """
-    # Get tags of child elements
-    child_tags = [child.tag for child in parent]
-
-    # Find elements from order list that exist in the XML
-    expected_order = [tag for tag in element_order if tag in child_tags]
-
-    # Check if the actual order matches the expected order
-    # This simple check assumes all expected_order elements are present and in sequence.
-    # A more robust check might be needed if elements can be optional and still affect order.
-    current_pos_in_xml = 0
-    for tag_in_expected_order in expected_order:
-        try:
-            # Find the current tag's first occurrence in the actual child_tags list
-            # starting from where the last tag was found.
-            idx = child_tags.index(tag_in_expected_order, current_pos_in_xml)
-            current_pos_in_xml = idx + 1
-        except ValueError:
-            # Tag in expected_order is not in child_tags (or not after the previous one)
-            # This might indicate an issue or an optional element not present.
-            # For strict ordering of present elements, this is an issue.
-            return True # Order issue or missing element that breaks sequence
-
-    # Check if all elements from child_tags that are in element_order are in the correct sequence
-    # This is a more complex check. The current logic in fix-sba-xml.py is simpler:
-    last_index_in_parent = -1
-    for tag_in_schema_order in element_order: # Iterate through the schema-defined order
-        try:
-            # Find the first occurrence of this tag in the parent's children
-            indices_in_parent = [i for i, child in enumerate(parent) if child.tag == tag_in_schema_order]
-            if not indices_in_parent:
-                continue # This element is not in the parent, skip
-
-            current_element_first_index = indices_in_parent[0]
-
-            if current_element_first_index < last_index_in_parent:
-                return True # Element appeared sooner than a preceding element in schema order
-            last_index_in_parent = current_element_first_index
-
-            # Additionally, ensure all instances of this tag are contiguous if that's a requirement
-            # (The current reorder logic groups them, so this check might be for pre-existing state)
-            # For now, just checking first occurrence order.
-
-        except ValueError:
-            # Element from element_order not found in parent, which is fine if it's optional.
-            pass
-
-    return False  # No order issues based on first occurrence
 
 def _resolve_output_path(file_path, input_dir, output_dir):
     """Compute the output path for a file, creating directories as needed."""

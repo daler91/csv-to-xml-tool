@@ -50,13 +50,16 @@ describe("GET /api/jobs/[jobId]/preview", () => {
     expect(worker).not.toHaveBeenCalled();
   });
 
-  it("persists totalRows unconditionally and advances status only from non-terminal states", async () => {
+  it("persists totalRows without disturbing in-flight jobs, and advances status only from non-terminal states", async () => {
     const res = await GET(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(200);
 
-    // 1st updateMany: unconditional row-count persist.
+    // 1st updateMany: row-count persist, skipped for queued/converting.
+    // Any write bumps updatedAt, and job-reaper.ts measures staleness from
+    // updatedAt on exactly those two states — an unguarded write here reset
+    // the reaper's clock and let a stuck job run past its deadline.
     expect(db.job.updateMany).toHaveBeenNthCalledWith(1, {
-      where: { id: "j1" },
+      where: { id: "j1", status: { notIn: ["queued", "converting"] } },
       data: { totalRows: 42 },
     });
     // 2nd updateMany: guarded status advance (won't revive terminal/queued/converting).
@@ -71,5 +74,21 @@ describe("GET /api/jobs/[jobId]/preview", () => {
         data: { status: "previewed" },
       })
     );
+  });
+});
+
+describe("GET /api/jobs/[jobId]/preview — expired uploads", () => {
+  it("returns 410 rather than a generic 500 when the upload was purged", async () => {
+    db.job.findFirst.mockResolvedValue({
+      id: "j1",
+      userId: TEST_USER.id,
+      converterType: "counseling",
+      inputFilePath: "",
+      filesPurgedAt: new Date(),
+    } as never);
+
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(410);
+    expect(worker).not.toHaveBeenCalled();
   });
 });

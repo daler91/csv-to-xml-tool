@@ -1,5 +1,21 @@
 # Architecture Review — csv-to-xml-tool (Consolidated)
 
+> [!IMPORTANT]
+> **This document is a historical record, not a current risk register.**
+>
+> It was written against an earlier state of the codebase. Nearly every finding here has since
+> been fixed, and **every `file:line` citation below is stale** — the code it points at has been
+> rewritten. The "Verification (how to reproduce)" section at the end no longer reproduces
+> anything, including its closing claim that `npm test` has no script (it does).
+>
+> Per-finding status markers were added retrospectively: **[RESOLVED]**, **[PARTIAL]**, **[OPEN]**.
+> They reflect a read of the code at the time of that review, not continuous maintenance.
+>
+> **For current status, read [`CODEBASE_ANALYSIS.md`](./CODEBASE_ANALYSIS.md)**, which carries
+> per-finding markers that are kept up to date as fixes land.
+
+---
+
 ## Context
 
 The app converts SBA Salesforce CSV exports (counseling Form 641, training Form 888) into
@@ -28,7 +44,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 
 ## Architecture & Orchestration
 
-### ARCH-1 (High) — No durable pipeline; un-awaited promise + 5-minute timeout
+### ARCH-1 (High) — No durable pipeline; un-awaited promise + 5-minute timeout  **[RESOLVED]**
 - Conversion is started "fire-and-forget": `apps/web/.../jobs/[jobId]/start/route.ts:78-88`
   does **not await** `workerFetch`, returns `202` at `:161`, and writes `complete`/`error`
   inside the dangling `.then()/.catch()`.
@@ -44,7 +60,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
   idempotent reconciliation so a late worker success can't leave the DB misleading, and a
   per-conversion (not global 5-min) timeout.
 
-### ARCH-2 (High) — In-memory progress & cancellation registries (single-process only)
+### ARCH-2 (High) — In-memory progress & cancellation registries (single-process only)  **[RESOLVED]**
 - `apps/worker/app/services/progress.py:35-66` and `cancellation.py:30-52` are in-process
   `dict`/`set` singletons that *explicitly document* "single-worker deployment only." Worker
   runs one uvicorn process today (`apps/worker/Dockerfile:15`, no `--workers`).
@@ -52,7 +68,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
   (request lands on the wrong process). Nothing prevents the misconfiguration.
 - **Direction:** move both to Redis (it's already a dependency + compose service).
 
-### ARCH-3 (Medium) — Worker ignores the available Redis
+### ARCH-3 (Medium) — Worker ignores the available Redis  **[RESOLVED]**
 - The **web** layer *does* use Redis: `ioredis` (`package.json:24`) powers token-bucket
   rate-limiting (`src/lib/rate-limit.ts`, used by `upload` and `signup`, fail-open).
 - The **worker** lists `redis>=5.0.0` (`apps/worker/requirements.txt:4`) but a grep of
@@ -60,7 +76,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 - **Net:** the coordination layer that genuinely needs Redis (queue/progress/cancel, ARCH-1/2)
   is the one part that doesn't use it, even though it's right there.
 
-### ARCH-4 (Medium) — Whole-file-as-JSON data path despite a shared volume
+### ARCH-4 (Medium) — Whole-file-as-JSON data path despite a shared volume  **[PARTIAL]**
 - Web reads the entire input into memory and posts it as a JSON string (`start/route.ts:76,86`);
   worker converts and **reads the full XML back into the HTTP response**
   (`apps/worker/app/routes/convert.py:70-77`); web writes it to disk (`start/route.ts:92-97`).
@@ -68,7 +84,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 - **Failure:** the file exists ~6× simultaneously, plus JSON-encoding a ~50 MB string twice.
 - **Direction:** pass **paths** over the shared volume; serve downloads from disk.
 
-### ARCH-5 (Medium) — Size cap is client-side only; memory amplifies under load
+### ARCH-5 (Medium) — Size cap is client-side only; memory amplifies under load  **[PARTIAL]**
 - 50 MB limit is enforced only in the browser-facing route (`upload/route.ts:41-46`); neither
   `start` nor the worker `/convert` re-checks size. Conversion then expands the payload in
   memory on both processes (compounds ARCH-4). No per-user/global concurrency control.
@@ -78,7 +94,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 
 ## Security & Authorization
 
-### SEC-1 (High) — Worker API unauthenticated & over-trusting
+### SEC-1 (High) — Worker API unauthenticated & over-trusting  **[RESOLVED]**
 - `/convert`, `/preview`, `/validate` have **no auth** (`apps/worker/app/routes/`); CORS is
   `allow_methods=["*"], allow_headers=["*"]` (`apps/worker/app/main.py:15-22`); `/convert`
   trusts a caller-supplied `job_id` with no ownership check (`convert.py:29-66`).
@@ -86,7 +102,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
   a multi-GB body (DoS). **Direction:** service-to-service auth (shared secret/mTLS), keep the
   worker private, tighten CORS, enforce limits.
 
-### SEC-2 (High) — `previousJobId` accepted without ownership validation (IDOR)
+### SEC-2 (High) — `previousJobId` accepted without ownership validation (IDOR)  **[RESOLVED]**
 - `upload/route.ts:25` reads `previousJobId` from form data; `:69` stores it directly
   (`...(previousJobId ? { previousJobId } : {})`) with no lookup. The schema relation
   (`schema.prisma:38-40`, `JobComparison`) is **not user-scoped** (and can't be at the DB level).
@@ -95,7 +111,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 - **Direction:** when present, look it up with `{ id: previousJobId, userId: user.id }` before
   accepting; centralize all job→job links behind a helper that enforces ownership.
 
-### SEC-3 (Medium) — Email identity not normalized
+### SEC-3 (Medium) — Email identity not normalized  **[RESOLVED]**
 - Signup stores/checks the raw email (`signup/route.ts:63,73`); login looks up the raw email
   (`auth.ts:18-19`); the unique constraint is exact-string (`schema.prisma:12`).
 - **Failure:** `User@example.com` and `user@example.com` become distinct accounts; casing
@@ -106,7 +122,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 
 ## Data Integrity & Persistence
 
-### DATA-1 (High) — Upload can orphan database jobs
+### DATA-1 (High) — Upload can orphan database jobs  **[RESOLVED]**
 - `upload/route.ts:63-71` creates the Job row with `inputFilePath: ""` **before** writing the
   file (`:73-78`), then updates the path (`:81-84`). If the write fails in between, the catch
   block (`:97-106`) returns 500 but **never deletes the row** — leaving a `uploaded`-status job
@@ -114,7 +130,7 @@ reporting**, silent data fabrication is treated as a first-class risk.
 - **Direction:** write the file first, or wrap in a transaction with compensating cleanup
   (delete the job + partial upload dir on any post-create failure).
 
-### DATA-2 (Medium) — `status` modeled as a free-form string
+### DATA-2 (Medium) — `status` modeled as a free-form string  **[RESOLVED]**
 - `schema.prisma:26` — `status String @default("uploaded")`; valid transitions are enforced
   only in app code (e.g. `STARTABLE_STATUSES` in `start/route.ts:15`).
 - **Failure:** any future route/script/migration can write an invalid status that breaks UI

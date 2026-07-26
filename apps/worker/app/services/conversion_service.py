@@ -14,7 +14,7 @@ if _SRC_DIR not in sys.path:
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
 from src.converters.training_client_converter import TrainingClientConverter
-from src.converters.base_converter import EmptyCSVError
+from src.converters.base_converter import EmptyCSVError  # noqa: F401  (re-exported: routes/convert.py imports it from here)
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd

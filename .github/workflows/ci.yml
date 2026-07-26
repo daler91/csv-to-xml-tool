@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [master]
 
+# Least privilege for GITHUB_TOKEN across every job (CodeQL actions/missing-workflow-permissions).
+# All three jobs only read the repository — none comment, push, or publish — so
+# read-only contents is sufficient. A job that needs more should declare its own
+# narrower `permissions` block rather than widening this one.
+permissions:
+  contents: read
+
 jobs:
   python-tests:
     runs-on: ubuntu-latest
@@ -31,6 +38,15 @@ jobs:
           # runner's system pip/setuptools/wheel, which we don't control. Fails on
           # any known advisory; allowlist a specific one with --ignore-vuln <ID>.
           pip-audit -r requirements.txt -r apps/worker/requirements.txt
+
+      - name: Lint (ruff)
+        # Correctness rules only — see pyproject.toml. This exists because
+        # pyflakes' F821 caught a refactor that left the tail of a method
+        # unreachable after a `return`, silently dropping four elements from
+        # every counseling record while the whole suite stayed green.
+        run: |
+          pip install ruff
+          ruff check .
 
       - name: Verify schemas resolve without SCHEMAS_DIR
         # The worker's default used to resolve to a nonexistent directory in both

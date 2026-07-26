@@ -10,11 +10,10 @@ _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from src.config import CounselingConfig, TrainingConfig, TrainingClientConfig
+from src.config import TrainingConfig
 from src.data_cleaning import normalize_header, normalize_row_keys
 from src.data_validation import analyze_data_quality
 
-from ..core.security import DATA_DIR
 from .column_requirements import (
     COUNSELING_REQUIRED,
     COUNSELING_CONDITIONAL,

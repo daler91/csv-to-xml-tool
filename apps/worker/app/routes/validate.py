@@ -54,8 +54,8 @@ async def validate_xsd(req: ValidateXsdRequest):
         return await validate_with_details(xml_path, xsd_file, req.schema_type)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         logger.exception("XSD validation failed")
-        raise HTTPException(status_code=500, detail="Internal validation error")
+        raise HTTPException(status_code=500, detail="Internal validation error") from e
     finally:
         await cleanup_staging(tmp_dir)

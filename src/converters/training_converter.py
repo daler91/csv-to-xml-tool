@@ -85,6 +85,43 @@ class TrainingConverter(BaseConverter):
         tree.write(output_path, encoding='utf-8', xml_declaration=True)
         self.logger.info(f"XML file successfully created at {output_path}")
 
+    def _warn_fabricated_default(self, event_id, field, default_value, element_label):
+        """Record a FABRICATED_DEFAULT warning for a value substituted for a blank cell.
+
+        Mirrors CounselingConverter._warn_fabricated_default. Only for fields the
+        CSV *could* have supplied -- deployment constants with no CSV source at
+        all are reported once per file by _warn_constant_defaults instead, since
+        a per-event warning for them would be identical every time.
+        """
+        self.validator.add_issue(
+            str(event_id), "warning", ValidationCategory.FABRICATED_DEFAULT, field,
+            f"Blank value defaulted to '{default_value}' ({element_label}).",
+        )
+
+    def _warn_constant_defaults(self):
+        """Record one file-level warning naming the values emitted from config.
+
+        These have no CSV column behind them -- they are constants of this
+        deployment that ship in every record of a federal filing. They are
+        surfaced once so they are visible for audit without flooding the report
+        with one identical warning per event.
+        """
+        constants = [
+            ('Location/LocationCode', self.general_config.DEFAULT_LOCATION_CODE),
+            ('NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS),
+            ('TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS),
+            ('TrainingPartners/Code', self.config.DEFAULT_TRAINING_PARTNER_CODE),
+            ('DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES),
+            ('Language/Code', self.general_config.DEFAULT_LANGUAGE),
+        ]
+        self.validator.add_issue(
+            "file", "warning", ValidationCategory.FABRICATED_DEFAULT, "configured_defaults",
+            "Emitted from configuration for every record (no CSV column supplies them): "
+            + "; ".join(f"{label}='{value}'" for label, value in constants)
+            + ". Verify these match the reporting organization.",
+            event_id="",
+        )
+
     def _build_training_record(self, root, event_id, group_df):
         """Build a single ManagementTrainingRecord element."""
         first_record = group_df.iloc[0]
@@ -105,6 +142,13 @@ class TrainingConverter(BaseConverter):
 
         date_val = self._get_column_value(first_record, "start_date")
         formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS, self.config.DEFAULT_START_DATE)
+        if formatted_date == self.config.DEFAULT_START_DATE and str(date_val).strip() != self.config.DEFAULT_START_DATE:
+            # A blank or unparseable date silently becomes a fixed past date,
+            # which is the kind of substitution a reviewer has to know about.
+            self._warn_fabricated_default(
+                event_id, 'Start Date', formatted_date,
+                'DateTrainingStarted' if data_cleaning.is_empty(date_val)
+                else f"DateTrainingStarted; '{str(date_val).strip()}' could not be parsed")
         create_element(record, 'DateTrainingStarted', formatted_date)
         if data_cleaning.is_ambiguous_date(date_val):
             # CONV-3: emitted month-first, but flag the ambiguity for human review.
@@ -121,6 +165,7 @@ class TrainingConverter(BaseConverter):
         title_val = self._get_column_value(first_record, "event_name")
         if not title_val:
             title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
+            self._warn_fabricated_default(event_id, 'Class/Event Name', title_val, 'TrainingTitle')
         create_element(record, 'TrainingTitle', title_val)
 
         self._build_location_section(record, first_record)
@@ -154,6 +199,9 @@ class TrainingConverter(BaseConverter):
 
         root = ET.Element('ManagementTrainingReport')
         root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+
+        # Recorded once up front, before any per-event event-id context is set.
+        self._warn_constant_defaults()
 
         # Training converter aggregates per event, so "progress" is
         # measured in event groups rather than CSV rows. Call the
@@ -193,10 +241,14 @@ class TrainingConverter(BaseConverter):
         zip_code = zip_match.group(0) if zip_match else ''
 
         if not (city and state and zip_code):
-            self.logger.info(f"Using default location for event {self.validator.current_record_id}")
+            event_id = self.validator.current_record_id
+            self.logger.info(f"Using default location for event {event_id}")
             city = self.config.DEFAULT_LOCATION['city']
             state = self.config.DEFAULT_LOCATION['state']
             zip_code = self.config.DEFAULT_LOCATION['zip']
+            self._warn_fabricated_default(
+                event_id, 'Class/Event Location', f"{city}, {state} {zip_code}",
+                'TrainingLocation; the CSV did not supply a complete city/state/ZIP')
 
         create_element(training_location, 'City', city)
         create_element(training_location, 'State', data_cleaning.standardize_state_name(state))

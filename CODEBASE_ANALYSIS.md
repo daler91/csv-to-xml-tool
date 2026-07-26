@@ -183,7 +183,19 @@ explicitly calls out the "Not Hispanic" trap — but it is only wired into the t
 (7 digits) is emitted and fails the `[0-9]{10}` pattern. The docstring claims it "normalizes to
 10 digits."
 
-### 1.6 Single-tenant values are stamped into every filing — `[OPEN]` — **most severe**
+### 1.6 Single-tenant values are stamped into every filing — `[FIXED]` by decision — **most severe**
+
+> **Resolved as a deliberate scope decision, not a code change: this is a single-organization
+> tool, so the constants are correct for it and stay in `config.py`.** What changed is that they
+> are no longer invisible — `_warn_constant_defaults()` records one file-level
+> `FABRICATED_DEFAULT` warning per conversion naming every value emitted from configuration
+> (location code, partner code, sessions, hours, fees, language), and per-event warnings now fire
+> when a blank cell falls back to the configured location, event title, or start date. The
+> training path previously emitted all of these with no warning at all, unlike the counseling path.
+>
+> **This decision does not survive the tool becoming multi-tenant.** If a second organization ever
+> uses the same deployment, the analysis below applies again in full and tenant identity has to
+> move into per-user settings.
 
 `src/config.py` hardcodes one organization's identity:
 

@@ -146,6 +146,51 @@ class TestTrainingConverter(unittest.TestCase):
             f"expected a recorded issue for the blank event ID, got {self.validator.issues}",
         )
 
+    def _fabrication_issues(self):
+        return [i for i in self.validator.issues if i['category'] == 'fabricated_default']
+
+    def test_configured_defaults_are_reported_once(self):
+        """Values with no CSV column behind them ship in every record.
+
+        They are constants of this deployment (location code, partner code,
+        session count, hours, fees, language) that land in a federal filing, so
+        they get one file-level warning -- once, not once per event.
+        """
+        self._convert_and_parse([
+            self._make_training_row(**{'Class/Event ID': 'EVT-001'}),
+            self._make_training_row(**{'Class/Event ID': 'EVT-002'}),
+        ])
+        constant_issues = [i for i in self._fabrication_issues()
+                           if i['field_name'] == 'configured_defaults']
+        self.assertEqual(len(constant_issues), 1, "expected exactly one file-level warning")
+        message = constant_issues[0]['message']
+        for expected in ('249003', "Women's Business Center", 'LocationCode'):
+            self.assertIn(expected, message)
+
+    def test_default_location_is_flagged_as_fabricated(self):
+        """Falling back to the configured location must be visible in the report."""
+        self._convert_and_parse([self._make_training_row(**{
+            'City': '', 'State/Province': '', 'Zip/Postal Code': '',
+        })])
+        self.assertTrue(
+            any(i['field_name'] == 'Class/Event Location' for i in self._fabrication_issues()),
+            f"expected a fabricated-location warning, got {self._fabrication_issues()}",
+        )
+
+    def test_unparseable_start_date_is_flagged_as_fabricated(self):
+        """A blank/unparseable date becomes a fixed past date -- say so."""
+        self._convert_and_parse([self._make_training_row(**{'Start Date': ''})])
+        date_issues = [i for i in self._fabrication_issues() if i['field_name'] == 'Start Date']
+        self.assertTrue(date_issues, f"expected a start-date warning, got {self._fabrication_issues()}")
+        self.assertIn('2023-12-12', date_issues[0]['message'])
+
+    def test_supplied_values_are_not_flagged(self):
+        """A row that supplies its own values gets no per-event fabrication noise."""
+        self._convert_and_parse([self._make_training_row()])
+        per_event = [i for i in self._fabrication_issues()
+                     if i['field_name'] != 'configured_defaults']
+        self.assertEqual(per_event, [], f"unexpected fabrication warnings: {per_event}")
+
     def test_all_rows_missing_event_id_raises(self):
         """No usable event ID anywhere means nothing is convertible.
 

@@ -11,6 +11,11 @@ reports/
 # Keep XSD files in schemas/ but ignore sample XMLs
 *.xml
 !schemas/*.xsd
+# Characterization goldens are committed on purpose: they are the reference
+# output the converter refactor is checked against. Without this exception the
+# blanket *.xml rule silently excludes them and the tests regenerate-and-skip
+# on every clean checkout, which passes while asserting nothing.
+!tests/golden/*.xml
 
 # Environment
 .env

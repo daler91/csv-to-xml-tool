@@ -1,0 +1,100 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ManagementTrainingReport xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ManagementTrainingRecord>
+    <PartnerTrainingNumber>701ABC001</PartnerTrainingNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <DateTrainingStarted>2025-02-03</DateTrainingStarted>
+    <NumberOfSessions>1</NumberOfSessions>
+    <TotalTrainingHours>1.5</TotalTrainingHours>
+    <TrainingTitle>Always Ready: Marketing</TrainingTitle>
+    <TrainingLocation>
+      <City>Des Moines</City>
+      <State>Iowa</State>
+      <ZipCode>50312</ZipCode>
+      <Country>
+        <Code>United States</Code>
+      </Country>
+    </TrainingLocation>
+    <NumberTrained>
+      <Total>4</Total>
+      <CurrentlyInBusiness>1</CurrentlyInBusiness>
+      <NotYetInBusiness>1</NotYetInBusiness>
+      <PersonWithDisabilities>1</PersonWithDisabilities>
+      <Female>2</Female>
+      <Male>1</Male>
+      <Veterans>2</Veterans>
+      <ServiceDisabledVeterans>1</ServiceDisabledVeterans>
+      <Race>
+        <Asian>1</Asian>
+        <BlackOrAfricanAmerican>1</BlackOrAfricanAmerican>
+        <White>2</White>
+      </Race>
+      <Ethnicity>
+        <HispanicOrLatinoOrigin>1</HispanicOrLatinoOrigin>
+        <NonHispanicOrLatinoOrigin>2</NonHispanicOrLatinoOrigin>
+      </Ethnicity>
+    </NumberTrained>
+    <NumberUnderservedTrained>
+      <Total>3</Total>
+    </NumberUnderservedTrained>
+    <TrainingTopic>
+      <Code>Marketing/Sales</Code>
+    </TrainingTopic>
+    <TrainingPartners>
+      <Code>Women's Business Center</Code>
+    </TrainingPartners>
+    <ProgramFormatType>In-person</ProgramFormatType>
+    <DollarAmountOfFees>0</DollarAmountOfFees>
+    <Language>
+      <Code>English</Code>
+    </Language>
+  </ManagementTrainingRecord>
+  <ManagementTrainingRecord>
+    <PartnerTrainingNumber>701ABC002</PartnerTrainingNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <DateTrainingStarted>2025-02-10</DateTrainingStarted>
+    <NumberOfSessions>1</NumberOfSessions>
+    <TotalTrainingHours>1.5</TotalTrainingHours>
+    <TrainingTitle>Small Business Taxes: Getting Ready for Tax Time</TrainingTitle>
+    <TrainingLocation>
+      <City>Des Moines</City>
+      <State>Iowa</State>
+      <ZipCode>50312</ZipCode>
+      <Country>
+        <Code>United States</Code>
+      </Country>
+    </TrainingLocation>
+    <NumberTrained>
+      <Total>3</Total>
+      <CurrentlyInBusiness>2</CurrentlyInBusiness>
+      <Female>1</Female>
+      <Male>1</Male>
+      <Race>
+        <Asian>1</Asian>
+        <White>1</White>
+      </Race>
+      <Ethnicity>
+        <HispanicOrLatinoOrigin>1</HispanicOrLatinoOrigin>
+        <NonHispanicOrLatinoOrigin>1</NonHispanicOrLatinoOrigin>
+      </Ethnicity>
+    </NumberTrained>
+    <NumberUnderservedTrained>
+      <Total>2</Total>
+    </NumberUnderservedTrained>
+    <TrainingTopic>
+      <Code>Tax Planning</Code>
+    </TrainingTopic>
+    <TrainingPartners>
+      <Code>Women's Business Center</Code>
+    </TrainingPartners>
+    <ProgramFormatType>Online</ProgramFormatType>
+    <DollarAmountOfFees>0</DollarAmountOfFees>
+    <Language>
+      <Code>English</Code>
+    </Language>
+  </ManagementTrainingRecord>
+</ManagementTrainingReport>

@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CounselingInformation>
+  <CounselingRecord>
+    <PartnerClientNumber>C-001</PartnerClientNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <ClientRequest>
+      <ClientNamePart1>
+        <Last>Smith</Last>
+        <First>John</First>
+      </ClientNamePart1>
+      <Email>john@example.com</Email>
+      <PhonePart1>
+        <Primary>5155551234</Primary>
+      </PhonePart1>
+      <AddressPart1>
+        <Street1>123 Main St</Street1>
+        <City>Des Moines</City>
+        <State>Iowa</State>
+        <ZipCode>50309</ZipCode>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart1>
+      <SurveyAgreement>Yes</SurveyAgreement>
+      <ClientSignature>
+        <Date>2025-01-15</Date>
+        <OnFile>Yes</OnFile>
+      </ClientSignature>
+    </ClientRequest>
+    <ClientIntake>
+      <Race>
+        <Code>White</Code>
+        <Code>Asian</Code>
+      </Race>
+      <Ethnicity>Non Hispanic or Latino</Ethnicity>
+      <Sex>Male</Sex>
+      <Disability>No</Disability>
+      <MilitaryStatus>No military service</MilitaryStatus>
+      <CurrentlyInBusiness>Yes</CurrentlyInBusiness>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <CompanyName />
+      <BusinessOwnership>
+        <Female>0</Female>
+      </BusinessOwnership>
+      <ConductingBusinessOnline>No</ConductingBusinessOnline>
+      <ClientIntake_Certified8a>No</ClientIntake_Certified8a>
+      <ClientAnnualIncomePart2>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart2>
+      <LegalEntity>
+        <Code>LLC</Code>
+      </LegalEntity>
+      <Rural_vs_Urban>Undetermined</Rural_vs_Urban>
+      <CounselingSeeking>
+        <Code>Business Plan</Code>
+      </CounselingSeeking>
+    </ClientIntake>
+    <CounselorRecord>
+      <PartnerSessionNumber>A-001</PartnerSessionNumber>
+      <ClientNamePart3>
+        <Last>Smith</Last>
+        <First>John</First>
+      </ClientNamePart3>
+      <Email>john@example.com</Email>
+      <PhonePart3>
+        <Primary>5155551234</Primary>
+      </PhonePart3>
+      <AddressPart3>
+        <Street1>123 Main St</Street1>
+        <City>Des Moines</City>
+        <State>Iowa</State>
+        <ZipCode>50309</ZipCode>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart3>
+      <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
+      <ReportableImpact>No</ReportableImpact>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
+      <ClientAnnualIncomePart3>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart3>
+      <ResourcePartnerServiceContributed>
+        <SBALoanAmount>0</SBALoanAmount>
+        <NonSBALoanAmount>0</NonSBALoanAmount>
+        <EquityCapitalReceived>0</EquityCapitalReceived>
+      </ResourcePartnerServiceContributed>
+      <CounselingProvided>
+        <Code>Business Plan</Code>
+      </CounselingProvided>
+      <SessionType>Telephone</SessionType>
+      <Language>
+        <Code>English</Code>
+      </Language>
+      <DateCounseled>2025-01-15</DateCounseled>
+      <CounselorName>Jane Doe</CounselorName>
+      <CounselingHours>
+        <Contact>1.5</Contact>
+        <Prepare>0.5</Prepare>
+        <Travel>0</Travel>
+      </CounselingHours>
+    </CounselorRecord>
+  </CounselingRecord>
+</CounselingInformation>

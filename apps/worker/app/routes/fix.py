@@ -22,7 +22,7 @@ if _SRC_DIR not in sys.path:
 
 from src.xml_validator import fix_client_intake_element_order
 
-from ..logging_context import job_id_var
+from ..logging_context import set_job_id
 from ..models.schemas import FixXmlRequest, FixXmlResponse
 from ..services.xsd_validation import (
     cleanup_staging,
@@ -73,7 +73,7 @@ async def fix_xml(req: FixXmlRequest):
     *result* (changed=false, is_valid=false with the parse error), not a 500.
     job_id is for log correlation only.
     """
-    job_id_var.set(req.job_id)
+    set_job_id(req.job_id)
 
     if req.schema_type not in _COUNSELING_FORMAT_SCHEMA_TYPES:
         raise HTTPException(

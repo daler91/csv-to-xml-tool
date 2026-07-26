@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import type { PreviewResponse } from "@/types";
@@ -64,10 +65,7 @@ export async function GET(
     });
 
     return NextResponse.json(preview);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to generate preview" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return routeError(error, "Failed to generate preview");
   }
 }

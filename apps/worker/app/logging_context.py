@@ -16,6 +16,7 @@ synchronous conversion pipeline's logs.
 """
 
 import logging
+import re
 from contextvars import ContextVar
 
 # "-" for records emitted outside any job (startup, healthcheck) so the format
@@ -23,6 +24,26 @@ from contextvars import ContextVar
 job_id_var: ContextVar[str] = ContextVar("job_id", default="-")
 
 LOG_FORMAT = "%(asctime)s [%(job_id)s] %(name)s %(levelname)s: %(message)s"
+
+_UNSAFE_JOB_ID = re.compile(r"[^a-zA-Z0-9_-]")
+_MAX_JOB_ID_LEN = 64
+
+
+def set_job_id(value: str | None) -> str:
+    """Sanitize an incoming job id, bind it to the log context, and return it.
+
+    The id arrives in the request body and lands in two places that must not
+    accept arbitrary text: the ``[%(job_id)s]`` log prefix, where an embedded
+    newline lets a caller forge whole log records (CWE-117), and the Redis key
+    suffixes for progress/cancellation, where it can pollute the namespace.
+    Anything outside ``[A-Za-z0-9_-]`` is dropped and the result is truncated.
+
+    Returns "-" for an empty/None id so the log format stays aligned; callers
+    use the returned value rather than the raw one.
+    """
+    cleaned = _UNSAFE_JOB_ID.sub("", str(value or ""))[:_MAX_JOB_ID_LEN] or "-"
+    job_id_var.set(cleaned)
+    return cleaned
 
 
 def install_job_id_log_factory() -> None:

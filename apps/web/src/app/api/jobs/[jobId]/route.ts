@@ -4,6 +4,7 @@ import path from "node:path";
 import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
 
@@ -67,8 +68,8 @@ export async function GET(
     }
 
     return NextResponse.json(job);
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
+  } catch (error) {
+    return routeError(error, "Failed to fetch job");
   }
 }
 
@@ -145,8 +146,8 @@ export async function PATCH(
 
     const fresh = await prisma.job.findUnique({ where: { id: jobId } });
     return NextResponse.json(fresh);
-  } catch {
-    return NextResponse.json({ error: "Failed to update job" }, { status: 500 });
+  } catch (error) {
+    return routeError(error, "Failed to update job");
   }
 }
 

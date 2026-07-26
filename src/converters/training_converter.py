@@ -318,63 +318,81 @@ class TrainingConverter(BaseConverter):
         )
         return self.config.DEFAULT_TRAINING_TOPIC
 
-    def _calculate_demographics(self, rows):
-        """Aggregate per-attendee rows for one event into demographic counts.
-
-        Each attendee row is classified by its controlled-vocabulary value (reusing
-        data_cleaning helpers) instead of loose substring matching, so "Prefer not to
-        say"/blank fall into no bucket, "Female" is never miscounted as Male, and "Non
-        Hispanic or Latino" is never miscounted as Hispanic.
-        """
-        demographics = {}
-        total = len(rows)
-        demographics['total'] = max(total, 1)  # XSD requires Total >= 1
-
-        gender_col = self._resolve_column(rows, 'gender')
-        ethnicity_col = self._resolve_column(rows, 'ethnicity')
-        race_col = self._resolve_column(rows, 'race')
-        military_col = self._resolve_column(rows, 'military_status')
-        disability_col = self._resolve_column(rows, 'disability')
-        business_col = self._resolve_column(rows, 'business_status')
-
-        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
-        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
-
+    @staticmethod
+    def _count_sex(rows, gender_col):
+        """Return (female, male). Anything that maps to neither is counted as neither."""
         female = male = 0
-        currently_in_business = not_in_business = 0
-        disabilities = 0
-        military_counts = {key: 0 for key in military_keywords}
+        if not gender_col:
+            return female, male
+        for row in rows:
+            sex = data_cleaning.map_gender_to_sex(row.get(gender_col))
+            if sex == 'Female':
+                female += 1
+            elif sex == 'Male':
+                male += 1
+        return female, male
+
+    @staticmethod
+    def _count_business_status(rows, business_col):
+        """Return (currently_in_business, not_in_business).
+
+        Deliberately not `not is_affirmative`: a blank or unrecognised answer
+        must land in neither bucket rather than being reported as "not yet in
+        business" to SBA.
+        """
+        currently = not_yet = 0
+        if not business_col:
+            return currently, not_yet
+        for row in rows:
+            value = row.get(business_col)
+            if data_cleaning.is_affirmative(value):
+                currently += 1
+            elif data_cleaning.is_negative(value):
+                not_yet += 1
+        return currently, not_yet
+
+    @staticmethod
+    def _count_disabilities(rows, disability_col):
+        if not disability_col:
+            return 0
+        return sum(
+            1 for row in rows
+            if data_cleaning.is_affirmative(row.get(disability_col))
+        )
+
+    @staticmethod
+    def _count_military(rows, military_col, military_keywords):
+        """Count per category. A row may match several (e.g. service-disabled veteran)."""
+        counts = {key: 0 for key in military_keywords}
+        if not military_col:
+            return counts
+        for row in rows:
+            for category in data_cleaning.classify_military(row.get(military_col), military_keywords):
+                counts[category] += 1
+        return counts
+
+    @staticmethod
+    def _count_race_ethnicity(rows, race_col, ethnicity_col, race_keywords):
+        """Return (race_counts, hispanic, non_hispanic, minorities).
+
+        Race, ethnicity and the minority tally share one pass because
+        "minority" is a per-person question that depends on both.
+        """
         race_counts = {key: 0 for key in race_keywords}
-        hispanic = non_hispanic = 0
-        minorities = 0
+        hispanic = non_hispanic = minorities = 0
 
         for row in rows:
-            if gender_col:
-                sex = data_cleaning.map_gender_to_sex(row.get(gender_col))
-                if sex == 'Female':
-                    female += 1
-                elif sex == 'Male':
-                    male += 1
-
-            if business_col:
-                business_val = row.get(business_col)
-                if data_cleaning.is_affirmative(business_val):
-                    currently_in_business += 1
-                elif data_cleaning.is_negative(business_val):
-                    not_in_business += 1
-
-            if disability_col and data_cleaning.is_affirmative(row.get(disability_col)):
-                disabilities += 1
-
-            if military_col:
-                for category in data_cleaning.classify_military(row.get(military_col), military_keywords):
-                    military_counts[category] += 1
-
-            person_races = data_cleaning.classify_races(row.get(race_col), race_keywords) if race_col else set()
+            person_races = (
+                data_cleaning.classify_races(row.get(race_col), race_keywords)
+                if race_col else set()
+            )
             for category in person_races:
                 race_counts[category] += 1
 
-            person_ethnicity = data_cleaning.classify_ethnicity(row.get(ethnicity_col)) if ethnicity_col else None
+            person_ethnicity = (
+                data_cleaning.classify_ethnicity(row.get(ethnicity_col))
+                if ethnicity_col else None
+            )
             if person_ethnicity == 'hispanic':
                 hispanic += 1
             elif person_ethnicity == 'non_hispanic':
@@ -386,20 +404,62 @@ class TrainingConverter(BaseConverter):
             if person_ethnicity == 'hispanic' or any(c != 'white' for c in person_races):
                 minorities += 1
 
-        demographics['female'] = female
-        demographics['male'] = male
+        return race_counts, hispanic, non_hispanic, minorities
+
+    def _calculate_demographics(self, rows):
+        """Aggregate per-attendee rows for one event into demographic counts.
+
+        Each attendee row is classified by its controlled-vocabulary value (reusing
+        data_cleaning helpers) instead of loose substring matching, so "Prefer not to
+        say"/blank fall into no bucket, "Female" is never miscounted as Male, and "Non
+        Hispanic or Latino" is never miscounted as Hispanic.
+
+        The per-dimension tallies live in the _count_* helpers above; this method
+        resolves the columns and assembles the result. Each helper walks `rows`
+        separately, which is a handful of passes over one event's attendee list --
+        not worth folding back into a single unreadable loop.
+        """
+        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
+        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
+
+        business_col = self._resolve_column(rows, 'business_status')
+        female, male = self._count_sex(rows, self._resolve_column(rows, 'gender'))
+        currently_in_business, not_in_business = self._count_business_status(rows, business_col)
+        military_counts = self._count_military(
+            rows, self._resolve_column(rows, 'military_status'), military_keywords
+        )
+        race_counts, hispanic, non_hispanic, minorities = self._count_race_ethnicity(
+            rows,
+            self._resolve_column(rows, 'race'),
+            self._resolve_column(rows, 'ethnicity'),
+            race_keywords,
+        )
+
+        demographics = {
+            'total': max(len(rows), 1),  # XSD requires Total >= 1
+            'female': female,
+            'male': male,
+            'disabilities': self._count_disabilities(
+                rows, self._resolve_column(rows, 'disability')
+            ),
+            'active_duty': military_counts.get('active_duty', 0),
+            'veterans': military_counts.get('veteran', 0),
+            'service_disabled_veterans': military_counts.get('service_disabled_veteran', 0),
+            'reserve_guard': military_counts.get('reserve_guard', 0),
+            'military_spouse': military_counts.get('spouse', 0),
+            'race': race_counts,
+            'ethnicity': {'hispanic': hispanic, 'non_hispanic': non_hispanic},
+            'minorities': minorities,
+        }
+        # Only reported when the source actually has the column: absent business
+        # data must not be emitted as zeros. Added last rather than inline because
+        # it is conditional; XML element order is unaffected, since
+        # _build_demographics_section walks its own key_to_xml_map, not this dict.
+        # (The 'race' sub-dict is the one whose order *is* load-bearing -- it is
+        # iterated directly -- and it keeps DEMOGRAPHIC_KEYWORDS order.)
         if business_col:
             demographics['currently_in_business'] = currently_in_business
             demographics['not_in_business'] = not_in_business
-        demographics['disabilities'] = disabilities
-        demographics['active_duty'] = military_counts.get('active_duty', 0)
-        demographics['veterans'] = military_counts.get('veteran', 0)
-        demographics['service_disabled_veterans'] = military_counts.get('service_disabled_veteran', 0)
-        demographics['reserve_guard'] = military_counts.get('reserve_guard', 0)
-        demographics['military_spouse'] = military_counts.get('spouse', 0)
-        demographics['race'] = race_counts
-        demographics['ethnicity'] = {'hispanic': hispanic, 'non_hispanic': non_hispanic}
-        demographics['minorities'] = minorities
 
         return demographics
 

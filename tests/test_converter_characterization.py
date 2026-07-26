@@ -107,9 +107,20 @@ def test_shipped_sample_output_is_stable(converter_type):
 
 @pytest.mark.parametrize("converter_type", ["counseling", "training", "training-client"])
 def test_output_is_deterministic_across_runs(converter_type):
-    """No timestamps or other run-varying content — the premise of this file."""
+    """No timestamps or other run-varying content — the premise of this file.
+
+    The two runs are bound to separate names deliberately: written inline as
+    `assert _convert_file(...) == _convert_file(...)` it reads as a tautology
+    (and static analysers flag it as one), when in fact each call is a full
+    independent conversion and the whole point is that they *could* differ.
+    """
     sample = SAMPLES / f"{converter_type}-sample.csv"
-    assert _convert_file(converter_type, sample) == _convert_file(converter_type, sample)
+    first_run = _convert_file(converter_type, sample)
+    second_run = _convert_file(converter_type, sample)
+    assert first_run == second_run, (
+        f"{converter_type} output varies between runs, so golden-file "
+        f"comparison is not a valid technique for it"
+    )
 
 
 # --------------------------------------------------------------------------

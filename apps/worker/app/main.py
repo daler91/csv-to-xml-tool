@@ -1,11 +1,13 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .core.auth import require_worker_token
+from .core.paths import verify_schemas_dir
 from .logging_context import LOG_FORMAT, install_job_id_log_factory
 from .routes import health, preview, convert, validate, fix
 
@@ -15,7 +17,24 @@ install_job_id_log_factory()
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="CSV-to-XML Worker", version="1.2.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Refuse to start when the XSD schemas can't be found.
+
+    Without them the worker still answers every request, but reports every
+    document as invalid with no reasons attached -- a silent failure in a
+    federal-reporting tool. Better to not come up at all. Checked here rather
+    than at import time so importing the app (as the tests do) stays side-effect
+    free. Imported lazily to pick up any monkeypatched SCHEMAS_DIR.
+    """
+    from .routes.validate import SCHEMAS_DIR
+    verify_schemas_dir(SCHEMAS_DIR)
+    logger.info("XSD schemas found at %s", os.path.realpath(SCHEMAS_DIR))
+    yield
+
+
+app = FastAPI(title="CSV-to-XML Worker", version="1.2.0", lifespan=lifespan)
 
 _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 

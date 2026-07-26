@@ -114,10 +114,20 @@ async function migrate() {
 
     console.log("Migration complete - all tables ready");
   } catch (err) {
+    // Must exit non-zero. This used to log and fall through, and the Dockerfile
+    // CMD chained with `;`, so a failed migration still started the server: the
+    // app came up against a half-migrated database and every query failed at
+    // request time with P2022 instead of the container failing at boot.
     console.error("Migration failed:", err.message);
+    process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }
 }
 
-migrate();
+// Catch anything thrown outside the try (e.g. new PrismaClient()) rather than
+// leaving an unhandled rejection, which would also exit 0 on older Node.
+migrate().catch((err) => {
+  console.error("Migration failed to run:", err.message);
+  process.exitCode = 1;
+});

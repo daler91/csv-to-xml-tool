@@ -1,6 +1,11 @@
 services:
   web:
-    build: ./apps/web
+    # Repo-root context, matching the worker below and Railway. apps/web/Dockerfile
+    # does `COPY apps/web/...`, so a ./apps/web context resolved those to
+    # apps/web/apps/web/... and the build failed on the first COPY.
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
     ports: ["3000:3000"]
     env_file: .env
     environment:
@@ -14,7 +19,7 @@ services:
       redis:
         condition: service_healthy
       worker:
-        condition: service_started
+        condition: service_healthy
 
   worker:
     build:
@@ -31,10 +36,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # stdlib, not curl: python:3.12-slim ships no curl, so the previous probe
+      # failed with "executable file not found" on every attempt and the worker
+      # was permanently unhealthy. Checks the body rather than the status code
+      # because /health returns 200 even when degraded.
+      test: ["CMD", "python", "-c", "import urllib.request,json,sys; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:8000/health',timeout=3))['status']=='ok' else 1)"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   db:
     image: postgres:16-alpine

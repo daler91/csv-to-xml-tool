@@ -239,17 +239,30 @@ becomes 2023-12-12.
 
 ## Tier 2 — Deployment integrity
 
-### 2.1 `SCHEMAS_DIR` default is wrong in *every* layout — `[OPEN]`
+### 2.1 `SCHEMAS_DIR` default is wrong in *every* layout — `[FIXED]`
 
-`conversion_service.py:37` and `validate.py:18` both build the default with three `..`:
+> **Correction to this finding as originally written.** It claimed "no single `..` count fixes both
+> layouts — this needs a real anchor, not an off-by-one correction." That was wrong: it missed that
+> **`apps/worker/schemas` is a git-tracked symlink** (mode `120000`) to `../../schemas`, which makes
+> **two** `..` resolve correctly in both layouts (repo → symlink → `<root>/schemas`; Docker →
+> `/app/schemas`). It was a plain off-by-one — 3 `..` where 2 was intended — and the symlink exists
+> precisely to make the 2-dot form work. The *impact* below was accurate; only the diagnosis of the
+> fix was wrong.
+>
+> Fixed in `apps/worker/app/core/paths.py`: `default_schemas_dir()` tries the 2-`..` path then falls
+> back to walking up for a `schemas/` directory holding both XSDs (a Windows checkout without
+> symlink support turns the symlink into a plain text file). `XSD_MAP` is deduplicated there too.
+> `SCHEMAS_DIR` stays a module-level name in each consumer — 16 tests monkeypatch it, and `fix.py`'s
+> re-import is a separate binding patched independently. A `lifespan` hook now refuses to start when
+> the schemas are absent, `/health` reports a `schemas` check, and
+> `tests/test_worker_schema_paths.py` covers the default **without** monkeypatching.
 
-| Layout | Resolves to | Exists | Would need |
-|---|---|---|---|
-| Repo | `apps/schemas` | ✗ | 4 × `..` |
-| Docker (`/app/app/services`) | `/schemas` | ✗ | 2 × `..` |
+`conversion_service.py:37` and `validate.py:18` both built the default with three `..`:
 
-**No single `..` count fixes both** — this needs a real anchor (walk up for `schemas/`, or fail fast
-at startup), not an off-by-one correction.
+| Layout | Resolved to | Existed |
+|---|---|---|
+| Repo | `apps/schemas` | ✗ |
+| Docker (`/app/app/services`) | `/schemas` | ✗ |
 
 It works today only because `docker-compose.yml:27` sets the variable explicitly.
 `apps/worker/railway.toml` sets **no environment variables at all**, and `SCHEMAS_DIR` is absent
@@ -262,7 +275,11 @@ not (`test_worker_content_routes.py:293`) asserts `is_valid is False` and **pass
 reason** — not because the document violates the schema, but because the XSD file could not be
 opened.
 
-### 2.2 The documented local-dev path cannot work — `[OPEN]`
+### 2.2 The documented local-dev path cannot work — `[FIXED]`
+
+> Fixed: `docker-compose.yml` now builds web with `context: .` + `dockerfile: apps/web/Dockerfile`,
+> matching the worker service and Railway. A `docker-build` CI job builds both images and runs
+> `docker compose up -d --wait`, so this cannot silently regress again.
 
 `docker-compose.yml:3` sets `build: ./apps/web`, but `apps/web/Dockerfile:3,9` uses
 `COPY apps/web/…`, which is repo-root-relative. Under the compose context those resolve to
@@ -270,7 +287,16 @@ opened.
 `COPY`. It works on Railway only because `apps/web/railway.toml` builds from the repo root.
 CI never builds either image, which is why this went unnoticed.
 
-### 2.3 Other deployment gaps — `[OPEN]`
+### 2.3 Other deployment gaps — `[FIXED]` (most); `[OPEN]` (Redis persistence)
+
+> Fixed: the `curl` healthcheck is now a stdlib Python probe that reads the body (and both images
+> gained a `HEALTHCHECK`); web's `depends_on` for worker is now `service_healthy`; `migrate.js` exits
+> non-zero and the Dockerfile CMD uses `&&`, so a failed migration can no longer boot a serving app;
+> the dead `startCommand` is gone from `apps/web/railway.toml`, leaving the Dockerfile CMD as the
+> single source of truth; both images run as a non-root user with `DATA_DIR` owned by that user; and
+> a repo-root `.dockerignore` now exists.
+> **Still open:** Redis has no persistence volume, so a restart drops queued jobs until the reaper
+> catches them.
 
 - The worker healthcheck shells out to `curl`, which is **not installed in `python:3.12-slim`** —
   the check is permanently red.

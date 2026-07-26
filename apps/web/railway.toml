@@ -3,7 +3,11 @@ builder = "dockerfile"
 dockerfilePath = "apps/web/Dockerfile"
 
 [deploy]
-startCommand = "sh -c 'npx prisma db push --skip-generate && node server.js'"
+# No startCommand: the Dockerfile CMD is the single source of truth. The command
+# that used to live here ran `npx prisma db push`, which could not work -- the
+# runtime stage copies neither prisma/schema.prisma nor the prisma CLI -- and
+# contradicted scripts/migrate.js, which is what the deployed container actually
+# runs (see commit 481c0a2, a production incident caused by that divergence).
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

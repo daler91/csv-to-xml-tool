@@ -32,6 +32,17 @@ jobs:
           # any known advisory; allowlist a specific one with --ignore-vuln <ID>.
           pip-audit -r requirements.txt -r apps/worker/requirements.txt
 
+      - name: Verify schemas resolve without SCHEMAS_DIR
+        # The worker's default used to resolve to a nonexistent directory in both
+        # the repo and Docker layouts, which made XSD validation silently no-op.
+        # Every other test monkeypatches SCHEMAS_DIR, so this cheap unpatched
+        # check is what keeps the default honest.
+        run: |
+          env -u SCHEMAS_DIR python -c "import sys; sys.path.insert(0, 'apps/worker'); \
+            import os; from app.services.conversion_service import SCHEMAS_DIR; \
+            assert os.path.isdir(SCHEMAS_DIR), SCHEMAS_DIR; \
+            print('schemas resolved to', os.path.realpath(SCHEMAS_DIR))"
+
       - name: Run tests
         # Coverage gate (QUAL-2): measure src/ + the worker app and fail under
         # the current baseline (~71%) so coverage can't regress. Raise the floor
@@ -65,3 +76,32 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  docker-build:
+    # Nothing in CI built or ran either image, which is how three separate
+    # deployment defects survived: a compose build context that couldn't resolve,
+    # a healthcheck calling a binary the image doesn't ship, and a failed
+    # migration that still started the server. `build` alone catches only the
+    # first -- `up --wait` is what exercises the other two.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide env file
+        # web, worker and db all declare `env_file: .env`; compose errors out if
+        # it's missing. The example values are fine for a throwaway stack.
+        run: cp .env.example .env
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start stack and wait for healthy
+        run: docker compose up -d --wait
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

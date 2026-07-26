@@ -1,9 +1,10 @@
-from __future__ import annotations
-
 """
 Enhanced data cleaning and formatting utilities for Salesforce CSV to XML conversion.
 This module contains functions for cleaning and standardizing Salesforce data formats.
 """
+
+from __future__ import annotations
+
 import logging
 import re
 from datetime import datetime

@@ -100,29 +100,31 @@ Your output XML and validation reports will be saved in the `output/` and `repor
 
 ```
 .
-├── run.py                         # Interactive launcher (start here!)
-├── run.bat                        # Windows double-click shortcut
-├── setup.bat                      # Windows one-time setup
+├── run.py                          # Interactive launcher (start here!)
+├── run.bat / setup.bat             # Windows shortcuts
 ├── src/
 │   ├── converters/
-│   │   ├── base_converter.py       # Base class for all converters
-│   │   ├── counseling_converter.py # Logic for converting counseling data (Form 641)
-│   │   └── training_converter.py   # Logic for converting training class data
-│   ├── main.py                     # Main entry point to run the converters
-│   ├── data_cleaning.py            # Functions for cleaning, formatting, and standardizing data
-│   ├── data_validation.py          # Functions for validating data integrity
-│   ├── xml_utils.py                # Helper functions for creating XML elements
-│   ├── config.py                   # Central configuration for field mappings, defaults, and validation rules
-│   ├── validation_report.py        # Module for tracking and reporting validation issues
-│   ├── logging_util.py             # Configures application-wide logging
-│   ├── fix_sba_xml.py              # Utility to fix element order in existing SBA XML files
-│   └── xml_validator.py            # Utility to validate XML files against an XSD
-├── tests/
-│   ├── test_counseling_converter.py
-│   ├── test_data_cleaning.py
-│   ├── test_training_converter.py
-│   └── test_xml_utils.py
-└── README.md
+│   │   ├── base_converter.py        # Shared progress plumbing + EmptyCSVError
+│   │   ├── counseling_converter.py  # Form 641 counseling sessions
+│   │   ├── training_converter.py    # Form 888 training events (per-attendee rollup)
+│   │   └── training_client_converter.py  # Form 641 from per-attendee training rows
+│   ├── main.py                      # CLI entry point
+│   ├── config.py                    # Field mappings, defaults, XSD enumerations
+│   ├── data_cleaning.py             # Formatting, standardization, enum mapping
+│   ├── data_validation.py           # Row validation + the preview data-quality report
+│   ├── validation_report.py         # Issue tracking, CSV + HTML reports
+│   ├── xml_utils.py                 # create_element / emit_optional
+│   ├── xsd_error_mapping.py         # Maps XSD errors back to CSV rows and columns
+│   ├── xml_validator.py             # XSD validation + element-order repair
+│   ├── fix_sba_xml.py               # CLI wrapper around the order repair
+│   ├── path_safety.py               # Output-path confinement
+│   └── logging_util.py              # Logging setup
+├── apps/
+│   ├── web/                         # Next.js frontend + API (auth, jobs, downloads)
+│   └── worker/                      # FastAPI service; imports src/ in-process
+├── schemas/                         # The two SBA XSDs
+├── tests/                           # 343 tests (pytest); apps/web has its own vitest suite
+└── CODEBASE_ANALYSIS.md             # Current findings register, with status markers
 ```
 
 -----
@@ -166,9 +168,21 @@ This will re-order the elements to match the schema requirements.
 
 ### Command-Line Arguments (`main.py`)
 
-  * `converter_type`: The type of conversion to perform (`counseling` or `training`).
+  * `converter_type`: `counseling`, `training`, or `training-client`.
   * `--input, -i`: Path to the input CSV file.
   * `--output, -o`: (Optional) Path for the output XML file. If omitted, the XML will be saved in the same directory as the input file with a timestamp.
   * `--log-level`: Set the logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `INFO`.
   * `--report-dir`: Directory to save validation reports. Defaults to `reports/`.
   * `--log-dir`: Directory to save log files. Defaults to `logs/`.
+
+### Writing outside the project folder
+
+All output paths are confined to the project directory. Passing an `--output`,
+`--report-dir` or `--log-dir` outside it fails with *"Refusing to write outside
+…"*. To allow another location, set `SBA_OUTPUT_BASE` to the directory you want
+writes confined to:
+
+```bash
+SBA_OUTPUT_BASE=/srv/sba-output python -m src.main convert counseling \
+  --input report.csv --output /srv/sba-output/counseling.xml
+```

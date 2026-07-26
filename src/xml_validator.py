@@ -237,65 +237,6 @@ def reorder_elements(parent, element_order):
         if tag not in element_order:
             _append_elements(parent, elements, tag)
 
-def check_element_order(parent, element_order):
-    """
-    Check if elements are in the correct order.
-
-    Args:
-        parent: Parent element
-        element_order: List of element names in the correct order
-
-    Returns:
-        Boolean indicating if there are ordering issues
-    """
-    # Get tags of child elements
-    child_tags = [child.tag for child in parent]
-
-    # Find elements from order list that exist in the XML
-    expected_order = [tag for tag in element_order if tag in child_tags]
-
-    # Check if the actual order matches the expected order
-    # This simple check assumes all expected_order elements are present and in sequence.
-    # A more robust check might be needed if elements can be optional and still affect order.
-    current_pos_in_xml = 0
-    for tag_in_expected_order in expected_order:
-        try:
-            # Find the current tag's first occurrence in the actual child_tags list
-            # starting from where the last tag was found.
-            idx = child_tags.index(tag_in_expected_order, current_pos_in_xml)
-            current_pos_in_xml = idx + 1
-        except ValueError:
-            # Tag in expected_order is not in child_tags (or not after the previous one)
-            # This might indicate an issue or an optional element not present.
-            # For strict ordering of present elements, this is an issue.
-            return True # Order issue or missing element that breaks sequence
-
-    # Check if all elements from child_tags that are in element_order are in the correct sequence
-    # This is a more complex check. The current logic in fix-sba-xml.py is simpler:
-    last_index_in_parent = -1
-    for tag_in_schema_order in element_order: # Iterate through the schema-defined order
-        try:
-            # Find the first occurrence of this tag in the parent's children
-            indices_in_parent = [i for i, child in enumerate(parent) if child.tag == tag_in_schema_order]
-            if not indices_in_parent:
-                continue # This element is not in the parent, skip
-
-            current_element_first_index = indices_in_parent[0]
-
-            if current_element_first_index < last_index_in_parent:
-                return True # Element appeared sooner than a preceding element in schema order
-            last_index_in_parent = current_element_first_index
-
-            # Additionally, ensure all instances of this tag are contiguous if that's a requirement
-            # (The current reorder logic groups them, so this check might be for pre-existing state)
-            # For now, just checking first occurrence order.
-
-        except ValueError:
-            # Element from element_order not found in parent, which is fine if it's optional.
-            pass
-
-    return False  # No order issues based on first occurrence
-
 def _resolve_output_path(file_path, input_dir, output_dir):
     """Compute the output path for a file, creating directories as needed."""
     if not output_dir:

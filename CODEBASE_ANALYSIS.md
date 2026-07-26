@@ -396,7 +396,26 @@ Status: `[FIXED]` except where noted.
 
 ## Tier 5 — Architecture, quality, docs
 
-All `[OPEN]`.
+Status: mixed — see each item.
+
+> **Fixed in the Tier 5 pass:** 5.3 dead code (`check_element_order` with its two contradictory
+> implementations, the `analyze_*_csv` pair written for a `--analyze-only` flag that doesn't exist,
+> `ValidationTracker.failed_records`, the worker's never-called `sanitize_id`/`sanitize_filename`,
+> `components/ui/card.tsx`, the unused `@auth/prisma-adapter`, and the stale `patch_tests.diff`);
+> 5.4 (`from __future__` moved below the docstrings in all five modules, so `__doc__` is populated
+> again; the import-time global logger that cleared handlers is gone; the fiscal-year cutoff is now
+> computed per call instead of frozen at import, which mattered for a long-lived worker crossing
+> October 1); and 5.7 docs — `ARCHITECTURE_REVIEW.md` now carries per-finding status markers and a
+> banner stating plainly that it is a historical record with stale citations, `TECHNICAL_DEBT.md`
+> #3/#11/#19 are refreshed, and the README covers the third converter, the real module list and
+> `SBA_OUTPUT_BASE`.
+>
+> **Still open:** 5.1 (the inverted converter abstraction and the two CSV engines) and 5.2 (no
+> column mapping in the counseling converter) — both are large refactors of code that now has real
+> test coverage but no strong behavioural contract, and are worth scoping deliberately rather than
+> doing opportunistically. 5.5 is partial: ruff is in CI, but there is still no formatter, no type
+> checker and no ESLint. 5.6 (web duplication, `results/page.tsx` at 685 LOC, the dual
+> schema/migrate.js source of truth, the stale audit action labels) is untouched.
 
 ### 5.1 The converter abstraction is inverted
 

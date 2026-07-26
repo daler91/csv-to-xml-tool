@@ -9,13 +9,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.data_validation import (
     validate_counseling_record,
     validate_training_record,
-    analyze_counseling_csv,
-    analyze_training_csv
 )
-from src.config import ValidationCategory as VC, CounselingConfig, TrainingConfig
+from src.config import ValidationCategory as VC, CounselingConfig, TrainingConfig, fiscal_year_start
 
 # Use a date within the current fiscal year for valid test cases
-_VALID_DATE = CounselingConfig.MIN_COUNSELING_DATE.replace("-01", "-15")
+_VALID_DATE = fiscal_year_start().replace("-01", "-15")
 
 class TestDataValidation(unittest.TestCase):
 
@@ -93,7 +91,7 @@ class TestDataValidation(unittest.TestCase):
         self.assertTrue(result)
         self.validator.set_current_record_id.assert_called_once_with("C-126")
         self.validator.add_issue.assert_called_once_with(
-            "C-126", "warning", VC.INVALID_DATE, "Date Counseled", f"Date 2020-01-01 is before minimum of {CounselingConfig.MIN_COUNSELING_DATE}"
+            "C-126", "warning", VC.INVALID_DATE, "Date Counseled", f"Date 2020-01-01 is before minimum of {fiscal_year_start()}"
         )
 
     def test_validate_training_record_success(self):
@@ -123,33 +121,6 @@ class TestDataValidation(unittest.TestCase):
             "Row_2", "error", VC.MISSING_REQUIRED, event_id_col, "Missing required Class/Event ID."
         )
 
-    def test_analyze_counseling_csv(self):
-        rows = [
-            {CounselingConfig.REQUIRED_FIELDS[0]: "C-1", 'Last Name': 'Doe', 'First Name': 'John', 'Date': _VALID_DATE},
-            {'Last Name': 'Smith', 'First Name': 'Alice'}, # missing id
-            {CounselingConfig.REQUIRED_FIELDS[0]: "C-3", 'First Name': 'Bob'}, # missing last name
-            {CounselingConfig.REQUIRED_FIELDS[0]: "C-4", 'Last Name': 'Brown', 'Date': 'invalid'}, # invalid date, missing first name
-        ]
-
-        analysis = analyze_counseling_csv(rows)
-
-        self.assertEqual(analysis['row_count'], 4)
-        self.assertEqual(analysis['missing_contact_id'], 1)
-        self.assertEqual(analysis['missing_names'], 2)
-        self.assertEqual(analysis['invalid_dates'], 1)
-
-    def test_analyze_training_csv(self):
-        event_id_col = TrainingConfig.COLUMN_MAPPING['event_id']
-        rows = [
-            {event_id_col: "T-1"},
-            {}, # missing event id
-            {event_id_col: "T-3"}
-        ]
-
-        analysis = analyze_training_csv(rows)
-
-        self.assertEqual(analysis['row_count'], 3)
-        self.assertEqual(analysis['missing_event_id'], 1)
 
 if __name__ == '__main__':
     unittest.main()

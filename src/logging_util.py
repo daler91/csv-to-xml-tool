@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """
 Logging utility for CSV to XML conversion.
 This module provides configurable logging functionality for the conversion process.
 """
+
+from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -123,7 +123,8 @@ class ConversionLogger:
         """Log a debug message."""
         self.logger.debug(message)
 
-# Default global logger instance (can be replaced by specific instantiations in scripts)
-# This instance is for convenience if a script needs a quick logger without specific config.
-# Most executable scripts should create their own configured instance.
-logger = ConversionLogger(logger_name="default_app_logger", log_to_file=False)
+# No module-level logger instance here on purpose. There used to be one, and
+# merely importing this module therefore ran ConversionLogger.__init__, which
+# does `self.logger.handlers = []` -- i.e. importing a utility module mutated
+# global logging state as a side effect. Nothing imported it (every caller
+# constructs its own ConversionLogger), so it was pure side effect.

@@ -25,7 +25,7 @@ Replaced generic `except Exception` blocks with specific exception types (`OSErr
 - Added `try/except OSError` around file writes in `validation_report.py` (CSV and HTML report generation).
 - Added `None` guard for `.text` access on XML elements in `xml_validator.py`.
 
-**Remaining:** CSV column existence pre-checks in converters could still be added for more robust early failure.
+**Remaining:** none. CSV column pre-checks now live in `apps/worker/app/services/column_requirements.py`: `classify_columns` raises `RequiredColumnsMissingError` (surfaced as a 422) and warns on missing conditional/fabrication-risk columns.
 
 ---
 
@@ -79,15 +79,11 @@ Added named constants in `data_cleaning.py` (`PHONE_NUMBER_DIGITS`, `PHONE_WITH_
 
 ---
 
-### 11. No Web Application Tests
+### 11. No Web Application Tests **[RESOLVED]**
 
-- No `apps/web/__tests__/` directory exists -- zero frontend test coverage.
-- No integration tests for API routes in `apps/web/src/app/api/`.
-- No end-to-end tests for the conversion flow through the web UI.
-- No test framework (Jest, Vitest, Playwright) is configured in `apps/web/package.json`.
-
-**Status:** Not yet resolved. Requires adding a test framework and writing tests.
-
+Vitest is wired up (`apps/web/package.json` `"test": "vitest run"`, `vitest.config.ts`) and runs
+in CI. 166 tests across 22 files cover the API routes, the job queue/consumer/runner/reaper,
+retention, rate limiting, path confinement, auth throttling and the security headers.
 ---
 
 ### 12. Docker Compose Missing Health Checks **[RESOLVED]**
@@ -144,10 +140,12 @@ Both converters load entire files into memory. With a 50MB upload limit, this co
 
 ---
 
-### 19. Missing Python Linting and Formatting
+### 19. Missing Python Linting and Formatting **[PARTIAL]**
 
-- No `ruff`, `flake8`, or `black` is configured for the Python codebase.
-- No `pyproject.toml` or equivalent configuration file for Python tooling.
-- The CI pipeline runs `pytest` but has no Python linting step.
+Ruff now runs in CI (`pyproject.toml`, `.github/workflows/ci.yml`), scoped deliberately to
+correctness rules only — `F`, `E9`, `B`. It exists because pyflakes' `F821` caught a refactor that
+left the tail of a method unreachable, silently dropping four elements from every counseling
+record while the whole suite stayed green.
 
-**Status:** Not yet resolved. Adding `ruff` deferred to avoid scope creep.
+**Remaining:** no formatter (black/ruff-format) and no type checker (mypy). Style rules are
+deliberately off — with no formatter in place they would bury real findings.

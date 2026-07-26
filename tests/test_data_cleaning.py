@@ -1,5 +1,4 @@
 import unittest
-from datetime import datetime # For testing date outputs if needed, though format_date handles strings
 import sys
 import os
 

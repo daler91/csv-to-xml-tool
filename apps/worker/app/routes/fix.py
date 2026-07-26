@@ -115,8 +115,8 @@ async def fix_xml(req: FixXmlRequest):
         }
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         logger.exception("XML auto-fix failed")
-        raise HTTPException(status_code=500, detail="Internal fix error")
+        raise HTTPException(status_code=500, detail="Internal fix error") from e
     finally:
         await cleanup_staging(tmp_dir)

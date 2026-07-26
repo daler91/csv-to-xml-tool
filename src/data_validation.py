@@ -12,8 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from .data_cleaning import (
-    clean_phone_number, format_date, is_ambiguous_date, is_empty,
-    split_multi_value, standardize_country_code, standardize_state_name
+    format_date, is_ambiguous_date, is_empty, split_multi_value
 )
 from .config import (
     COUNSELING_FABRICATION_DEFAULTS,

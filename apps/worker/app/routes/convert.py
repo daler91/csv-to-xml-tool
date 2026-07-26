@@ -94,24 +94,24 @@ async def convert(req: ConvertRequest):
         result.pop("xml_path", None)
         result["xml_content"] = xml_content
         return result
-    except ConversionCancelledError:
+    except ConversionCancelledError as e:
         logger.info("Conversion cancelled for job %s", req.job_id)
-        raise HTTPException(status_code=409, detail="Conversion cancelled")
+        raise HTTPException(status_code=409, detail="Conversion cancelled") from e
     except RequiredColumnsMissingError as e:
         # CONV-1: surface exactly which required columns are missing instead of a
         # generic 400, so the web layer can record/show what the user must fix.
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except EmptyCSVError as e:
         # CONV-6: headers-only / empty CSV is unprocessable; map to 422 (before the
         # generic ValueError handler, since EmptyCSVError subclasses ValueError).
-        raise HTTPException(status_code=422, detail=str(e))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid request parameters")
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid request parameters") from e
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         logger.exception("Conversion failed")
-        raise HTTPException(status_code=500, detail="Internal conversion error")
+        raise HTTPException(status_code=500, detail="Internal conversion error") from e
     finally:
         # Drop the cancellation flag and progress snapshot so the same job_id
         # can be reused after a re-upload, and remove the worker-local temp dir.

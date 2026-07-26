@@ -217,7 +217,7 @@ class TestCounselingXSDValidation(unittest.TestCase):
         xml_path = self._convert([_make_counseling_row()])
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -230,7 +230,7 @@ class TestCounselingXSDValidation(unittest.TestCase):
         xml_path = self._convert(rows)
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -244,7 +244,7 @@ class TestCounselingXSDValidation(unittest.TestCase):
         })])
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -264,7 +264,7 @@ class TestCounselingXSDValidation(unittest.TestCase):
                 ['Belgium', 'Canada'],
             )
             is_valid, errors = _validate_xml_against_xsd(xml_path, COUNSELING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -326,7 +326,7 @@ class TestTrainingXSDValidation(unittest.TestCase):
         xml_path = self._convert(rows)
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, TRAINING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -341,7 +341,7 @@ class TestTrainingXSDValidation(unittest.TestCase):
         xml_path = self._convert(rows)
         try:
             is_valid, errors = _validate_xml_against_xsd(xml_path, TRAINING_XSD)
-            self.assertTrue(is_valid, f"XSD validation errors:\n" + "\n".join(errors[:10]))
+            self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
         finally:
             os.unlink(xml_path)
 
@@ -545,6 +545,41 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         """A partner funding label is not in the XSD's SBA funding-code enum."""
         tree = self._assert_valid([_make_counseling_row(**{'Funding Source': 'Federal'})])
         self.assertEqual(tree.findall('.//FundingSource'), [])
+
+    def test_counselor_record_carries_client_identity(self):
+        """CounselorRecord must still carry the client's name, email and address.
+
+        These are all minOccurs="0", so dropping them leaves the document
+        perfectly schema-valid -- XSD validation cannot catch their loss, and a
+        refactor did exactly that: a method inserted mid-body left the tail of
+        _build_counselor_identity unreachable after a return, silently removing
+        ClientNamePart3/Email/PhonePart3/AddressPart3 from every record while
+        every test stayed green.
+        """
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Last Name': 'Smith',
+            'First Name': 'John',
+            'Email': 'john@example.com',
+            'Contact: Phone': '5155551234',
+            'Mailing City': 'Des Moines',
+            'Mailing State/Province': 'IA',
+            'Mailing Zip/Postal Code': '50312',
+        })])
+        counselor = tree.find('.//CounselorRecord')
+        self.assertIsNotNone(counselor)
+
+        name = counselor.find('ClientNamePart3')
+        self.assertIsNotNone(name, "ClientNamePart3 missing from CounselorRecord")
+        self.assertEqual(name.find('Last').text, 'Smith')
+        self.assertEqual(name.find('First').text, 'John')
+
+        self.assertEqual(counselor.find('Email').text, 'john@example.com')
+        self.assertEqual(counselor.find('PhonePart3/Primary').text, '5155551234')
+
+        address = counselor.find('AddressPart3')
+        self.assertIsNotNone(address, "AddressPart3 missing from CounselorRecord")
+        self.assertEqual(address.find('City').text, 'Des Moines')
+        self.assertEqual(address.find('ZipCode').text, '50312')
 
 
 if __name__ == '__main__':

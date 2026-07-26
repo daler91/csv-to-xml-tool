@@ -1,0 +1,26 @@
+[tool.ruff]
+# Lint the shared conversion core, the worker service, the CLI, and the tests.
+target-version = "py312"
+line-length = 120
+extend-exclude = ["apps/web", ".venv", "venv"]
+
+[tool.ruff.lint]
+# Deliberately narrow: correctness rules only, not style.
+#
+#   F   pyflakes  -- undefined names, unreachable-by-scope references, unused imports
+#   E9  syntax/IO errors
+#   B   flake8-bugbear -- likely-wrong constructs (mutable defaults, unused loop vars)
+#
+# F821 is the reason this exists. A method inserted into the middle of another
+# method left the tail of the outer one unreachable after a `return`, silently
+# dropping ClientNamePart3/Email/PhonePart3/AddressPart3 from every counseling
+# record. Those elements are all minOccurs="0", so the XML stayed schema-valid
+# and the entire test suite stayed green. Pyflakes caught it in under a second.
+#
+# Style rules (E1-E7, W, I, N, UP...) are intentionally NOT enabled: this
+# codebase has no formatter, and turning them on would bury real findings.
+select = ["F", "E9", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use bare asserts and long inline fixtures.
+"tests/*" = ["B011"]

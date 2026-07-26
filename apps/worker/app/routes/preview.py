@@ -29,9 +29,9 @@ async def preview(req: PreviewRequest):
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         logger.exception("Preview failed")
-        raise HTTPException(status_code=500, detail="Internal preview error")
+        raise HTTPException(status_code=500, detail="Internal preview error") from e

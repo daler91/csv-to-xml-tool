@@ -429,6 +429,15 @@ class CounselingConverter(BaseConverter):
             emit_optional(counselor_record, 'FundingSource',
                           self._resolve_funding_source(funding_source, record_id))
 
+        counselor_name_part3 = create_element(counselor_record, 'ClientNamePart3')
+        create_element(counselor_name_part3, 'Last', row.get('Last Name', ''))
+        create_element(counselor_name_part3, 'First', row.get('First Name', ''))
+        emit_optional(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
+
+        emit_optional(counselor_record, 'Email', row.get('Email', ''))
+        self._build_phone(counselor_record, 'PhonePart3', row)
+        self._build_address(counselor_record, 'AddressPart3', row, record_id)
+
     def _resolve_funding_source(self, funding_source, record_id):
         """Return the funding source iff it matches the XSD enumeration, else ''."""
         cleaned = str(funding_source).strip()
@@ -440,15 +449,6 @@ class CounselingConverter(BaseConverter):
             f"Funding Source '{cleaned}' is not a recognized SBA funding code; omitted from the XML.",
         )
         return ""
-
-        counselor_name_part3 = create_element(counselor_record, 'ClientNamePart3')
-        create_element(counselor_name_part3, 'Last', row.get('Last Name', ''))
-        create_element(counselor_name_part3, 'First', row.get('First Name', ''))
-        emit_optional(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
-
-        emit_optional(counselor_record, 'Email', row.get('Email', ''))
-        self._build_phone(counselor_record, 'PhonePart3', row)
-        self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
     def _build_business_verification(self, counselor_record, row):
         """Build business verification and reportable impact fields. Returns session-relevant values."""

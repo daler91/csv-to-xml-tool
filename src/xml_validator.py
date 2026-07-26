@@ -235,7 +235,7 @@ def check_element_order(parent, element_order):
     # This simple check assumes all expected_order elements are present and in sequence.
     # A more robust check might be needed if elements can be optional and still affect order.
     current_pos_in_xml = 0
-    for i, tag_in_expected_order in enumerate(expected_order):
+    for tag_in_expected_order in expected_order:
         try:
             # Find the current tag's first occurrence in the actual child_tags list
             # starting from where the last tag was found.

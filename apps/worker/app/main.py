@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -34,7 +35,22 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="CSV-to-XML Worker", version="1.2.0", lifespan=lifespan)
+# The interactive docs and the OpenAPI schema were served unauthenticated,
+# handing anyone the worker's full request/response contract. They're useful in
+# development, so they're kept there and disabled everywhere else.
+_DOCS_ENABLED = os.environ.get("ENVIRONMENT", "development").lower() not in {
+    "production",
+    "prod",
+}
+
+app = FastAPI(
+    title="CSV-to-XML Worker",
+    version="1.2.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
+)
 
 _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
@@ -42,6 +58,99 @@ _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").sp
 # parsed into memory. The web layer enforces a 50MB *file* cap; this is a
 # generous backstop on the JSON envelope (CSV content is sent as a string field).
 MAX_REQUEST_BYTES = int(os.environ.get("MAX_REQUEST_BYTES", str(100 * 1024 * 1024)))
+
+
+class _RequestTooLarge(Exception):
+    """Raised from the receive wrapper when a streamed body exceeds the cap."""
+
+
+async def _send_json(send, status_code: int, payload: dict) -> None:
+    body = json.dumps(payload).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+class BodySizeLimitMiddleware:
+    """Reject request bodies exceeding MAX_REQUEST_BYTES.
+
+    Checks the declared Content-Length first (rejects before anything is read),
+    then counts bytes as the body streams. The streaming half is the point: the
+    previous version trusted Content-Length alone, so a request sent with
+    ``Transfer-Encoding: chunked`` and no Content-Length skipped the guard
+    entirely and Starlette buffered the whole body -- the cap was bypassable by
+    omitting one header.
+
+    Written as raw ASGI rather than ``@app.middleware("http")`` deliberately:
+    Starlette's BaseHTTPMiddleware hands the *original* receive channel to
+    ``call_next``, so replacing ``request._receive`` there has no effect on what
+    the endpoint actually reads.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        # Read the module global at call time so tests (and env reloads) can
+        # override it without rebuilding the middleware stack.
+        max_bytes = MAX_REQUEST_BYTES
+
+        declared_raw = dict(scope.get("headers") or {}).get(b"content-length")
+        if declared_raw is not None:
+            try:
+                declared = int(declared_raw)
+            except ValueError:
+                return await _send_json(send, 400, {"detail": "Invalid Content-Length"})
+            if declared < 0:
+                return await _send_json(send, 400, {"detail": "Invalid Content-Length"})
+            if declared > max_bytes:
+                return await _send_json(send, 413, {"detail": "Request body too large"})
+
+        received = 0
+        too_large = False
+        responded = False
+
+        async def limited_receive():
+            nonlocal received, too_large
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > max_bytes:
+                    # Truncate rather than raise: an exception here is caught by
+                    # FastAPI's body parsing and reported as "error parsing the
+                    # body" (400), which hides the real reason. Ending the body
+                    # early lets the request finish, and guarded_send below
+                    # replaces whatever the endpoint produced with a 413.
+                    too_large = True
+                    return {"type": "http.request", "body": b"", "more_body": False}
+            return message
+
+        async def guarded_send(message):
+            nonlocal responded
+            if too_large:
+                if not responded:
+                    responded = True
+                    await _send_json(
+                        send, 413, {"detail": "Request body too large"}
+                    )
+                return  # drop the endpoint's own response
+            await send(message)
+
+        await self.app(scope, limited_receive, guarded_send)
+        if too_large and not responded:
+            await _send_json(send, 413, {"detail": "Request body too large"})
+
 
 # The worker is called server-to-server by the web backend, never from a
 # browser, so CORS can be tight: only the methods/headers we actually use.
@@ -53,22 +162,7 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def limit_request_body_size(request: Request, call_next):
-    """Reject requests whose declared body exceeds MAX_REQUEST_BYTES."""
-    content_length = request.headers.get("content-length")
-    if content_length is not None:
-        try:
-            declared = int(content_length)
-        except ValueError:
-            return JSONResponse(
-                status_code=400, content={"detail": "Invalid Content-Length"}
-            )
-        if declared > MAX_REQUEST_BYTES:
-            return JSONResponse(
-                status_code=413, content={"detail": "Request body too large"}
-            )
-    return await call_next(request)
+app.add_middleware(BodySizeLimitMiddleware)
 
 
 # /health stays unauthenticated so container/platform healthchecks keep working.
@@ -94,10 +188,11 @@ logger.info("=========================")
 async def catch_all(path: str, request: Request):
     sanitized_path = path.replace("\n", "").replace("\r", "")[:200]
     logger.error("CATCH-ALL: %s /%s (no route matched)", request.method, sanitized_path)
-    return JSONResponse(
-        status_code=404,
-        content={
-            "detail": "No route matched",
-            "registered_routes": _registered,
-        },
-    )
+    # The route table goes to the log, not the response. Returning it here
+    # handed the worker's entire API surface to any anonymous caller who
+    # guessed a wrong path; the same information is already logged at startup
+    # for whoever is actually debugging.
+    body = {"detail": "No route matched"}
+    if _DOCS_ENABLED:
+        body["registered_routes"] = _registered
+    return JSONResponse(status_code=404, content=body)

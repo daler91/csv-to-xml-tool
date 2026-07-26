@@ -1,4 +1,5 @@
 import unittest
+import csv
 import os
 import shutil
 import tempfile
@@ -184,6 +185,70 @@ class TestValidationTracker(unittest.TestCase):
 
         self.assertIn("<th>Event ID</th>", content)
         self.assertIn("<td>EVT-HTML</td>", content)
+
+
+class TestReportEscaping(unittest.TestCase):
+    """Reports embed raw spreadsheet content, so it has to be neutralized.
+
+    Issue messages quote the offending value (an unrecognized session type, a
+    bad country, a ZIP that wouldn't parse), so whatever a CSV cell contained
+    was written straight into the HTML report and the CSV export.
+    """
+
+    def setUp(self):
+        self.tracker = ValidationTracker()
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_html_report_escapes_script_tags(self):
+        self.tracker.add_issue(
+            "<script>alert(1)</script>", "error", "invalid_value",
+            "<img src=x onerror=alert(2)>",
+            "Value '<script>alert(3)</script>' is not recognized.",
+        )
+        path = self.tracker.generate_html_report(self.tmp)
+        content = open(path, encoding="utf-8").read()
+
+        self.assertNotIn("<script>alert(1)</script>", content)
+        self.assertNotIn("<img src=x onerror=alert(2)>", content)
+        self.assertNotIn("<script>alert(3)</script>", content)
+        # Escaped, not dropped -- the reviewer still needs to see the value.
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", content)
+        self.assertIn("alert(3)", content)
+
+    def test_html_report_escapes_quotes(self):
+        self.tracker.add_issue(
+            'R"1', "warning", "invalid_value", 'F"2', 'M"3',
+        )
+        content = open(self.tracker.generate_html_report(self.tmp), encoding="utf-8").read()
+        self.assertNotIn('R"1', content)
+        self.assertIn("&quot;", content)
+
+    def test_csv_export_neutralizes_formulas(self):
+        # The export is meant to be opened in Excel, where a leading '=' runs.
+        self.tracker.add_issue(
+            "=cmd|'/c calc'!A1", "error", "invalid_value",
+            "+SUM(A1)", "-2+3", event_id="@evil",
+        )
+        path = self.tracker.save_issues_to_csv(self.tmp)
+        rows = list(csv.DictReader(open(path, encoding="utf-8")))
+        self.assertEqual(len(rows), 1)
+        for field in ("record_id", "field_name", "message", "event_id"):
+            self.assertTrue(
+                rows[0][field].startswith("'"),
+                f"{field}={rows[0][field]!r} should be prefixed",
+            )
+
+    def test_csv_export_leaves_ordinary_values_alone(self):
+        self.tracker.add_issue("C-001", "warning", "invalid_value", "Race", "Missing.")
+        path = self.tracker.save_issues_to_csv(self.tmp)
+        row = next(iter(csv.DictReader(open(path, encoding="utf-8"))))
+        self.assertEqual(row["record_id"], "C-001")
+        self.assertEqual(row["field_name"], "Race")
+        self.assertEqual(row["message"], "Missing.")
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,6 +3,7 @@ import type { JobStatus } from "@prisma/client";
 import { stat } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { routeError } from "@/lib/api-errors";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import { enqueueJob } from "@/lib/job-queue";
 
@@ -83,10 +84,7 @@ export async function POST(
     await enqueueJob(jobId);
 
     return NextResponse.json({ status: "queued" }, { status: 202 });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to start conversion" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return routeError(error, "Failed to start conversion");
   }
 }

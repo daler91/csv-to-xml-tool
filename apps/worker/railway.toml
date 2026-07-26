@@ -2,6 +2,11 @@
 builder = "dockerfile"
 dockerfilePath = "apps/worker/Dockerfile"
 
+[deploy.variables]
+# Disables the interactive docs, the OpenAPI schema and the route list in 404
+# bodies — all of which are served unauthenticated and describe the whole API.
+ENVIRONMENT = "production"
+
 [deploy]
 startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"

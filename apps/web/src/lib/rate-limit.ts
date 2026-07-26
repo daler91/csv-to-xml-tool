@@ -32,3 +32,19 @@ export async function rateLimit(
     return { success: true, remaining: limit };
   }
 }
+
+/**
+ * Clear a rate-limit counter.
+ *
+ * Used after a successful login so a user who mistypes their password a few
+ * times and then gets it right isn't left throttled for the rest of the
+ * window. Failures are swallowed for the same reason `rateLimit` fails open:
+ * a Redis hiccup must not break sign-in.
+ */
+export async function resetRateLimit(key: string): Promise<void> {
+  try {
+    await getRedis().del(`rate-limit:${key}`);
+  } catch {
+    // Counter expires on its own; nothing to do.
+  }
+}

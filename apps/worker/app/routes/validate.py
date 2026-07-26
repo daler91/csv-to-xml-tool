@@ -4,7 +4,7 @@ import os
 from fastapi import APIRouter, HTTPException
 
 from ..core.paths import XSD_MAP, default_schemas_dir
-from ..logging_context import job_id_var
+from ..logging_context import set_job_id
 from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
 from ..services.xsd_validation import (
     cleanup_staging,
@@ -39,7 +39,7 @@ async def validate_xsd(req: ValidateXsdRequest):
     correlation only. Malformed/unparseable XML is a *result* (is_valid=false
     with the parse error in errors), not a 500.
     """
-    job_id_var.set(req.job_id)
+    set_job_id(req.job_id)
 
     if req.schema_type not in XSD_MAP:
         raise HTTPException(status_code=400, detail=f"Unknown schema type: {req.schema_type}")

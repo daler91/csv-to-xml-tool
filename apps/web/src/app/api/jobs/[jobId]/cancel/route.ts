@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 
 /**
@@ -84,10 +85,7 @@ export async function POST(
     });
 
     return NextResponse.json({ status: "cancelled" }, { status: 200 });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to cancel conversion" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return routeError(error, "Failed to cancel conversion");
   }
 }

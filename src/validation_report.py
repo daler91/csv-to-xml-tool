@@ -6,11 +6,37 @@ This module tracks validation issues and generates reports.
 """
 
 import csv
+import html
 import os
 from datetime import datetime
 from collections import defaultdict, Counter
 
 from .path_safety import output_base, resolve_within
+
+
+def _html_escape(value) -> str:
+    """Escape a value for interpolation into the HTML report.
+
+    The report embeds raw spreadsheet content, so everything that reaches a
+    cell has to be escaped -- ``quote=True`` covers attribute contexts too.
+    """
+    return html.escape(str(value), quote=True)
+
+
+# Leading characters that make Excel/Sheets treat a cell as a formula.
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value):
+    """Neutralize spreadsheet formula injection in an exported cell.
+
+    The issues export echoes values straight from the source spreadsheet, and
+    the report is meant to be opened in Excel -- so a cell beginning with '='
+    would execute on open. Prefixing with an apostrophe forces text.
+    """
+    if not isinstance(value, str) or not value.startswith(_CSV_FORMULA_PREFIXES):
+        return value
+    return "'" + value
 
 class ValidationTracker:
     """Tracks validation issues during the conversion process."""
@@ -164,7 +190,7 @@ class ValidationTracker:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, restval='')
                 writer.writeheader()
                 for issue in self.issues:
-                    writer.writerow(issue)
+                    writer.writerow({k: _csv_safe(v) for k, v in issue.items()})
         except OSError as e:
             raise OSError(f"Failed to write validation CSV report to {csv_file}: {e}") from e
 
@@ -224,9 +250,11 @@ class ValidationTracker:
         </tr>
 """]
         for category, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
+            # Categories are controlled constants today, but escaped anyway so
+            # this stays safe if a category ever carries field-derived text.
             parts.append(f"""        <tr>
-            <td>{category}</td>
-            <td>{count}</td>
+            <td>{_html_escape(category)}</td>
+            <td>{int(count)}</td>
         </tr>
 """)
         parts.append("    </table>\n")
@@ -257,13 +285,19 @@ class ValidationTracker:
 
         for issue in sorted_issues:
             severity_class = "error" if issue['severity'] == 'error' else "warning"
+            # Every cell below carries raw CSV content -- record ids, field
+            # names and messages that embed the offending value (e.g. an
+            # unrecognized session type or country). Interpolating that
+            # unescaped put whatever the spreadsheet contained straight into the
+            # report, so a cell holding <script> was executable in
+            # reports/validation_report_*.html.
             parts.append(f"""        <tr>
-            <td>{issue['record_id']}</td>
-            <td>{issue.get('event_id', '')}</td>
-            <td class="{severity_class}">{issue['severity'].upper()}</td>
-            <td>{issue['category']}</td>
-            <td>{issue['field_name']}</td>
-            <td>{issue['message']}</td>
+            <td>{_html_escape(issue['record_id'])}</td>
+            <td>{_html_escape(issue.get('event_id', ''))}</td>
+            <td class="{severity_class}">{_html_escape(issue['severity'].upper())}</td>
+            <td>{_html_escape(issue['category'])}</td>
+            <td>{_html_escape(issue['field_name'])}</td>
+            <td>{_html_escape(issue['message'])}</td>
         </tr>
 """)
 

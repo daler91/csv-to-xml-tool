@@ -31,7 +31,14 @@ def require_worker_token(authorization: str | None = Header(default=None)) -> No
         )
 
     expected = f"Bearer {WORKER_AUTH_TOKEN}"
-    if authorization is None or not secrets.compare_digest(authorization, expected):
+    # Compare as bytes. secrets.compare_digest() rejects str operands containing
+    # non-ASCII, so `Authorization: Bearer café` raised inside the dependency
+    # and surfaced as an unhandled 500 instead of a 401 -- remotely triggerable
+    # by anyone, and noise in error monitoring. Starlette decodes headers as
+    # latin-1, so encoding back with the same codec round-trips exactly.
+    if authorization is None or not secrets.compare_digest(
+        authorization.encode("latin-1", "replace"), expected.encode("latin-1", "replace")
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing worker credentials",

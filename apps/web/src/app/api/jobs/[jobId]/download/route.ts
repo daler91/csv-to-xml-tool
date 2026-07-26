@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { routeError } from "@/lib/api-errors";
 import { resolveWithinDataDir } from "@/lib/paths";
 
 export async function GET(
@@ -43,7 +44,7 @@ export async function GET(
         "Content-Disposition": `attachment; filename="${fileName}"`,
       },
     });
-  } catch {
-    return NextResponse.json({ error: "Download failed" }, { status: 500 });
+  } catch (error) {
+    return routeError(error, "Download failed");
   }
 }

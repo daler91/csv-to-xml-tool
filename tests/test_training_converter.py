@@ -4,7 +4,6 @@ import sys
 import tempfile
 import csv
 import xml.etree.ElementTree as ET
-import pandas as pd
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,6 +12,19 @@ from src.converters.base_converter import EmptyCSVError
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
+
+
+def _rows(**columns):
+    """Transpose column-oriented test data into the row dicts the converter takes.
+
+    _calculate_demographics used to receive a DataFrame, and these tests built
+    one with `pd.DataFrame({col: [...], ...})`. It now takes a list of row
+    dicts, so the same column-oriented literal is transposed here — keeping the
+    fixtures readable and dropping the pandas dependency from the test suite.
+    """
+    length = len(next(iter(columns.values())))
+    return [{col: values[i] for col, values in columns.items()} for i in range(length)]
+
 
 class TestTrainingConverter(unittest.TestCase):
 
@@ -127,9 +139,11 @@ class TestTrainingConverter(unittest.TestCase):
     def test_missing_event_id_skips_record(self):
         """A row with a blank event ID is dropped; valid siblings still convert.
 
-        The CSV is read with dtype=str, so a blank cell arrives as float('nan'),
-        which is truthy -- this row used to pass validation and then get silently
-        discarded by groupby(), producing no record and no recorded issue.
+        Historically this row was lost silently: the CSV was read with pandas'
+        dtype=str, so a blank cell arrived as float('nan') -- truthy -- and it
+        passed validation only to be discarded by groupby(), producing no record
+        and no recorded issue. The reader is stdlib csv now, so a blank cell is
+        "" and is rejected up front, but the case stays covered.
         """
         bad = self._make_training_row()
         bad['Class/Event ID'] = ''
@@ -218,17 +232,16 @@ class TestTrainingConverter(unittest.TestCase):
         """Per-attendee rows aggregate to correct, controlled-vocabulary counts."""
         converter = TrainingConverter(self.logger, self.validator)
 
-        data = {
+        rows = _rows(**{
             'Currently in Business?': ['Yes', 'No', 'Yes', 'Yes'],
             'Gender': ['Female', 'Male', 'Female', 'Male'],
             'Disabilities': ['Yes', 'No', 'No', 'Prefer not to say'],
             'Military Status': ['Active Duty', 'Veteran', '', ''],
             'Race': ['Asian', 'Black', 'White', 'White'],
             'Ethnicity': ['Hispanic', 'Non-Hispanic', 'Latino', 'Prefer not to say'],
-        }
-        df = pd.DataFrame(data)
+        })
 
-        demographics = converter._calculate_demographics(df)
+        demographics = converter._calculate_demographics(rows)
 
         self.assertEqual(demographics.get('total'), 4)
         self.assertEqual(demographics.get('currently_in_business'), 3)
@@ -248,13 +261,13 @@ class TestTrainingConverter(unittest.TestCase):
     def test_demographics_prefer_not_to_say_excluded(self):
         """Salesforce "Prefer not to say"/blank values fall into no demographic bucket."""
         converter = TrainingConverter(self.logger, self.validator)
-        df = pd.DataFrame({
+        rows = _rows(**{
             'Gender': ['Prefer not to say', 'Prefer not to say', 'Male'],
             'Ethnicity': ['Prefer not to say', 'Non Hispanic or Latino', ''],
             'Race': ['Prefer not to say', '', 'White; '],
             'Military Status': ['Prefer not to say', 'No military service', ''],
         })
-        demographics = converter._calculate_demographics(df)
+        demographics = converter._calculate_demographics(rows)
         self.assertEqual(demographics['female'], 0)  # no "f"-in-"prefer" false positives
         self.assertEqual(demographics['male'], 1)
         self.assertEqual(demographics['ethnicity']['hispanic'], 0)
@@ -265,11 +278,11 @@ class TestTrainingConverter(unittest.TestCase):
     def test_demographics_multivalue_race(self):
         """A semicolon-joined Race counts toward each listed category, once each."""
         converter = TrainingConverter(self.logger, self.validator)
-        df = pd.DataFrame({
+        rows = _rows(**{
             'Race': ['Black or African American; White; ',
                      'Asian; Black or African American; White; '],
         })
-        demographics = converter._calculate_demographics(df)
+        demographics = converter._calculate_demographics(rows)
         self.assertEqual(demographics['race']['black'], 2)
         self.assertEqual(demographics['race']['white'], 2)
         self.assertEqual(demographics['race']['asian'], 1)
@@ -278,18 +291,18 @@ class TestTrainingConverter(unittest.TestCase):
     def test_demographics_service_disabled_counts_as_veteran(self):
         """A service-disabled veteran is counted in BOTH Veterans and ServiceDisabledVeterans."""
         converter = TrainingConverter(self.logger, self.validator)
-        df = pd.DataFrame({
+        rows = _rows(**{
             'Military Status': ['Service Disabled Veteran', 'Veteran', 'No military service'],
         })
-        demographics = converter._calculate_demographics(df)
+        demographics = converter._calculate_demographics(rows)
         self.assertEqual(demographics['veterans'], 2)
         self.assertEqual(demographics['service_disabled_veterans'], 1)
 
     def test_demographics_blank_business_status_excluded(self):
         """A blank "Currently in Business?" is neither in-business nor not-in-business."""
         converter = TrainingConverter(self.logger, self.validator)
-        df = pd.DataFrame({'Currently in Business?': ['Yes', 'No', '', 'Prefer not to say']})
-        demographics = converter._calculate_demographics(df)
+        rows = _rows(**{'Currently in Business?': ['Yes', 'No', '', 'Prefer not to say']})
+        demographics = converter._calculate_demographics(rows)
         self.assertEqual(demographics['currently_in_business'], 1)
         self.assertEqual(demographics['not_in_business'], 1)
 
@@ -361,13 +374,13 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertIsNone(cosponsor)
 
     def test_ambiguous_start_date_warned(self):
-        """CONV-3: an ambiguous Start Date is flagged on the pandas/training path."""
+        """CONV-3: an ambiguous Start Date is flagged on the training path."""
         self._convert_and_parse([self._make_training_row(**{'Start Date': '03/04/2025'})])
         cats = [i['category'] for i in self.validator.issues]
         self.assertIn('ambiguous_date', cats)
 
     def test_header_whitespace_tolerated(self):
-        """CONV-2: a training header with stray whitespace is still matched (pandas)."""
+        """CONV-2: a training header with stray whitespace is still matched."""
         base = self._make_training_row()
         row = {(k + ' ' if k == 'Class/Event ID' else k): v for k, v in base.items()}
         root = self._convert_and_parse([row])

@@ -8,10 +8,6 @@ to ``event_id``; the mapping page auto-applied that, the worker renamed the colu
 away, and the converter then failed with "Event ID column is missing."
 """
 
-import pytest
-
-pytest.importorskip("pandas")
-
 from app.services.preview_service import get_expected_columns, read_csv_preview
 
 

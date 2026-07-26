@@ -1,10 +1,10 @@
 """Wraps existing CSV-to-XML converters for use by the FastAPI service."""
 
+import csv
 import os
 import sys
 import tempfile
 from typing import Callable, Optional
-import pandas as pd
 
 # Add the repo root's src/ to the Python path so we can import existing code
 _SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
@@ -107,13 +107,24 @@ def run_conversion(
         # utf-8-sig so a BOM on the first header can't desync this rename from the
         # converter's own utf-8-sig read of the temp file written below (every
         # other CSV read path strips the BOM; this one was the lone exception).
-        df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
         safe_mapping = _sanitize_column_mapping(column_mapping, converter_type)
-        df.rename(columns=safe_mapping, inplace=True)
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as source:
+            reader = csv.DictReader(source)
+            fieldnames = [safe_mapping.get(name, name) for name in (reader.fieldnames or [])]
+            # Materialized before opening the writer so a malformed CSV fails
+            # before a half-written temp file exists.
+            renamed_rows = [
+                {safe_mapping.get(key, key): value for key, value in row.items() if key is not None}
+                for row in reader
+            ]
         tmp_mapped = tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, dir=os.path.dirname(csv_path)
         )
-        df.to_csv(tmp_mapped.name, index=False)
+        tmp_mapped.close()
+        with open(tmp_mapped.name, "w", encoding="utf-8", newline="") as target:
+            writer = csv.DictWriter(target, fieldnames=fieldnames, restval="", extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(renamed_rows)
         actual_csv_path = tmp_mapped.name
 
     _checkpoint()

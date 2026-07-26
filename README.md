@@ -136,7 +136,8 @@ The primary entry point for the conversion is `src/main.py`.
 ### Prerequisites
 
   * Python 3.x
-  * Pandas library (`pip install pandas`)
+  * `pip install -r requirements.txt` (CSV reading is stdlib; `defusedxml` and
+    `lxml` are needed for XML building and XSD validation)
 
 ### Converting Data
 

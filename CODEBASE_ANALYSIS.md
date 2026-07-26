@@ -417,12 +417,26 @@ Status: mixed — see each item.
 > checker and no ESLint. 5.6 (web duplication, `results/page.tsx` at 685 LOC, the dual
 > schema/migrate.js source of truth, the stale audit action labels) is untouched.
 
-### 5.1 The converter abstraction is inverted
+### 5.1 The converter abstraction is inverted — [PARTIALLY FIXED]
 
 `BaseConverter` shares 99 lines of progress plumbing while two 400–600 line converters duplicate the
 entire read → validate → write pipeline **on two different CSV engines** (`csv.DictReader` vs
 pandas). pandas is pulled in solely for one `groupby`. `TrainingClientConverter` demonstrates the
 right pattern: 102 lines reusing ~470 via four explicit hooks.
+
+**The two-engine split is gone.** `training_converter.py` and the worker's column-mapping rename now
+use `csv.DictReader`/`DictWriter`, and pandas is out of both requirements files — ~123 MB of
+pandas + numpy off the worker image. That also removes the `float('nan')`-is-truthy bug class at the
+source (the cause of 1.4's silently-vanishing training rows) rather than defending against it.
+
+Two things the rewrite had to preserve, neither of which any pre-existing test covered:
+`DataFrame.groupby` defaults to `sort=True`, so records have always been emitted ordered by event
+id — dict grouping is insertion-ordered, hence the explicit `sorted()`. And
+`pytest.importorskip("pandas")` guarded two whole test files, which would have turned into silent
+skips the moment pandas was uninstalled. The characterization goldens from step 0 are what proved
+the output is byte-identical.
+
+The template-method `convert()` and the shared registry remain open.
 
 ### 5.2 No column mapping in the counseling converter
 

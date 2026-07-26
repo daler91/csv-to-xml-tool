@@ -1,0 +1,84 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CounselingInformation>
+  <CounselingRecord>
+    <PartnerClientNumber>C-001</PartnerClientNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <ClientRequest>
+      <ClientNamePart1>
+        <Last>Smith</Last>
+        <First>John</First>
+      </ClientNamePart1>
+      <AddressPart1>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart1>
+      <SurveyAgreement>No</SurveyAgreement>
+      <ClientSignature>
+        <OnFile>Yes</OnFile>
+      </ClientSignature>
+    </ClientRequest>
+    <ClientIntake>
+      <Race>
+        <Code>White</Code>
+      </Race>
+      <Sex>Male</Sex>
+      <CurrentlyInBusiness>No</CurrentlyInBusiness>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <CompanyName />
+      <BusinessOwnership>
+        <Female>0</Female>
+      </BusinessOwnership>
+      <ConductingBusinessOnline>No</ConductingBusinessOnline>
+      <ClientIntake_Certified8a>No</ClientIntake_Certified8a>
+      <ClientAnnualIncomePart2>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart2>
+      <Rural_vs_Urban>Undetermined</Rural_vs_Urban>
+    </ClientIntake>
+    <CounselorRecord>
+      <PartnerSessionNumber>A-001</PartnerSessionNumber>
+      <ClientNamePart3>
+        <Last>Smith</Last>
+        <First>John</First>
+      </ClientNamePart3>
+      <AddressPart3>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart3>
+      <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
+      <ReportableImpact>No</ReportableImpact>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
+      <ClientAnnualIncomePart3>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart3>
+      <ResourcePartnerServiceContributed>
+        <SBALoanAmount>0</SBALoanAmount>
+        <NonSBALoanAmount>0</NonSBALoanAmount>
+        <EquityCapitalReceived>0</EquityCapitalReceived>
+      </ResourcePartnerServiceContributed>
+      <CounselingProvided>
+        <Code>Business Start-up/Preplanning</Code>
+      </CounselingProvided>
+      <SessionType>Telephone</SessionType>
+      <Language>
+        <Code>English</Code>
+      </Language>
+      <DateCounseled>2025-01-15</DateCounseled>
+      <CounselorName>Jane Doe</CounselorName>
+      <CounselingHours>
+        <Contact>1.5</Contact>
+        <Prepare>0</Prepare>
+        <Travel>0</Travel>
+      </CounselingHours>
+    </CounselorRecord>
+  </CounselingRecord>
+</CounselingInformation>

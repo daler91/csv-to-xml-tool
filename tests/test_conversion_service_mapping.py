@@ -11,10 +11,6 @@ Covers:
 import os
 import xml.etree.ElementTree as ET
 
-import pytest
-
-pytest.importorskip("pandas")
-
 from app.services import conversion_service
 from app.services.conversion_service import run_conversion, _sanitize_column_mapping
 

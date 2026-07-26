@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ManagementTrainingReport xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ManagementTrainingRecord>
+    <PartnerTrainingNumber>EVT-001</PartnerTrainingNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <DateTrainingStarted>2025-01-15</DateTrainingStarted>
+    <NumberOfSessions>1</NumberOfSessions>
+    <TotalTrainingHours>1.5</TotalTrainingHours>
+    <TrainingTitle>Business Workshop</TrainingTitle>
+    <TrainingLocation>
+      <City>Des Moines</City>
+      <State>Iowa</State>
+      <ZipCode>50309</ZipCode>
+      <Country>
+        <Code>United States</Code>
+      </Country>
+    </TrainingLocation>
+    <NumberTrained>
+      <Total>1</Total>
+      <CurrentlyInBusiness>1</CurrentlyInBusiness>
+      <Female>1</Female>
+      <Race>
+        <White>1</White>
+      </Race>
+      <Ethnicity>
+        <NonHispanicOrLatinoOrigin>1</NonHispanicOrLatinoOrigin>
+      </Ethnicity>
+    </NumberTrained>
+    <TrainingTopic>
+      <Code>Technology</Code>
+    </TrainingTopic>
+    <TrainingPartners>
+      <Code>Women's Business Center</Code>
+    </TrainingPartners>
+    <ProgramFormatType>In-person</ProgramFormatType>
+    <DollarAmountOfFees>0</DollarAmountOfFees>
+    <Language>
+      <Code>English</Code>
+    </Language>
+  </ManagementTrainingRecord>
+</ManagementTrainingReport>

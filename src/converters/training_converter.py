@@ -3,9 +3,10 @@ Handles the conversion of SBA Management Training Reports from CSV to XML.
 """
 
 from .. import data_validation
-import pandas as pd
+import csv
 import xml.etree.ElementTree as ET
 import re
+from collections import defaultdict
 
 from .base_converter import BaseConverter, EmptyCSVError
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
@@ -23,47 +24,54 @@ class TrainingConverter(BaseConverter):
 
     def _get_column_value(self, record, key, default=''):
         """
-        Gets a value from a record (pandas Series) using a list of possible column names from config.
+        Gets a value from a row dict using the list of possible column names from config.
         """
         possible_columns = self.config.COLUMN_MAPPING.get(key, [])
         if isinstance(possible_columns, str):
             possible_columns = [possible_columns]
 
         for col in possible_columns:
-            if col in record and not pd.isna(record[col]):
+            if col in record and not data_cleaning.is_empty(record[col]):
                 return str(record[col])
         return default
 
     def _read_and_validate_csv(self, input_path):
         """Read CSV, validate columns and rows. Returns (event_groups, event_id_col).
 
-        Raises EmptyCSVError when there is nothing convertible -- an empty CSV, a
-        missing event-ID column, or no row carrying a usable event ID -- so the
-        caller can never write a success with no output file.
+        ``event_groups`` is a list of ``(event_id, rows)`` pairs, sorted by event
+        id. Raises EmptyCSVError when there is nothing convertible -- an empty
+        CSV, a missing event-ID column, or no row carrying a usable event ID --
+        so the caller can never write a success with no output file.
         """
         try:
-            # CONV-2: explicit utf-8-sig + string dtype (both were missing) and
-            # normalize header whitespace so lookups match the other read paths.
-            df = pd.read_csv(input_path, encoding='utf-8-sig', dtype=str)
-            df.columns = [data_cleaning.normalize_header(c) for c in df.columns]
-            self.logger.info(f"Successfully read CSV with {len(df)} records.")
-        except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError) as e:
+            # CONV-2: explicit utf-8-sig, and normalize_row_keys both normalizes
+            # header whitespace and coerces the None that DictReader emits for a
+            # short row into "". This is the same read path the counseling
+            # converter uses; it used to be pd.read_csv(dtype=str), which made a
+            # blank cell float('nan') -- truthy, and the direct cause of training
+            # rows passing validation and then vanishing in groupby().
+            with open(input_path, 'r', encoding='utf-8-sig') as csv_file:
+                reader = csv.DictReader(csv_file)
+                headers = [data_cleaning.normalize_header(c) for c in (reader.fieldnames or [])]
+                rows = [data_cleaning.normalize_row_keys(row) for row in reader]
+            self.logger.info(f"Successfully read CSV with {len(rows)} records.")
+        except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {e}")
             raise
 
-        if df.empty:
+        if not rows:
             # CONV-6: a headers-only / empty CSV must fail, not return silently.
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, "input_file", "CSV has headers but no data rows to convert.")
             raise EmptyCSVError("CSV has no data rows to convert.")
 
         event_id_col = self.config.COLUMN_MAPPING.get("event_id")
-        if not event_id_col or event_id_col not in df.columns:
+        if not event_id_col or event_id_col not in headers:
             self.logger.error(f"Required column '{event_id_col}' not found in the CSV.")
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, event_id_col, "Event ID column is missing.")
             raise EmptyCSVError(f"Required column '{event_id_col}' is missing from the CSV.")
 
-        valid_rows = [row for index, row in df.iterrows() if data_validation.validate_training_record(row, index, self.validator)]
+        valid_rows = [row for index, row in enumerate(rows) if data_validation.validate_training_record(row, index, self.validator)]
         if not valid_rows:
             # Must raise, not return: a silent return left convert() writing no
             # file at all while main.py still logged "Conversion process
@@ -73,8 +81,15 @@ class TrainingConverter(BaseConverter):
                                      "No rows had a usable Class/Event ID, so there is nothing to convert.")
             raise EmptyCSVError("No rows had a usable Class/Event ID to convert.")
 
-        df_valid = pd.DataFrame(valid_rows)
-        event_groups = df_valid.groupby(event_id_col)
+        grouped = defaultdict(list)
+        for row in valid_rows:
+            grouped[row[event_id_col]].append(row)
+        # sorted(), not insertion order: DataFrame.groupby defaults to
+        # sort=True, so records have always been emitted ordered by event id.
+        # Preserving that keeps the output byte-identical (see
+        # tests/test_converter_characterization.py, which feeds deliberately
+        # unsorted event ids).
+        event_groups = [(event_id, grouped[event_id]) for event_id in sorted(grouped)]
         self.logger.info(f"Found {len(event_groups)} unique training events.")
         return event_groups, event_id_col
 
@@ -122,9 +137,9 @@ class TrainingConverter(BaseConverter):
             event_id="",
         )
 
-    def _build_training_record(self, root, event_id, group_df):
+    def _build_training_record(self, root, event_id, group_rows):
         """Build a single ManagementTrainingRecord element."""
-        first_record = group_df.iloc[0]
+        first_record = group_rows[0]
         self.validator.set_current_record_id(str(event_id))
         self.validator.set_current_event_id(str(event_id))
 
@@ -169,7 +184,7 @@ class TrainingConverter(BaseConverter):
         create_element(record, 'TrainingTitle', title_val)
 
         self._build_location_section(record, first_record)
-        demographics = self._calculate_demographics(group_df)
+        demographics = self._calculate_demographics(group_rows)
         self._build_demographics_section(record, demographics)
 
         topic_val = self._get_column_value(first_record, "training_topic")
@@ -209,12 +224,12 @@ class TrainingConverter(BaseConverter):
         total_events = len(event_groups)
         self._report_progress(0, total_events)
 
-        for i, (event_id, group_df) in enumerate(event_groups, 1):
-            if group_df.empty:
+        for i, (event_id, group_rows) in enumerate(event_groups, 1):
+            if not group_rows:
                 self._maybe_report_progress(i, total_events, every=5)
                 continue
             try:
-                self._build_training_record(root, event_id, group_df)
+                self._build_training_record(root, event_id, group_rows)
                 self.validator.record_processed(success=True)
             except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
@@ -256,12 +271,12 @@ class TrainingConverter(BaseConverter):
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 
-    def _resolve_column(self, df, column_key):
-        """Resolve a config column key to the actual DataFrame column name."""
+    def _resolve_column(self, rows, column_key):
+        """Resolve a config column key to the actual CSV column name present in the rows."""
         possible = self.config.COLUMN_MAPPING.get(column_key, [])
         if isinstance(possible, str):
             possible = [possible]
-        return next((c for c in possible if c in df.columns), None)
+        return next((c for c in possible if any(c in row for row in rows)), None)
 
     def _resolve_funding_source(self, funding_source, event_id):
         """Return the funding source iff it is a valid XSD enumeration value, else None.
@@ -303,63 +318,81 @@ class TrainingConverter(BaseConverter):
         )
         return self.config.DEFAULT_TRAINING_TOPIC
 
-    def _calculate_demographics(self, df):
-        """Aggregate per-attendee rows for one event into demographic counts.
-
-        Each attendee row is classified by its controlled-vocabulary value (reusing
-        data_cleaning helpers) instead of loose substring matching, so "Prefer not to
-        say"/blank fall into no bucket, "Female" is never miscounted as Male, and "Non
-        Hispanic or Latino" is never miscounted as Hispanic.
-        """
-        demographics = {}
-        total = len(df)
-        demographics['total'] = max(total, 1)  # XSD requires Total >= 1
-
-        gender_col = self._resolve_column(df, 'gender')
-        ethnicity_col = self._resolve_column(df, 'ethnicity')
-        race_col = self._resolve_column(df, 'race')
-        military_col = self._resolve_column(df, 'military_status')
-        disability_col = self._resolve_column(df, 'disability')
-        business_col = self._resolve_column(df, 'business_status')
-
-        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
-        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
-
+    @staticmethod
+    def _count_sex(rows, gender_col):
+        """Return (female, male). Anything that maps to neither is counted as neither."""
         female = male = 0
-        currently_in_business = not_in_business = 0
-        disabilities = 0
-        military_counts = {key: 0 for key in military_keywords}
+        if not gender_col:
+            return female, male
+        for row in rows:
+            sex = data_cleaning.map_gender_to_sex(row.get(gender_col))
+            if sex == 'Female':
+                female += 1
+            elif sex == 'Male':
+                male += 1
+        return female, male
+
+    @staticmethod
+    def _count_business_status(rows, business_col):
+        """Return (currently_in_business, not_in_business).
+
+        Deliberately not `not is_affirmative`: a blank or unrecognised answer
+        must land in neither bucket rather than being reported as "not yet in
+        business" to SBA.
+        """
+        currently = not_yet = 0
+        if not business_col:
+            return currently, not_yet
+        for row in rows:
+            value = row.get(business_col)
+            if data_cleaning.is_affirmative(value):
+                currently += 1
+            elif data_cleaning.is_negative(value):
+                not_yet += 1
+        return currently, not_yet
+
+    @staticmethod
+    def _count_disabilities(rows, disability_col):
+        if not disability_col:
+            return 0
+        return sum(
+            1 for row in rows
+            if data_cleaning.is_affirmative(row.get(disability_col))
+        )
+
+    @staticmethod
+    def _count_military(rows, military_col, military_keywords):
+        """Count per category. A row may match several (e.g. service-disabled veteran)."""
+        counts = {key: 0 for key in military_keywords}
+        if not military_col:
+            return counts
+        for row in rows:
+            for category in data_cleaning.classify_military(row.get(military_col), military_keywords):
+                counts[category] += 1
+        return counts
+
+    @staticmethod
+    def _count_race_ethnicity(rows, race_col, ethnicity_col, race_keywords):
+        """Return (race_counts, hispanic, non_hispanic, minorities).
+
+        Race, ethnicity and the minority tally share one pass because
+        "minority" is a per-person question that depends on both.
+        """
         race_counts = {key: 0 for key in race_keywords}
-        hispanic = non_hispanic = 0
-        minorities = 0
+        hispanic = non_hispanic = minorities = 0
 
-        for _, row in df.iterrows():
-            if gender_col:
-                sex = data_cleaning.map_gender_to_sex(row.get(gender_col))
-                if sex == 'Female':
-                    female += 1
-                elif sex == 'Male':
-                    male += 1
-
-            if business_col:
-                business_val = row.get(business_col)
-                if data_cleaning.is_affirmative(business_val):
-                    currently_in_business += 1
-                elif data_cleaning.is_negative(business_val):
-                    not_in_business += 1
-
-            if disability_col and data_cleaning.is_affirmative(row.get(disability_col)):
-                disabilities += 1
-
-            if military_col:
-                for category in data_cleaning.classify_military(row.get(military_col), military_keywords):
-                    military_counts[category] += 1
-
-            person_races = data_cleaning.classify_races(row.get(race_col), race_keywords) if race_col else set()
+        for row in rows:
+            person_races = (
+                data_cleaning.classify_races(row.get(race_col), race_keywords)
+                if race_col else set()
+            )
             for category in person_races:
                 race_counts[category] += 1
 
-            person_ethnicity = data_cleaning.classify_ethnicity(row.get(ethnicity_col)) if ethnicity_col else None
+            person_ethnicity = (
+                data_cleaning.classify_ethnicity(row.get(ethnicity_col))
+                if ethnicity_col else None
+            )
             if person_ethnicity == 'hispanic':
                 hispanic += 1
             elif person_ethnicity == 'non_hispanic':
@@ -371,20 +404,62 @@ class TrainingConverter(BaseConverter):
             if person_ethnicity == 'hispanic' or any(c != 'white' for c in person_races):
                 minorities += 1
 
-        demographics['female'] = female
-        demographics['male'] = male
+        return race_counts, hispanic, non_hispanic, minorities
+
+    def _calculate_demographics(self, rows):
+        """Aggregate per-attendee rows for one event into demographic counts.
+
+        Each attendee row is classified by its controlled-vocabulary value (reusing
+        data_cleaning helpers) instead of loose substring matching, so "Prefer not to
+        say"/blank fall into no bucket, "Female" is never miscounted as Male, and "Non
+        Hispanic or Latino" is never miscounted as Hispanic.
+
+        The per-dimension tallies live in the _count_* helpers above; this method
+        resolves the columns and assembles the result. Each helper walks `rows`
+        separately, which is a handful of passes over one event's attendee list --
+        not worth folding back into a single unreadable loop.
+        """
+        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
+        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
+
+        business_col = self._resolve_column(rows, 'business_status')
+        female, male = self._count_sex(rows, self._resolve_column(rows, 'gender'))
+        currently_in_business, not_in_business = self._count_business_status(rows, business_col)
+        military_counts = self._count_military(
+            rows, self._resolve_column(rows, 'military_status'), military_keywords
+        )
+        race_counts, hispanic, non_hispanic, minorities = self._count_race_ethnicity(
+            rows,
+            self._resolve_column(rows, 'race'),
+            self._resolve_column(rows, 'ethnicity'),
+            race_keywords,
+        )
+
+        demographics = {
+            'total': max(len(rows), 1),  # XSD requires Total >= 1
+            'female': female,
+            'male': male,
+            'disabilities': self._count_disabilities(
+                rows, self._resolve_column(rows, 'disability')
+            ),
+            'active_duty': military_counts.get('active_duty', 0),
+            'veterans': military_counts.get('veteran', 0),
+            'service_disabled_veterans': military_counts.get('service_disabled_veteran', 0),
+            'reserve_guard': military_counts.get('reserve_guard', 0),
+            'military_spouse': military_counts.get('spouse', 0),
+            'race': race_counts,
+            'ethnicity': {'hispanic': hispanic, 'non_hispanic': non_hispanic},
+            'minorities': minorities,
+        }
+        # Only reported when the source actually has the column: absent business
+        # data must not be emitted as zeros. Added last rather than inline because
+        # it is conditional; XML element order is unaffected, since
+        # _build_demographics_section walks its own key_to_xml_map, not this dict.
+        # (The 'race' sub-dict is the one whose order *is* load-bearing -- it is
+        # iterated directly -- and it keeps DEMOGRAPHIC_KEYWORDS order.)
         if business_col:
             demographics['currently_in_business'] = currently_in_business
             demographics['not_in_business'] = not_in_business
-        demographics['disabilities'] = disabilities
-        demographics['active_duty'] = military_counts.get('active_duty', 0)
-        demographics['veterans'] = military_counts.get('veteran', 0)
-        demographics['service_disabled_veterans'] = military_counts.get('service_disabled_veteran', 0)
-        demographics['reserve_guard'] = military_counts.get('reserve_guard', 0)
-        demographics['military_spouse'] = military_counts.get('spouse', 0)
-        demographics['race'] = race_counts
-        demographics['ethnicity'] = {'hispanic': hispanic, 'non_hispanic': non_hispanic}
-        demographics['minorities'] = minorities
 
         return demographics
 

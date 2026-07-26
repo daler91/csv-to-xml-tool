@@ -1,0 +1,112 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CounselingInformation>
+  <CounselingRecord>
+    <PartnerClientNumber>003Pe00000Sxsp4</PartnerClientNumber>
+    <Location>
+      <LocationCode>249003</LocationCode>
+    </Location>
+    <ClientRequest>
+      <ClientNamePart1>
+        <Last>Doe</Last>
+        <First>Jane</First>
+      </ClientNamePart1>
+      <Email>jane@example.com</Email>
+      <PhonePart1>
+        <Primary>5155551234</Primary>
+      </PhonePart1>
+      <AddressPart1>
+        <Street1>2210 Grand Ave</Street1>
+        <City>Des Moines</City>
+        <State>Iowa</State>
+        <ZipCode>50312</ZipCode>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart1>
+      <SurveyAgreement>No</SurveyAgreement>
+      <ClientSignature>
+        <OnFile>No</OnFile>
+      </ClientSignature>
+    </ClientRequest>
+    <ClientIntake>
+      <Race>
+        <Code>White</Code>
+      </Race>
+      <Ethnicity>Non Hispanic or Latino</Ethnicity>
+      <Sex>Female</Sex>
+      <Disability>No</Disability>
+      <MilitaryStatus>No military service</MilitaryStatus>
+      <CurrentlyInBusiness>No</CurrentlyInBusiness>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <CompanyName>Doe Enterprises</CompanyName>
+      <BusinessOwnership>
+        <Female>0</Female>
+      </BusinessOwnership>
+      <ConductingBusinessOnline>No</ConductingBusinessOnline>
+      <ClientIntake_Certified8a>No</ClientIntake_Certified8a>
+      <ClientAnnualIncomePart2>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart2>
+      <Rural_vs_Urban>Undetermined</Rural_vs_Urban>
+      <CounselingSeeking>
+        <Code>Marketing/Sales</Code>
+      </CounselingSeeking>
+    </ClientIntake>
+    <CounselorRecord>
+      <PartnerSessionNumber>00vPe00000Pn89L</PartnerSessionNumber>
+      <ClientNamePart3>
+        <Last>Doe</Last>
+        <First>Jane</First>
+      </ClientNamePart3>
+      <Email>jane@example.com</Email>
+      <PhonePart3>
+        <Primary>5155551234</Primary>
+      </PhonePart3>
+      <AddressPart3>
+        <Street1>2210 Grand Ave</Street1>
+        <City>Des Moines</City>
+        <State>Iowa</State>
+        <ZipCode>50312</ZipCode>
+        <Country>
+          <Code>United States</Code>
+        </Country>
+      </AddressPart3>
+      <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
+      <ReportableImpact>No</ReportableImpact>
+      <CurrentlyExporting>No</CurrentlyExporting>
+      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
+      <ClientAnnualIncomePart3>
+        <GrossRevenues>0</GrossRevenues>
+        <ProfitLoss>0</ProfitLoss>
+        <ExportGrossRevenuesOrSales>0</ExportGrossRevenuesOrSales>
+      </ClientAnnualIncomePart3>
+      <ResourcePartnerServiceContributed>
+        <SBALoanAmount>0</SBALoanAmount>
+        <NonSBALoanAmount>0</NonSBALoanAmount>
+        <EquityCapitalReceived>0</EquityCapitalReceived>
+      </ResourcePartnerServiceContributed>
+      <CounselingProvided>
+        <Code>Marketing/Sales</Code>
+      </CounselingProvided>
+      <SessionType>Training</SessionType>
+      <Language>
+        <Code>English</Code>
+      </Language>
+      <DateCounseled>2025-04-08</DateCounseled>
+      <CounselorName>Mike Smith</CounselorName>
+      <CounselingHours>
+        <Contact>0</Contact>
+        <Prepare>0</Prepare>
+        <Travel>0</Travel>
+      </CounselingHours>
+      <TrainingSession>
+        <DateTrainingStarted>2025-04-08</DateTrainingStarted>
+        <PartnerTrainingNumber>701Pe00000vtCVy</PartnerTrainingNumber>
+        <EmployeesTrained>1</EmployeesTrained>
+        <HoursTrained>1.5</HoursTrained>
+      </TrainingSession>
+    </CounselorRecord>
+  </CounselingRecord>
+</CounselingInformation>

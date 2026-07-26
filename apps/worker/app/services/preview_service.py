@@ -231,7 +231,17 @@ def _build_field_requirements(
     return result
 
 
-# Expected columns extracted from converter source code
+# Expected columns extracted from converter source code.
+#
+# These MUST match the header literals CounselingConverter actually reads.
+# Three of them had drifted to a spelling without the "(old)" suffix, which is
+# worse than cosmetic: the mapping page then reports the user's real column as
+# "extra" and the never-read one as "missing", the fuzzy suggester (cutoff 0.6)
+# proposes renaming the real column to the missing name, and
+# conversion_service._sanitize_column_mapping *accepts* that rename because the
+# target is in this list. Accepting the suggestion renamed away the column the
+# converter needed. tests/test_expected_columns.py pins this list against the
+# converter source so it cannot drift again.
 COUNSELING_EXPECTED = [
     _COL_CONTACT_ID, "LocationCode", _COL_LAST_NAME, _COL_FIRST_NAME, "Middle Name",
     "Email", "Contact: Phone", "Contact: Secondary Phone",
@@ -241,10 +251,10 @@ COUNSELING_EXPECTED = [
     "Race", "Ethnicity:", "Gender", "Disability", "Veteran Status",
     "Branch Of Service", "What Prompted you to contact us?",
     "Internet (specify)", "InternetUsage",
-    "Currently In Business?", "Are you currently exporting?",
+    "Currently In Business?", "Are you currently exporting?(old)",
     "Account Name", "Type of Business",
-    "Business Ownership - % Female", "Conduct Business Online?",
-    "8(a) Certified?", "Employee Owned", "Total Number of Employees",
+    "Business Ownership - % Female(old)", "Conduct Business Online?",
+    "8(a) Certified?(old)", "Employee Owned", "Total Number of Employees",
     "Number of Employees in Exporting Business",
     "Gross Revenues/Sales", "Profits/Losses",
     "Legal Entity of Business", "Other legal entity (specify)",

@@ -24,7 +24,6 @@ const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_IP_MAX_ATTEMPTS = 50;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",
@@ -98,3 +97,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+

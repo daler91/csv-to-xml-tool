@@ -4,6 +4,7 @@ import { compare } from "bcryptjs";
 import { prisma } from "./prisma";
 import { normalizeEmail } from "./normalize";
 import { rateLimit, resetRateLimit } from "./rate-limit";
+import { authConfig } from "./auth.config";
 
 /**
  * Sign-in throttling.
@@ -24,7 +25,7 @@ const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_IP_MAX_ATTEMPTS = 50;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: true,
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -79,22 +80,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
 });

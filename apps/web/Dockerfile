@@ -10,7 +10,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/ .
 ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
-RUN npx prisma generate
+# `npm run`, not `npx`: npx would fetch and execute an arbitrary version of
+# `prisma` from the registry if the local binary were ever missing. `npm run`
+# only sees node_modules/.bin, i.e. the lockfile-pinned copy installed above.
+RUN npm run generate
 RUN npm run build
 
 FROM node:20-alpine

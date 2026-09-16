@@ -17,6 +17,12 @@ cd apps/web && npm ci && cd ../..
 them, 79 tests **silently skip** rather than fail
 ([testing.md](./testing.md#test_converter_characterizationpy)). Install it.
 
+To add or bump a Python dependency, edit the matching `requirements*.in` file,
+not the `.txt`: the `.txt` files are hash-locked lockfiles that CI and the
+worker image install with `--require-hashes`, regenerated with the
+`uv pip compile` command in each file's header
+([testing.md](./testing.md#running-everything)).
+
 Full-stack work is easiest under Compose:
 
 ```bash

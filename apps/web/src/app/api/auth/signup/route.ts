@@ -13,10 +13,13 @@ function getClientIdentifier(req: Request): string {
 }
 
 // RFC 5321 caps an address at 254 characters; the shape check is deliberately
-// loose (something@something.something) -- it exists to reject obvious
-// garbage, not to validate deliverability.
+// loose (something@label.label) -- it exists to reject obvious garbage, not to
+// validate deliverability. The domain is spelled as dot-separated labels that
+// themselves exclude the dot: the earlier `[^\s@]+\.[^\s@]+` let the two
+// classes overlap on ".", which backtracks super-linearly on a long, dotted,
+// invalid input.
 const MAX_EMAIL_LENGTH = 254;
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 const MAX_NAME_LENGTH = 100;
 
 function validatePasswordComplexity(password: string): string | null {

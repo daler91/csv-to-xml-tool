@@ -151,10 +151,11 @@ without ever double-running a job.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SBA_OUTPUT_BASE` | cwd (`src.main`) / the `run.py` folder | Directory all CLI writes are confined to |
+| `SBA_OUTPUT_BASE` | cwd (`src.main`) / the `run.py` folder | Directory all CLI writes (and the validator's `--directory`) are confined to |
 
-Every CLI write — XML, reports, logs — is confined to this base. Passing a path
-outside it fails with *"Refusing to write outside …"*. See
+Every CLI write — XML, reports, logs — is confined to this base, as is the
+directory the XML validator is pointed at. Passing a path outside it fails with
+*"Refusing to write outside …"*. See
 [cli.md](./cli.md#output-path-confinement).
 
 ---

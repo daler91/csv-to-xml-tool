@@ -152,17 +152,21 @@ class BodySizeLimitMiddleware:
             await _send_json(send, 413, {"detail": "Request body too large"})
 
 
+app.add_middleware(BodySizeLimitMiddleware)
+
 # The worker is called server-to-server by the web backend, never from a
 # browser, so CORS can be tight: only the methods/headers we actually use.
+# Added last on purpose: add_middleware() prepends, so the last one registered
+# is the outermost layer. CORS has to sit outside everything else so its
+# preflight handling and response headers also cover what the inner
+# middleware produces (the 413 above included) instead of only what reaches
+# the routes.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
-
-
-app.add_middleware(BodySizeLimitMiddleware)
 
 
 # /health stays unauthenticated so container/platform healthchecks keep working.

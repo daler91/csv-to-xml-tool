@@ -108,7 +108,7 @@ describe("POST /api/auth/signup — input and error mapping", () => {
     expect(res.status).toBe(400);
   });
 
-  it.each(["not-an-email", "a@b", `${"x".repeat(250)}@example.com`])(
+  it.each(["not-an-email", "a@b", "a@b..c", "a@.b", `${"x".repeat(250)}@example.com`])(
     "rejects an invalid email %s with 400",
     async (email) => {
       const res = await signup({ email, password: "Password1!" });

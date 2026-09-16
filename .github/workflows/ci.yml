@@ -24,16 +24,21 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
+        # Every pip install here is wheels-only (--only-binary :all:, so no
+        # sdist setup.py ever executes on the runner) from a hash-locked file
+        # (--require-hashes, so a substituted release fails the install). The
+        # *.txt files are compiled from the human-edited *.in files -- see the
+        # header of each for the uv command that regenerates them.
         run: |
-          pip install -r requirements.txt
+          pip install --only-binary :all: --require-hashes -r requirements.txt
           # Worker deps (fastapi, redis, …) + fakeredis, so the worker route and
           # registry tests under tests/ actually run here instead of erroring or
           # skipping on a missing import.
-          pip install -r apps/worker/requirements-dev.txt
+          pip install --only-binary :all: --require-hashes -r apps/worker/requirements-dev.txt
 
       - name: Audit dependencies (pip-audit)
         run: |
-          pip install pip-audit
+          pip install --only-binary :all: --require-hashes -r requirements-ci.txt
           # Scoped to our declared requirements — an env scan would also flag the
           # runner's system pip/setuptools/wheel, which we don't control. Fails on
           # any known advisory; allowlist a specific one with --ignore-vuln <ID>.
@@ -45,7 +50,7 @@ jobs:
         # unreachable after a `return`, silently dropping four elements from
         # every counseling record while the whole suite stayed green.
         run: |
-          pip install ruff
+          # ruff comes from requirements-ci.txt, installed by the audit step.
           ruff check .
 
       - name: Verify schemas resolve without SCHEMAS_DIR
@@ -78,7 +83,13 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm ci
+        # --ignore-scripts: no package's lifecycle scripts run on the runner.
+        # That also skips our own postinstall (prisma generate), so the client
+        # is generated explicitly through the locally installed binary -- the
+        # same two steps apps/web/Dockerfile takes.
+        run: |
+          npm ci --ignore-scripts
+          npm run generate
 
       - name: Audit dependencies (npm)
         # Blocks on high+ advisories; moderates are reported but don't fail CI.

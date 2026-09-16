@@ -31,6 +31,10 @@ class TestProcessDirectory(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory for testing
         self.test_dir = tempfile.mkdtemp()
+        # process_directory confines --directory to SBA_OUTPUT_BASE (cwd by
+        # default); the temp dir lives outside the checkout, so widen it.
+        self._env = patch.dict(os.environ, {"SBA_OUTPUT_BASE": self.test_dir})
+        self._env.start()
 
         # Create some dummy XML files
         self.file1_path = os.path.join(self.test_dir, "file1.xml")
@@ -54,6 +58,7 @@ class TestProcessDirectory(unittest.TestCase):
             f.write("<CounselingRecord><PartnerClientNumber>4</PartnerClientNumber></CounselingRecord>")
 
     def tearDown(self):
+        self._env.stop()
         # Remove the directory after the test
         shutil.rmtree(self.test_dir)
 
@@ -149,12 +154,25 @@ class TestProcessDirectory(unittest.TestCase):
 
     def test_process_empty_directory(self):
         """Test processing an empty directory returns 0."""
-        empty_dir = tempfile.mkdtemp()
+        empty_dir = tempfile.mkdtemp(dir=self.test_dir)
+        processed_count = xml_validator.process_directory(empty_dir)
+        self.assertEqual(processed_count, 0)
+
+    def test_process_directory_refuses_input_outside_base(self):
+        """--directory is confined to SBA_OUTPUT_BASE like --output (CWE-22)."""
+        outside = tempfile.mkdtemp()
         try:
-            processed_count = xml_validator.process_directory(empty_dir)
-            self.assertEqual(processed_count, 0)
+            with self.assertRaises(ValueError):
+                xml_validator.process_directory(outside)
+            with self.assertRaises(ValueError):
+                xml_validator.process_directory(os.path.join(self.test_dir, "..", os.path.basename(outside)))
         finally:
-            shutil.rmtree(empty_dir)
+            shutil.rmtree(outside)
+
+    def test_process_directory_pattern_cannot_escape_input_dir(self):
+        """A traversal --pattern must not surface files outside --directory."""
+        processed_count = xml_validator.process_directory(self.sub_dir, pattern=os.path.join("..", "*.xml"))
+        self.assertEqual(processed_count, 0)
 
 
 class TestFixClientIntakeElementOrder(unittest.TestCase):

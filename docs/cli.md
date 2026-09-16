@@ -138,7 +138,10 @@ yourself.
 Every write — XML, reports, logs — is confined to a base directory. Passing a
 path outside it fails with *"Refusing to write outside …"*. This is a
 path-traversal guard (`src/path_safety.py`), and it applies to `--output`,
-`--report-dir` and `--log-dir` alike.
+`--report-dir` and `--log-dir` alike. The validator's `--directory` is held to
+the same base: it names the folder the glob walks (and, with `--fix`, rewrites
+in place), and a `--pattern` that climbs out of it, such as `../*.xml`, matches
+nothing.
 
 The base is:
 

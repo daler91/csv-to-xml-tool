@@ -4,8 +4,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev libxslt1-dev && rm -rf /var/lib/apt/lists/*
 
+# requirements.txt is the hash-locked resolution of requirements.in (see its
+# header for the uv command that regenerates it). Wheels only, so no sdist
+# setup.py runs during the build, and every artifact must match its pinned hash.
 COPY apps/worker/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --only-binary :all: --require-hashes -r requirements.txt
 
 COPY src/ ./src/
 # Lands at /app/schemas, which is what app/core/paths.py resolves to.

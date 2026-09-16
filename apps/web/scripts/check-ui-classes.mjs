@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regression guard for the UI primitive refactor (UX_REVIEW.md §8.1).
+ * Regression guard for the UI primitive refactor (docs/reviews/UX_REVIEW.md §8.1).
  *
  * Phase 6 extracted apps/web/src/components/ui/{button,alert,card,
  * status-badge}.tsx so pages stop duplicating utility-class combos.
@@ -142,7 +142,7 @@ function report(violations, fileCount) {
     console.error("");
   }
   console.error(
-    "See UX_REVIEW.md §8.1 and apps/web/src/components/ui/ for the primitives."
+    "See docs/reviews/UX_REVIEW.md §8.1 and apps/web/src/components/ui/ for the primitives."
   );
   process.exit(1);
 }

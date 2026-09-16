@@ -23,7 +23,7 @@ interface State {
  * if the error was deterministic, crashed again immediately. Users had
  * to hand-edit the URL bar to escape.
  *
- * Resolves UX_REVIEW.md §4.4: the fallback now offers a Go to
+ * Resolves docs/reviews/UX_REVIEW.md §4.4: the fallback now offers a Go to
  * dashboard escape hatch alongside Try again, announces itself to
  * screen readers (role=alert already in place from Phase 1), and in
  * development surfaces the error message and stack so contributors

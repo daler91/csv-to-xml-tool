@@ -53,7 +53,7 @@ class BaseConverter(abc.ABC):
         # progress updates (e.g. the FastAPI worker, which polls this
         # back into an in-memory registry the web app reads to draw
         # the progress bar). None by default so the CLI path is
-        # unchanged. See UX_REVIEW.md §3.6.
+        # unchanged. See docs/reviews/UX_REVIEW.md §3.6.
         self.progress_callback: Optional[ProgressCallback] = None
 
     def _report_progress(self, processed: int, total: int) -> None:

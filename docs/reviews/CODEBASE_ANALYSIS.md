@@ -47,24 +47,30 @@ SBA Nexus/EDMIS system. Three converters:
 
 Two delivery forms share one core: a Python CLI (`run.py` + `src/`) and a web app
 (Next.js `apps/web` + FastAPI `apps/worker`, which imports `src/` in-process — not via subprocess).
-~20,200 LOC; 148 commits since 2026-03.
+~20,200 LOC; 148 commits since 2026-03. (At `d0e71f0`: 131 commits, first dated 2026-04-03.)
 
 ## 2. Baseline health
 
-| Check | Result |
-|---|---|
-| `pytest` (Python) | **281 passed** |
-| Coverage (exact CI command) | **86.79%** against a 70% gate — 17 pts of headroom |
-| `vitest` (web) | **113 passed**, 18 files |
-| `tsc --noEmit` | clean |
-| `check-ui-classes.mjs` | clean, 78 files |
-| `next build` | succeeds, 28 routes |
-| `npm audit` (prod + dev) | **0 vulnerabilities** |
-| `pip-audit` (both requirement files) | **0 vulnerabilities** |
-| Committed secrets | none found |
+> **Re-measured 2026-09-16 at `d0e71f0`** by the documentation audit. The
+> `bd390af` column is the original reading, kept so the trend is visible.
+> Re-measure rather than trusting either column indefinitely; the commands are in
+> [`../testing.md`](../testing.md).
+
+| Check | At `bd390af` | At `d0e71f0` |
+|---|---|---|
+| `pytest` (Python) | 281 passed | **374 passed** |
+| Coverage (exact CI command) | 86.79% | **88.8%** against a 70% gate — ~19 pts of headroom |
+| `vitest` (web) | 113 passed, 18 files | **173 passed, 23 files** |
+| `tsc --noEmit` | clean | clean |
+| `check-ui-classes.mjs` | clean, 78 files | clean |
+| `ruff check .` | clean | clean |
+| `next build` | succeeds, 28 routes | succeeds, 28 routes |
+| `npm audit` (prod + dev) | 0 vulnerabilities | gated at `--audit-level=high` in CI |
+| `pip-audit` (both requirement files) | 0 vulnerabilities | gated in CI |
+| Committed secrets | none found | none found |
 
 The repo is green, dependencies are pinned and clean, and the CI gate passes with room to spare.
-(Note: the CI comment claiming a "~71% baseline" is stale — actual is 86.79%, so the floor could be
+(Note: the CI comment claiming a "~71% baseline" is stale — actual is ~89%, so the floor could be
 raised.) **The significance of the findings below is that the test suite passes over every one of
 them.**
 

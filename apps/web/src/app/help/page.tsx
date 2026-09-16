@@ -4,7 +4,7 @@ import { CONVERTER_TYPES } from "@/lib/converter-types";
 /**
  * Help page.
  *
- * Resolves UX_REVIEW.md §1.3. The app had no in-product help
+ * Resolves docs/reviews/UX_REVIEW.md §1.3. The app had no in-product help
  * surface — partners with questions had nowhere to go inside the
  * web UI, and the repo README only documents the Python CLI.
  *
@@ -276,25 +276,25 @@ export default function HelpPage() {
         </p>
         <ul className="list-disc pl-5 space-y-1">
           <li>
-            Review the{" "}
+            Read the{" "}
             <a
-              href="https://github.com/daler91/csv-to-xml-tool/blob/master/UX_REVIEW.md"
+              href="https://github.com/daler91/csv-to-xml-tool/blob/master/docs/troubleshooting.md"
               className="text-blue-700 underline"
               target="_blank"
               rel="noreferrer"
             >
-              UX review
+              troubleshooting guide
             </a>{" "}
-            and{" "}
+            and the{" "}
             <a
-              href="https://github.com/daler91/csv-to-xml-tool/blob/master/TECHNICAL_DEBT.md"
+              href="https://github.com/daler91/csv-to-xml-tool/blob/master/docs/reviews/TECHNICAL_DEBT.md"
               className="text-blue-700 underline"
               target="_blank"
               rel="noreferrer"
             >
-              technical debt register
-            </a>{" "}
-            for known issues.
+              known-issues register
+            </a>
+            .
           </li>
           <li>
             File an issue at the{" "}

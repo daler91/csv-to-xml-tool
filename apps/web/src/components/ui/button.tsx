@@ -5,7 +5,7 @@
  *
  * Consolidates the ~8 hand-rolled button variants that existed
  * across the app into a single component with variant / size /
- * isLoading props. Resolves UX_REVIEW.md §8.1 for buttons.
+ * isLoading props. Resolves docs/reviews/UX_REVIEW.md §8.1 for buttons.
  *
  * Class-string tokens live in ./button-classes (a non-client
  * file) so server components can share them via ``buttonClasses()``

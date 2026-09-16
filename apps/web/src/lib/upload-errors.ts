@@ -1,7 +1,7 @@
 /**
  * Human-friendly error messages for /api/upload responses.
  *
- * Resolves UX_REVIEW.md §4.1. The old client code flattened every
+ * Resolves docs/reviews/UX_REVIEW.md §4.1. The old client code flattened every
  * non-2xx response into ``data.error || "Upload failed"``, which
  * gave partners no diagnostic. This helper maps the known HTTP
  * status codes the upload route actually returns to concrete,

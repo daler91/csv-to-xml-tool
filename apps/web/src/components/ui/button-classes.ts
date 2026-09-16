@@ -6,7 +6,7 @@
  * tokens as the <Button> client component. The Button component
  * imports from here too, so there's one source of truth.
  *
- * See UX_REVIEW.md §8.1. The regression guard in
+ * See docs/reviews/UX_REVIEW.md §8.1. The regression guard in
  * scripts/check-ui-classes.mjs exempts components/ui/ as a
  * directory, so the raw utility-class strings below don't trip the
  * check.

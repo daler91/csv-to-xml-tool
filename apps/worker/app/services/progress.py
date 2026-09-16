@@ -8,7 +8,7 @@ the converter is doing mid-run.
 The converter populates a per-job snapshot via the BaseConverter
 progress callback, and a dedicated route exposes it so the web layer
 can merge it into its existing /api/jobs/[id] polling response. See
-UX_REVIEW.md §3.6.
+docs/reviews/UX_REVIEW.md §3.6.
 
 State lives in Redis (ARCH-2/ARCH-3) under ``csvxml:progress:{job_id}``
 so it survives across worker processes/replicas — the converter thread

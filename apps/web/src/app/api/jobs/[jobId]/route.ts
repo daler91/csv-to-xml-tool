@@ -54,7 +54,7 @@ export async function GET(
 
     // For in-flight conversions, also fetch the worker's in-memory
     // progress snapshot so the progress page can show row-level
-    // progress instead of a dead 0% bar. UX_REVIEW.md §3.6.
+    // progress instead of a dead 0% bar. docs/reviews/UX_REVIEW.md §3.6.
     if (job.status === "converting") {
       const progress = await fetchWorkerProgress(jobId);
       if (progress) {

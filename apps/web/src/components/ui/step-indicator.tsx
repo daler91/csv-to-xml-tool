@@ -3,7 +3,7 @@
 /**
  * Step indicator for the conversion flow.
  *
- * Resolves UX_REVIEW.md §1.2. Previously the convert flow (Upload →
+ * Resolves docs/reviews/UX_REVIEW.md §1.2. Previously the convert flow (Upload →
  * Preview → Map → Convert → Results) had no visible progress cue;
  * partners in the middle of a multi-step conversion lost their place
  * and had to rely on the browser URL bar or the Nav's "Convert" link

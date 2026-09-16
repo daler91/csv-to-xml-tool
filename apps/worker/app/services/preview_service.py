@@ -32,7 +32,7 @@ _COL_FIRST_NAME = "First Name"
 _COL_CLASS_EVENT_ID = "Class/Event ID"
 
 # Plain-language field metadata shown on the web mapping page.
-# Added for UX_REVIEW.md §3.5 — the mapping page previously exposed
+# Added for docs/reviews/UX_REVIEW.md §3.5 — the mapping page previously exposed
 # raw XML field names like "BranchOfService" with no explanation of
 # what they mean or when conditional rules apply.
 #

@@ -10,7 +10,7 @@
  * Phase 4 extends this with descriptions and sample-file links so the
  * converter picker (and the landing page / dashboard empty state) can
  * explain what each type is for without requiring users to read
- * source code — see UX_REVIEW.md §3.1, §9.4, §2.1, §2.2.
+ * source code — see docs/reviews/UX_REVIEW.md §3.1, §9.4, §2.1, §2.2.
  */
 
 export type ConverterType = "counseling" | "training" | "training-client";

@@ -1016,9 +1016,12 @@ consider sticky column headers for long lists.
 
 ---
 
-### 7.8 Nav doesn't collapse on mobile **[P1]**
+### 7.8 Nav doesn't collapse on mobile **[P1]** **[RESOLVED]**
 
-Already filed as 1.1.
+Already filed as 1.1, and resolved there. `components/nav.tsx` now hides the
+primary links on `md:hidden` behind an `aria-expanded` toggle that opens a mobile
+panel. This entry was left unmarked while 1.1 was marked; corrected by the
+documentation audit on 2026-09-16.
 
 ---
 

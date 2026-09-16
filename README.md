@@ -1,189 +1,135 @@
 # SBA Counseling and Training Data Conversion Tool
 
-Converts SBA counseling and training CSV data into XSD-compliant XML files.
+Converts SBA counseling and training CSV exports into XSD-compliant XML for the
+federal SBA Nexus/EDMIS system — and tells you, row by row and column by column,
+what it changed and why.
 
-The tool ships in two forms:
+Because the output is a federal filing, the tool's guiding rule is that it never
+silently invents data. Where a default is unavoidable it is recorded in the
+validation report rather than shipped quietly.
 
-- A **web application** (`apps/web`, `apps/worker`) — recommended for
-  most users. Handles authentication, uploads, preview/mapping,
-  validation reports, job history, and downloads via a browser.
-- A **Python CLI** (`run.py`, `src/`) — the original interactive
-  launcher, useful for power users and for scripting.
+It ships in two forms, both running the same conversion core:
 
------
+- **A web application** (`apps/web` + `apps/worker`) — accounts, uploads, column
+  mapping, live progress, validation reports, job history, downloads. Recommended
+  for most people.
+- **A Python CLI** (`run.py`, `src/`) — a double-clickable launcher for one-off
+  conversions, and an argparse CLI for scripting.
 
-## Web App (recommended)
+---
 
-The web app is a Next.js frontend backed by a FastAPI worker, Postgres,
-and Redis — all wired up in `docker-compose.yml`.
+## Quick start
 
-### Run it locally
+### Web app
 
 ```bash
 cp .env.example .env
-# Edit .env to set DATABASE_URL, NEXTAUTH_SECRET, etc.
+# Set NEXTAUTH_SECRET and WORKER_AUTH_TOKEN: openssl rand -hex 32
 docker compose up
 ```
 
-Then open <http://localhost:3000>, create an account, and upload a CSV.
+Open <http://localhost:3000>, create an account, upload a CSV.
 
-### Download sample CSVs
+### Desktop CLI
 
-Sample CSVs for each converter type live under
-`apps/web/public/samples/` and are also linked from the landing page
-and the dashboard empty state inside the app:
+1. **Download** — **Code** → **Download ZIP**, unzip anywhere.
+2. **Set up** (once) — Windows: double-click `setup.bat`. macOS/Linux:
+   `pip install -r requirements.txt`. Requires
+   [Python](https://www.python.org/downloads/) (tick **"Add Python to PATH"** on
+   Windows).
+3. **Run** — put your CSV in the folder, then double-click `run.bat`, or run
+   `python run.py`.
 
-- `counseling-sample.csv` — individual counseling sessions (Form 641)
-- `training-sample.csv` — per-attendee training rows (Form 888); the converter totals the demographics automatically
-- `training-client-sample.csv` — per-attendee rows (Form 641)
+Output lands in `output/`, reports in `reports/`, logs in `logs/`.
 
-### UX documentation
+Full walkthrough: **[docs/getting-started.md](./docs/getting-started.md)**.
 
-- [`UX_REVIEW.md`](./UX_REVIEW.md) — severity-ranked audit of the
-  web app's user-facing surfaces.
-- [`UX_IMPLEMENTATION_PLAN.md`](./UX_IMPLEMENTATION_PLAN.md) — the
-  phased roadmap that sequences the UX review findings into
-  executable slices.
-- [`TECHNICAL_DEBT.md`](./TECHNICAL_DEBT.md) — code/security debt
-  register, separate from UX concerns.
+---
 
------
+## The three converters
 
-## Python CLI
+| Converter | Form | A CSV row is… |
+|---|---|---|
+| `counseling` | 641 Counseling | one counseling session with one client |
+| `training` | 888 Management Training | one **attendee**; rows are rolled up per event, with demographic totals computed automatically |
+| `training-client` | 641 Counseling | one training attendee, emitted as a counseling record |
 
------
+Picking the wrong one is the most common source of confusing output.
+**[docs/converters.md](./docs/converters.md)** explains which you want.
 
-## Quick Start (3 steps)
+Sample CSVs for each live in `apps/web/public/samples/` and are linked from the
+landing page and the dashboard empty state. All three are covered by a test that
+asserts they convert to schema-valid XML.
 
-1. **Download** — On the GitHub page, click the green **Code** button → **Download ZIP**. Unzip the folder anywhere on your computer.
+## What it does
 
-2. **Setup** (one time only) — Requires [Python](https://www.python.org/downloads/) (check **"Add Python to PATH"** during install).
-   - **Windows:** Double-click `setup.bat`
-   - **Mac/Linux:** Open a terminal in the folder and run: `pip install -r requirements.txt`
+- **Schema-correct output** — elements emitted in the exact order the XSD
+  requires, which is what prevents the `cvc-complex-type.2.4.a` errors that
+  dominate hand-built SBA XML. A blank cell produces no element, never an empty
+  one.
+- **Cleaning and standardization** — dates to `YYYY-MM-DD`, phone numbers to
+  digits, money with `Decimal`, states and countries mapped onto schema
+  enumerations (`IA` → `Iowa`), semicolon-delimited Salesforce multi-value fields
+  split, long text truncated at the schema's limits.
+- **Conditional logic** — `BranchOfService` only when military status indicates
+  service, and so on.
+- **Errors traced back to your CSV** — instead of *"Line 20: Element 'ZipCode'…"*
+  you get *"Row 1 (Contact 003XX…): 'Mailing Zip/Postal Code'…"*.
+- **An audit trail of every change** — CSV and HTML validation reports from the
+  CLI, a before/after cleaning diff in the web app, and a `FABRICATED_DEFAULT`
+  warning wherever a value did not come from your data.
+- **An XML repair tool** — reorders elements in existing counseling-format XML,
+  from the CLI or the web app's Validate page.
 
-3. **Run** — Put your CSV file in the folder, then:
-   - **Windows:** Double-click `run.bat`
-   - **Mac/Linux:** Open a terminal in the folder and run: `python run.py`
+> **This is currently a single-organization tool.** `src/config.py` hardcodes one
+> organization's location code and partner code, and they are stamped into every
+> filing. Read
+> [docs/converters.md](./docs/converters.md#-this-is-a-single-organization-tool)
+> before deploying it for anyone else.
 
-   The tool will walk you through selecting your CSV file, conversion type, and optional XSD validation — no typing commands needed.
+## Documentation
 
-Your output XML and validation reports will be saved in the `output/` and `reports/` folders.
+Everything lives in **[`docs/`](./docs/README.md)**.
 
------
+| | |
+|---|---|
+| [Getting started](./docs/getting-started.md) | Install and run, web or CLI |
+| [Architecture](./docs/architecture.md) | How the pieces fit together |
+| [Converters](./docs/converters.md) | What each one emits, and when it defaults |
+| [CSV reference](./docs/csv-reference.md) | Expected columns per converter |
+| [CLI reference](./docs/cli.md) | Every flag, and output-path confinement |
+| [API reference](./docs/api-reference.md) | Web and worker HTTP surfaces |
+| [Configuration](./docs/configuration.md) | Every environment variable |
+| [Deployment](./docs/deployment.md) | Compose, Railway, migrations |
+| [Operations](./docs/operations.md) | Queue, retention, audit, runbook |
+| [Troubleshooting](./docs/troubleshooting.md) | Errors and what to do about them |
+| [Testing](./docs/testing.md) | Suites, CI gates, the tests that matter |
+| [Contributing](./docs/CONTRIBUTING.md) | Setup and the rules that are not negotiable |
+| [Security](./docs/SECURITY.md) | Reporting, controls, known weaknesses |
+| [Review registers](./docs/reviews/README.md) | Audits and debt registers, with status markers |
 
-## Key Features
-
-  * **Dual Converters**:
-      * **Counseling Data (Form 641)**: Converts detailed client counseling session data.
-      * **Training Data (Form 888)**: Takes per-attendee rows (one line per participant) and
-      automatically rolls them up per event, computing the demographic totals the schema
-      requires (Female, Male, race, ethnicity, veterans, disabilities, etc.). No
-      pre-calculated total columns are needed.
-  * **Data Cleaning & Standardization**:
-      * Formats dates to the required `YYYY-MM-DD` standard.
-      * Cleans and validates phone numbers, numeric values, and percentages.
-      * Standardizes state and country names to match schema enumerations (e.g., "IA" becomes "Iowa").
-      * Truncates long text fields, like counselor notes, to meet maximum length requirements while preserving readability.
-      * Correctly handles and splits multi-value fields from Salesforce (e.g., `Race` or `Services Provided`).
-  * **XSD-Compliant XML Generation**:
-      * Generates XML with elements in the precise order required by the schemas, preventing common `cvc-complex-type.2.4.a` validation errors.
-      * Correctly maps CSV data to the appropriate XML tags based on an extensive mapping configuration.
-      * Handles conditional logic, such as requiring a `BranchOfService` only when `MilitaryStatus` indicates service.
-  * **Validation & Reporting**:
-      * During conversion, it generates comprehensive validation reports in both CSV and HTML formats, detailing any issues found in the source data.
-  * **XML Fixer Utility**:
-      * Includes a standalone script (`fix_sba_xml.py`) to correct element ordering issues in existing XML files that do not conform to the schema.
-
------
-
-## Project Structure
+## Repository layout
 
 ```
-.
-├── run.py                          # Interactive launcher (start here!)
-├── run.bat / setup.bat             # Windows shortcuts
-├── src/
-│   ├── converters/
-│   │   ├── base_converter.py        # Shared progress plumbing + EmptyCSVError
-│   │   ├── counseling_converter.py  # Form 641 counseling sessions
-│   │   ├── training_converter.py    # Form 888 training events (per-attendee rollup)
-│   │   └── training_client_converter.py  # Form 641 from per-attendee training rows
-│   ├── main.py                      # CLI entry point
-│   ├── config.py                    # Field mappings, defaults, XSD enumerations
-│   ├── data_cleaning.py             # Formatting, standardization, enum mapping
-│   ├── data_validation.py           # Row validation + the preview data-quality report
-│   ├── validation_report.py         # Issue tracking, CSV + HTML reports
-│   ├── xml_utils.py                 # create_element / emit_optional
-│   ├── xsd_error_mapping.py         # Maps XSD errors back to CSV rows and columns
-│   ├── xml_validator.py             # XSD validation + element-order repair
-│   ├── fix_sba_xml.py               # CLI wrapper around the order repair
-│   ├── path_safety.py               # Output-path confinement
-│   └── logging_util.py              # Logging setup
-├── apps/
-│   ├── web/                         # Next.js frontend + API (auth, jobs, downloads)
-│   └── worker/                      # FastAPI service; imports src/ in-process
-├── schemas/                         # The two SBA XSDs
-├── tests/                           # 343 tests (pytest); apps/web has its own vitest suite
-└── CODEBASE_ANALYSIS.md             # Current findings register, with status markers
+run.py, run.bat, setup.bat    Interactive launcher + Windows shortcuts
+src/                          Shared conversion core (converters, cleaning,
+                              validation, XSD checking, error mapping)
+apps/web/                     Next.js — auth, jobs, UI, downloads
+apps/worker/                  FastAPI — HTTP wrapper around src/
+schemas/                      The two SBA XSDs
+tests/                        Python suite (covers src/ and the worker)
+docs/                         Documentation
 ```
 
------
-
-## How to Use
-
-The primary entry point for the conversion is `src/main.py`.
-
-### Prerequisites
-
-  * Python 3.x
-  * `pip install -r requirements.txt` (CSV reading is stdlib; `defusedxml` and
-    `lxml` are needed for XML building and XSD validation)
-
-### Converting Data
-
-1.  **Prepare your CSV file**. Ensure it contains the necessary columns as defined in `src/config.py`.
-
-2.  **Run the `main.py` script** from your terminal, specifying the `converter_type`, and providing the input and output paths.
-
-    **For Counseling Data (Form 641):**
-
-    ```bash
-    python -m src.main convert counseling --input /path/to/your/report.csv --output /path/to/output/counseling_data.xml
-    ```
-
-    **For Training Data:**
-
-    ```bash
-    python -m src.main convert training --input /path/to/your/training_report.csv --output /path/to/output/training_data.xml
-    ```
-
-### Fixing an Existing XML File
-
-If you have an XML file that fails validation due to incorrect element order, use the `fix_sba_xml.py` script:
+## Development
 
 ```bash
-python -m src.fix_sba_xml --file /path/to/your/invalid.xml --output /path/to/output/fixed.xml
+pip install -r requirements.txt -r apps/worker/requirements-dev.txt
+python -m pytest tests/ -v --cov=src --cov=apps/worker/app --cov-fail-under=70
+ruff check .
+
+cd apps/web && npm ci && npm run lint && npm test && npm run build
 ```
 
-This will re-order the elements to match the schema requirements.
-
-### Command-Line Arguments (`main.py`)
-
-  * `converter_type`: `counseling`, `training`, or `training-client`.
-  * `--input, -i`: Path to the input CSV file.
-  * `--output, -o`: (Optional) Path for the output XML file. If omitted, the XML will be saved in the same directory as the input file with a timestamp.
-  * `--log-level`: Set the logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `INFO`.
-  * `--report-dir`: Directory to save validation reports. Defaults to `reports/`.
-  * `--log-dir`: Directory to save log files. Defaults to `logs/`.
-
-### Writing outside the project folder
-
-All output paths are confined to the project directory. Passing an `--output`,
-`--report-dir` or `--log-dir` outside it fails with *"Refusing to write outside
-…"*. To allow another location, set `SBA_OUTPUT_BASE` to the directory you want
-writes confined to:
-
-```bash
-SBA_OUTPUT_BASE=/srv/sba-output python -m src.main convert counseling \
-  --input report.csv --output /srv/sba-output/counseling.xml
-```
+Installing `apps/worker/requirements-dev.txt` matters — without it 79 tests skip
+silently rather than failing. See [docs/testing.md](./docs/testing.md).

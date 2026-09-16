@@ -14,7 +14,7 @@ interface AuditEntry {
 /**
  * Human-friendly summaries for audit-entry metadata.
  *
- * Resolves UX_REVIEW.md §9.2. Previously the Details cell rendered
+ * Resolves docs/reviews/UX_REVIEW.md §9.2. Previously the Details cell rendered
  * ``JSON.stringify(entry.metadata)`` truncated to 200 chars, which
  * was useless for end users and looked unfinished. This helper
  * interprets the known action types and produces a plain sentence.

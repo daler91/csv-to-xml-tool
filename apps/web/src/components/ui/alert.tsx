@@ -2,7 +2,7 @@
  * Shared alert primitive.
  *
  * Consolidates the ~6 hand-rolled red/blue/green alert variants
- * that existed across the app. Resolves UX_REVIEW.md §8.1 / §8.5.
+ * that existed across the app. Resolves docs/reviews/UX_REVIEW.md §8.1 / §8.5.
  *
  * Variants map to tone:
  *   error   — red-50 bg, red-200 border, red-800 text, role=alert

@@ -6,6 +6,11 @@
 running the full test suites, building the app, converting the shipped sample CSVs, and validating
 the output against the bundled SBA schemas. Findings are not inferred from reading alone.
 
+> **A second-pass review at `482d235` (2026-09-16) lives in
+> [`CODEBASE_ANALYSIS_2.md`](./CODEBASE_ANALYSIS_2.md).** It does not repeat this document; it
+> records what remained after the remediation below, and its §5.4 lists which of these findings are
+> still open. New work should be tracked there.
+
 ## How to use this document
 
 Each finding carries a status marker. **When you fix something, flip its marker to `[FIXED]`
@@ -312,7 +317,8 @@ CI never builds either image, which is why this went unnoticed.
   script's own header comment; the runtime image contains neither `prisma/schema.prisma` nor the
   Prisma CLI.
 - Both images run as **root**, with no `HEALTHCHECK` instruction, no `.dockerignore`, and
-  `npm install` rather than `npm ci`.
+  `npm install` rather than `npm ci`. _(Still `npm install --ignore-scripts` at `482d235` —
+  `CODEBASE_ANALYSIS_2.md` §3.4.)_
 - Redis has no persistence volume, so a restart drops every queued job until the 1-hour reaper.
 - `/health` returns HTTP 200 even when degraded, so the platform healthcheck only proves the
   process is up.

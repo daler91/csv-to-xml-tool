@@ -5,11 +5,12 @@ wrong**; the guides in [`../`](../README.md) describe **how the system works**.
 If you want to know how something behaves today, read a guide — these documents
 are deliberately written in the past tense of a problem.
 
-## The four registers
+## The registers
 
 | Document | What it is | Trust it? |
 |---|---|---|
-| [`CODEBASE_ANALYSIS.md`](./CODEBASE_ANALYSIS.md) | Full review of `src/`, `apps/web`, `apps/worker`, tests, CI and deployment, organised into five severity tiers. Every finding was verified by *executing* the code, not by reading it. | **Yes.** The most authoritative of the four. |
+| [`CODEBASE_ANALYSIS_2.md`](./CODEBASE_ANALYSIS_2.md) | **Second-pass** review at `482d235`, after the first register's Tier 1–5 remediation. Same method (every finding verified by execution); does not repeat the first register. Length facets, case-sensitive Yes/No, unaudited fabrications, training race counting, the web boot/consumer failure modes. | **Yes.** The current findings register — start here. |
+| [`CODEBASE_ANALYSIS.md`](./CODEBASE_ANALYSIS.md) | First full review of `src/`, `apps/web`, `apps/worker`, tests, CI and deployment, organised into five severity tiers. Every finding was verified by *executing* the code, not by reading it. Most items are now `[FIXED]`; the still-open ones are listed in `CODEBASE_ANALYSIS_2.md` §5.4. | **Yes**, for what it covers. One stale marker: 2.3 lists `npm ci` under `[FIXED] (most)`; the web Dockerfile still uses `npm install` (second pass, 3.4). |
 | [`TECHNICAL_DEBT.md`](./TECHNICAL_DEBT.md) | 19 numbered debt items by priority, each with a fix. | Yes, with the caveats below. |
 | [`UX_REVIEW.md`](./UX_REVIEW.md) | Severity-ranked audit of every user-facing surface, with inline `[RESOLVED]` markers. Well maintained. | Yes, with one stale marker (below). |
 | [`UX_IMPLEMENTATION_PLAN.md`](./UX_IMPLEMENTATION_PLAN.md) | The six-phase plan that sequenced the UX findings into shippable slices. | As a record of what was done. |

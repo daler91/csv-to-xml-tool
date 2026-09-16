@@ -292,7 +292,10 @@ test for *column names*, not for *coverage of the cleaners actually applied*.
 
 ## Tier 3 — Correctness & robustness
 
-### 3.1 The validation reports crash on non-ASCII text under a non-UTF-8 locale — `[OPEN]`
+### 3.1 The validation reports crash on non-ASCII text under a non-UTF-8 locale — `[FIXED]`
+
+> Fixed: both writers pass an explicit encoding (`utf-8-sig` for the CSV so Excel reads it as UTF-8, `utf-8` plus a `<meta charset>` for the HTML) and catch `UnicodeError` alongside `OSError`. `tests/test_validation_report.py::TestReportEncoding` runs the writers in a subprocess under an ASCII locale.
+
 
 `validation_report.py:188` and `:334` open the CSV and HTML reports with no `encoding=`. Python
 then uses the locale encoding — `cp1252` on the Windows machines that `run.bat`/`setup.bat` exist to
@@ -306,7 +309,10 @@ double-click user sees a traceback and the console closes; in `src.main` it is c
 `except Exception` and the process exits 1 with "An unexpected error occurred" after writing a good
 XML file. The XML writers are fine (they pass `encoding='utf-8'` explicitly).
 
-### 3.2 Training-client issues and XSD error details cite columns the user's file does not have — `[OPEN]`
+### 3.2 Training-client issues and XSD error details cite columns the user's file does not have — `[FIXED]`
+
+> Fixed: `TrainingClientConfig.reverse_column_mapping()` is applied in two places — `ValidationTracker.field_aliases` (set by `TrainingClientConverter.__init__`) renames every issue's `field_name` back to the user's header, and `xsd_error_mapping._TRAINING_CLIENT_ELEMENT_FIELDS` is derived from the counseling table through the same reverse map. The ZIP warning is recorded once per record (`_first_time`).
+
 
 `TrainingClientConverter` renames `State → Mailing State/Province`, `Zip code → Mailing Zip/Postal
 Code`, `Phone → Contact: Phone`, `Company → Account Name`, `Disabilities → Disability`, etc., before
@@ -322,7 +328,10 @@ the reverse map needed; `analyze_training_client_quality` already applies it for
 Also visible in that run: the ZIP warning is recorded **twice** per row (once each for
 `AddressPart1` and `AddressPart3`), because `_build_address` dedupes only the fabrication warning.
 
-### 3.3 The mapping page reports the shipped samples as incomplete — `[OPEN]`
+### 3.3 The mapping page reports the shipped samples as incomplete — `[FIXED]`
+
+> Fixed: `preview_service._match_columns` treats any accepted alias as a match for `training` and reports it in `column_status.aliases` (shown by the mapping page); `TRAINING_CLIENT_EXPECTED` now lists only the columns the converter reads. Both shipped samples are regression fixtures in `tests/test_preview_service.py`.
+
 
 `get_expected_columns('training')` returns the *first* alias of each `TrainingConfig` entry
 (`preview_service.py:273-279`), so for `training-sample.csv` — whose headers are `city`, `State`,
@@ -333,7 +342,10 @@ lists columns (`Class Teacher`, `Disabilities`, `Related Record ID`, `Street`, `
 `Zip code`, `Unique Campaign Members`) that the sample deliberately omits. The first thing a new user
 sees after uploading the sample the landing page linked is a warning that it is wrong.
 
-### 3.4 Smaller items — `[OPEN]`
+### 3.4 Smaller items — `[FIXED]`
+
+> Fixed: `/preview` binds the job id; the cleaning-diff failure is logged with its traceback; the dead `Street2` call is gone; the web Dockerfile runs `npm ci --ignore-scripts`.
+
 
 - `routes/preview.py` never calls `set_job_id`, so preview logs carry `[-]` and cannot be
   correlated with the job (every other route binds it).
@@ -356,7 +368,10 @@ surface turned up. Items marked **verified** were confirmed against the code and
 running it; **plausible** means the code path is clear but the trigger needs a runtime condition not
 reproduced here.
 
-### 4.1 The web server never starts if Redis is unreachable at boot — `[OPEN]` — HIGH, verified
+### 4.1 The web server never starts if Redis is unreachable at boot — `[FIXED]` — HIGH, verified
+
+> Fixed: `startConsumer` no longer awaits the boot sweep (fire-and-forget with its own error log), so `register()` resolves whatever Redis is doing. `job-consumer.test.ts` starts the consumer against a sweep whose promise never settles.
+
 
 `instrumentation.ts:17` awaits `startConsumer()`, which awaits `sweepStaleClaims()`
 (`job-consumer.ts:35`) on the queue client. That client is built with `maxRetriesPerRequest: null`
@@ -371,7 +386,10 @@ Redis is restarting → the process listens on nothing → Railway's `/` healthc
 other Redis path in the app deliberately fails open; this one fails closed at the worst moment. Fix:
 do not block `register()` on the boot sweep (fire-and-forget, or race it against a short timeout).
 
-### 4.2 `PATCH /api/jobs/[jobId]` lets the browser write any job status — `[OPEN]` — HIGH, verified
+### 4.2 `PATCH /api/jobs/[jobId]` lets the browser write any job status — `[FIXED]` — HIGH, verified
+
+> Fixed: the body must be a JSON object; `status` is accepted only as `mapping`; `columnMapping` goes through the shared `lib/column-mapping.ts::sanitizeMapping` (moved out of the template route, with `allowEmpty` for the legitimate empty job mapping). `api-reference.md` says so.
+
 
 `jobs/[jobId]/route.ts:110-134` whitelists `["columnMapping", "status"]` and guards the *current*
 status (not terminal) but never validates the *target* value. The only legitimate client write is
@@ -387,7 +405,10 @@ body (`"abc"`, `null`) hits `key in data` at `:113` → TypeError → 500. `rout
 `status`, and `api-reference.md:109` documents `status` as freely updatable. Fix: accept only
 `status: "mapping"` and reuse `sanitizeMapping`.
 
-### 4.3 The consumer loop dies permanently if `handleFailure` throws — `[OPEN]` — HIGH, verified
+### 4.3 The consumer loop dies permanently if `handleFailure` throws — `[FIXED]` — HIGH, verified
+
+> Fixed: the per-job work moved into `processClaim`, and `runLoop` wraps it in its own try/catch with a backoff, so a throwing failure handler is logged and the loop claims again. Tested with a `getAttempts` that rejects inside the handler.
+
 
 `job-consumer.ts:72-77`: `handleFailure` runs inside the `catch` with no guard of its own and calls
 `ackJob`/`getAttempts`/`requeueJob` (Redis) and `deadLetter` (Prisma). Any of those throwing rejects
@@ -399,7 +420,10 @@ Redis restart during a completing conversion leaves every later job `queued` unt
 fails it. No test covers a throwing `handleFailure`. Fix: guard `handleFailure` with its own
 try/catch and sleep, and clear the started flag (or restart the loop) on exit.
 
-### 4.4 `JOB_MAX_ATTEMPTS` is not enforced for sweep-reclaimed jobs — `[OPEN]` — MEDIUM, plausible
+### 4.4 `JOB_MAX_ATTEMPTS` is not enforced for sweep-reclaimed jobs — `[FIXED]` — MEDIUM, plausible
+
+> Fixed: `processClaim` reads the attempt counter before running and dead-letters a job claimed more than `JOB_MAX_ATTEMPTS` times, with a `conversion_deadlettered` audit row naming the count.
+
 
 The attempts cap is checked only in `handleFailure` (`job-consumer.ts:100`). A job that kills the
 process instead of throwing — realistic, since `job-runner.ts:44-54` holds the CSV string, its
@@ -409,7 +433,10 @@ minutes later `sweepStaleClaims` re-queues (`job-queue.ts:116-130` never consult
 (attempts=2, unchecked) → crash… The reaper never fires because `updatedAt` is refreshed every 40
 minutes and its deadline is 60. Fix: check `getAttempts(jobId) > MAX_ATTEMPTS` at claim time.
 
-### 4.5 `workerFetch` timeout does not cover the response body — `[OPEN]` — MEDIUM, verified
+### 4.5 `workerFetch` timeout does not cover the response body — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `return (await res.json())`. `worker-client.test.ts` (new) checks the abort fires while a body is still downloading and that a body-read failure goes through the same catch as a network error.
+
 
 `worker-client.ts:32` is `return res.json()` with no `await`, inside `try … finally`. The `finally`
 runs — and `clearTimeout` fires — as soon as headers arrive, so the `AbortController` never aborts a
@@ -418,7 +445,10 @@ failure (socket reset mid-body, invalid JSON) also bypasses the `catch`, so it s
 `SyntaxError`/`TypeError` instead of the "timed out"/"Worker error" shapes that
 `job-consumer.ts:97-98` classifies on. Fix: `return await res.json()`.
 
-### 4.6 CSV bytes are decoded as UTF-8 with no detection — `[OPEN]` — MEDIUM, verified
+### 4.6 CSV bytes are decoded as UTF-8 with no detection — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `lib/csv-decode.ts` decodes UTF-16 by BOM, then strict UTF-8, then Windows-1252; the runner and the preview route both use it and log a non-UTF-8 fallback. `csv-decode.test.ts` covers a cp1252 Excel export.
+
 
 `job-runner.ts:44` and `preview/route.ts:39` do `readFile(path, "utf-8")`. Excel's default "CSV
 (Comma delimited)" on Windows writes cp1252, so every non-ASCII byte (José, Muñoz, an en-dash in
@@ -428,7 +458,10 @@ spirit of rule 4. `xml-tool-route.ts:44-70` already has a BOM/declaration-aware 
 uploads; the CSV path has nothing. Fix: decode with `TextDecoder("utf-8", {fatal: true})` and fall
 back to windows-1252, or reject invalid UTF-8 at upload with a clear message.
 
-### 4.7 Client components read a server-only env var — `[OPEN]` — MEDIUM, verified
+### 4.7 Client components read a server-only env var — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `MAX_UPLOAD_BYTES` is passed as a prop from the server pages (`convert/page.tsx`, and a new server `validate/page.tsx` wrapping the client `validate-tool.tsx`), and the size messages on that path are formatted from the real cap via `formatMegabytes`.
+
 
 `limits.ts:9-10` reads `process.env.MAX_UPLOAD_BYTES`; it is imported by the client components
 `convert-form.tsx:19` and `validate/page.tsx:20`. It is not `NEXT_PUBLIC_`, so in the browser it is
@@ -437,29 +470,31 @@ sees the client accept a 30 MB file, the server return 413, and `upload-errors.t
 the file is "larger than 50MB". The header comment of `convert-form.tsx` explains exactly this trap
 for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES` the same way.
 
-### 4.8 Remaining items — `[OPEN]`
+### 4.8 Remaining items — `[FIXED]` (every row; 4.8.12 by documentation)
 
 | # | Finding | Location | Severity |
 |---|---|---|---|
-| 4.8.1 | Rate-limit key can lose its TTL permanently: `INCR` then a separate `EXPIRE` only when `current === 1`; if the `EXPIRE` fails the key never expires and, after `limit` more hits, is 429 forever (`signup:unknown` and `upload:<userId>` included). Use `SET … EX … NX` + `INCR` or a MULTI. | `rate-limit.ts:21-25` | MEDIUM, plausible |
-| 4.8.2 | Preview route hides the worker's 4xx detail behind a 500 "Failed to generate preview", so a malformed CSV reads as "server may be busy". `xml-tool-route.ts:86-97` already does the right translation. | `preview/route.ts:49-56,82-83` | MEDIUM, verified |
-| 4.8.3 | Retention purge can race `POST /start`: candidates are selected by status but the purge claim guards only `filesPurgedAt: null`, so a job started in the window loses its input and dead-letters after three ENOENTs. One predicate fixes it. | `retention.ts:44-66` | LOW/MEDIUM, plausible |
-| 4.8.4 | A failed conversion has no user-visible reason: `deadLetter` and the reaper put it only in `AuditEntry.metadata`, and `results/page.tsx:97-105` renders an `error` job as an empty "Conversion Results" page. Distinct from the tracked audit-label item: fixing that only makes the reason findable on a different page. | `job-consumer.ts:113-116`, `results/page.tsx` | LOW/MEDIUM, verified |
-| 4.8.5 | Upload extension check is case-sensitive on the server only (`endsWith(".csv")`); the client lower-cases. `EXPORT.CSV` passes the client and is told "That file isn't a CSV". | `upload/route.ts:35` | LOW, verified |
-| 4.8.6 | Multipart bodies are fully buffered by `req.formData()` before the size cap is applied, and a non-file `file` part → TypeError → 500. | `upload/route.ts:23`, `xml-tool-route.ts:121` | LOW, plausible |
-| 4.8.7 | Every worker 4xx is relabelled a user error: a wrong `WORKER_AUTH_TOKEN` (401), the worker's 413 or a 429 is shown to the partner as if their file were bad, and not logged. | `xml-tool-route.ts:86-97` | LOW, verified |
-| 4.8.8 | Download filename replaces the *first* `.csv`: `q1.csv_export.csv` downloads as `q1.xml_export.csv`. Use `/\.csv$/i`. | `download/route.ts:55` | LOW, verified |
-| 4.8.9 | Login IP key is an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
-| 4.8.10 | Signup: malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
-| 4.8.11 | `conversion_started` is audited on every successful claim, including sweep re-claims and requeues, so a job retried three times shows three starts. | `job-runner.ts:38-40` | LOW, verified |
-| 4.8.12 | `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
-| 4.8.13 | The `CONVERSION_TIMEOUT_MS < VISIBILITY_TIMEOUT_MS < REAP_DEADLINE_MS` ordering (rule 7) is correct in the defaults and both `.env.example` files but has no runtime assertion; a misordered override silently lets the sweep re-queue a job a live consumer is still running. | `job-queue.ts`, `job-reaper.ts` | LOW |
+| 4.8.1 | **`[FIXED]`** `rateLimit` issues `INCR` and `EXPIRE … NX` in one MULTI, so the TTL is armed atomically and a key that lost it is healed on the next hit (Redis 7 required; documented). Previously the rate-limit key could lose its TTL permanently: `INCR` then a separate `EXPIRE` only when `current === 1`; if the `EXPIRE` fails the key never expires and, after `limit` more hits, is 429 forever (`signup:unknown` and `upload:<userId>` included). Use `SET … EX … NX` + `INCR` or a MULTI. | `rate-limit.ts:21-25` | MEDIUM, plausible |
+| 4.8.2 | **`[FIXED]`** Preview route hid the worker's 4xx detail behind a 500. The route now relays a worker 400/422 detail as a 400 through the shared `workerClientError`. "Failed to generate preview", so a malformed CSV reads as "server may be busy". `xml-tool-route.ts:86-97` already does the right translation. | `preview/route.ts:49-56,82-83` | MEDIUM, verified |
+| 4.8.3 | **`[FIXED]`** Retention purge could race `POST /start`. The purge claim now repeats the `status notIn` predicate.: candidates are selected by status but the purge claim guards only `filesPurgedAt: null`, so a job started in the window loses its input and dead-letters after three ENOENTs. One predicate fixes it. | `retention.ts:44-66` | LOW/MEDIUM, plausible |
+| 4.8.4 | **`[FIXED]`** The results page now reads the latest `conversion_deadlettered`/`conversion_timeout` audit entry and shows `describeJobFailure()`'s explanation (worker 400/422 detail verbatim, generic text for outages). Previously a failed conversion had no user-visible reason: `deadLetter` and the reaper put it only in `AuditEntry.metadata`, and `results/page.tsx:97-105` renders an `error` job as an empty "Conversion Results" page. Distinct from the tracked audit-label item: fixing that only makes the reason findable on a different page. | `job-consumer.ts:113-116`, `results/page.tsx` | LOW/MEDIUM, verified |
+| 4.8.5 | **`[FIXED]`** Upload extension check was case-sensitive on the server only (`endsWith(".csv")`); the client lower-cases. `EXPORT.CSV` passes the client and is told "That file isn't a CSV". | `upload/route.ts:35` | LOW, verified |
+| 4.8.6 | **`[FIXED]`** Multipart bodies were fully buffered before the size cap applied: `declaredBodyTooLarge` now rejects on `Content-Length` first, and `isUploadedFile` rejects a non-file part with a 400. Previously, and a non-file `file` part → TypeError → 500. | `upload/route.ts:23`, `xml-tool-route.ts:121` | LOW, plausible |
+| 4.8.7 | **`[FIXED]`** `workerClientError` now recognises only 400/422; a 401/403/413/429 falls through to the logged 502 path. Previously every worker 4xx was relabelled a user error: a wrong `WORKER_AUTH_TOKEN` (401), the worker's 413 or a 429 is shown to the partner as if their file were bad, and not logged. | `xml-tool-route.ts:86-97` | LOW, verified |
+| 4.8.8 | **`[FIXED]`** Download filename replaced the *first* `.csv`; now the suffix, case-insensitively: `q1.csv_export.csv` downloads as `q1.xml_export.csv`. Use `/\.csv$/i`. | `download/route.ts:55` | LOW, verified |
+| 4.8.9 | **`[FIXED]`** `lib/client-ip.ts` requires an IPv4/IPv6 address (`net.isIP`, ≤45 chars) and is shared by signup and login; `TECHNICAL_DEBT.md` #15 is corrected. The email-keyed lockout is unchanged and documented. Previously the login IP key was an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
+| 4.8.10 | **`[FIXED]`** Signup: malformed JSON → 400, non-string name → 400, email shape/length checked, P2002 → 409. Previously malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
+| 4.8.11 | **`[FIXED]`** `conversion_started` was audited on every successful claim. `runJob` now takes the attempt number from the consumer and writes `conversion_retried` (with `metadata.attempt`) for later attempts; the audit page labels it. | `job-runner.ts` | LOW, verified |
+| 4.8.12 | **`[FIXED]`** (documented; not verifiable here) `deployment.md` now has a *Volume ownership on Railway* section and a checklist item naming `RAILWAY_RUN_UID=0`. `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
+| 4.8.13 | **`[FIXED]`** The three timeouts now live in `lib/durability-timeouts.ts` and `assertTimeoutOrdering()` runs at consumer startup, refusing to start on a misordered override. | `lib/durability-timeouts.ts` | LOW |
 
-**Web test gaps:** no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`; a throwing
-`handleFailure` is untested; `PATCH` with a `status` value is untested; an upper-case `.CSV` upload is
-untested. `GET /api/jobs/[jobId]` returns `inputFilePath`/`outputFilePath` (absolute server paths)
-plus the full `issues` and `cleaningDiffs` arrays on every 1–5 s progress poll — not a bug, but
-unnecessary disclosure and payload.
+**Web test gaps:** _(as found)_ no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`;
+a throwing `handleFailure` is untested; `PATCH` with a `status` value is untested; an upper-case
+`.CSV` upload is untested. _(Now)_ all but the `[templateId]` route are covered by the Tier 4 fixes
+(`worker-client.test.ts`, `job-consumer.test.ts`, the PATCH and upload route tests); the web suite
+went from 173 to 237 tests. `GET /api/jobs/[jobId]` still returns `inputFilePath`/`outputFilePath`
+(absolute server paths) plus the full `issues` and `cleaningDiffs` arrays on every 1–5 s progress
+poll — not a bug, but unnecessary disclosure and payload, and still open.
 
 ---
 

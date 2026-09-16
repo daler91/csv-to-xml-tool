@@ -100,7 +100,8 @@ written by the code:
 | Action | Written when |
 |---|---|
 | `upload` | A CSV is accepted |
-| `conversion_started` | The consumer claims a job |
+| `conversion_started` | The consumer claims a job for the first time (`metadata.attempt` = 1) |
+| `conversion_retried` | A later claim of the same job — after a requeue or a sweep re-claim (`metadata.attempt` ≥ 2) |
 | `conversion_complete` | The XML is persisted |
 | `conversion_cancelled` | A user cancels |
 | `conversion_timeout` | The reaper fails a stuck job |

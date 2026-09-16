@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from ..logging_context import set_job_id
 from ..models.schemas import PreviewRequest, PreviewResponse
 from ..services.preview_service import read_csv_preview
 
@@ -20,6 +21,9 @@ router = APIRouter()
     },
 )
 async def preview(req: PreviewRequest):
+    # Bind the job id so preview logs correlate with the job like every other
+    # route's do (QUAL-5); this was the one handler that left it as "-".
+    set_job_id(req.job_id)
     try:
         # The web sends the uploaded CSV's content in the request body; the
         # worker no longer reads a shared volume (web and worker are separate

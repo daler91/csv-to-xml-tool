@@ -1,7 +1,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY apps/web/package*.json ./
-RUN npm install --ignore-scripts
+# ci, not install: the image must build from the lockfile CI tested, not
+# re-resolve ranges at build time.
+RUN npm ci --ignore-scripts
 
 FROM node:20-alpine AS builder
 WORKDIR /app

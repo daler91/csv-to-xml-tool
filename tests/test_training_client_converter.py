@@ -376,3 +376,37 @@ class TestTrainingClientConverter(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestTrainingClientIssueColumnNames(unittest.TestCase):
+    """Issues must name the user's own columns, once each.
+
+    _preprocess_row renames the training-client headers to counseling names,
+    so the shared counseling code used to record a bad ZIP under
+    'Mailing Zip/Postal Code' -- a column the file does not have -- and did so
+    twice, once for each address part.
+    """
+
+    def setUp(self):
+        self.logger = ConversionLogger("test_tc_issues", log_level="DEBUG", log_to_file=False).logger
+        self.validator = ValidationTracker()
+        self.helper = TestTrainingClientConverter()
+        self.helper.logger = self.logger
+        self.helper.validator = self.validator
+
+    def test_bad_zip_is_reported_under_the_users_column_once(self):
+        row = self.helper._make_valid_row(**{'Zip code': 'M5V 3L9'})
+        self.helper._convert_and_parse([row])
+
+        zip_issues = [i for i in self.validator.issues if i['category'] == 'invalid_format']
+        self.assertEqual(len(zip_issues), 1, zip_issues)
+        self.assertEqual(zip_issues[0]['field_name'], 'Zip code')
+        self.assertNotIn(
+            'Mailing Zip/Postal Code', [i['field_name'] for i in self.validator.issues])
+
+    def test_pass_through_columns_are_unchanged(self):
+        row = self.helper._make_valid_row(**{'Military Status': 'Veteran'})  # no branch -> error
+        self.helper._convert_and_parse([row])
+
+        branch = [i for i in self.validator.issues if i['field_name'] == 'BranchOfService']
+        self.assertEqual(len(branch), 1)

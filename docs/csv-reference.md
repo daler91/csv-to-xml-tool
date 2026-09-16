@@ -9,8 +9,13 @@ absent.
    before anything else, on both the preview path and the conversion path. A
    trailing space in an export header does not break the lookup, and the preview
    UI cannot disagree with what the converter actually reads.
-2. **The file is read as `utf-8-sig`**, so an Excel BOM does not turn the first
-   header into `﻿Contact ID`.
+2. **The file is decoded as strict UTF-8, falling back to Windows-1252.** An
+   Excel "CSV UTF-8" export (with its BOM) and a plain "CSV (Comma delimited)"
+   export from Windows Excel (the system code page, cp1252) both decode
+   correctly; a UTF-16 "Unicode Text" export is recognised by its BOM. The
+   worker then reads the text as `utf-8-sig`, so a BOM never turns the first
+   header into `﻿Contact ID`. Before the fallback existed, every accented
+   character in a cp1252 export became `�` silently.
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
    column name it no longer uses.

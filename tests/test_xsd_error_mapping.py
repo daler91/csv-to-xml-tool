@@ -265,3 +265,33 @@ def test_counseling_session_number_still_maps_to_activity_id():
 
     assert detail["field_label"] == "Activity ID"
     assert detail["csv_column"] == "Activity ID"
+
+
+def test_training_client_renamed_columns_report_the_users_header():
+    """The converter renames 'State' -> 'Mailing State/Province' before the
+    counseling code runs; the error detail has to name the column the user's
+    file actually has, or the fix-it view points at a column they can't find."""
+    line = _line_of(COUNSELING_XML, "<ZipCode>BAD</ZipCode>")
+    error = f"Line {line}: Element 'ZipCode': bad value."
+    detail = _one_detail(COUNSELING_XML, error, schema_type="training-client")
+
+    assert detail["field_label"] == "Zip code"
+    assert detail["csv_column"] == "Zip code"
+    assert "(CSV column 'Zip code')" in detail["friendly_message"]
+    assert "Mailing Zip" not in detail["friendly_message"]
+
+    # The same element on a counseling document still maps to the counseling column.
+    detail = _one_detail(COUNSELING_XML, error, schema_type="counseling")
+    assert detail["csv_column"] == "Mailing Zip/Postal Code"
+
+
+def test_training_client_pass_through_columns_keep_their_names():
+    from src.xsd_error_mapping import _TRAINING_CLIENT_ELEMENT_FIELDS as fields
+
+    assert fields["State"] == ("State", "State")
+    assert fields["Primary"] == ("Phone", "Phone")
+    assert fields["CompanyName"] == ("Company", "Company")
+    assert fields["Disability"] == ("Disabilities", "Disabilities")
+    # Columns the training-client CSV shares with the counseling form are untouched.
+    assert fields["Email"] == ("Email", "Email")
+    assert fields["First"] == ("First Name", "First Name")

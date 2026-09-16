@@ -7,10 +7,27 @@ import { getRedis } from "@/lib/redis";
 
 const mockGetRedis = vi.mocked(getRedis);
 
-function fakeRedis(incrValue: number) {
+/**
+ * A Redis whose MULTI records the queued commands and answers INCR with
+ * `incrValue`. `expireReply` lets a test simulate an EXPIRE that errored
+ * inside the transaction.
+ */
+function fakeRedis(incrValue: number, expireReply: [Error | null, unknown] = [null, 1]) {
+  const queued: unknown[][] = [];
+  const multi = {
+    incr: vi.fn((...args: unknown[]) => {
+      queued.push(["incr", ...args]);
+      return multi;
+    }),
+    expire: vi.fn((...args: unknown[]) => {
+      queued.push(["expire", ...args]);
+      return multi;
+    }),
+    exec: vi.fn().mockResolvedValue([[null, incrValue], expireReply]),
+  };
   return {
-    incr: vi.fn().mockResolvedValue(incrValue),
-    expire: vi.fn().mockResolvedValue(1),
+    multi: vi.fn(() => multi),
+    queued,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
@@ -20,24 +37,28 @@ beforeEach(() => {
 });
 
 describe("rateLimit", () => {
-  it("allows under the limit and sets the window expiry on the first hit", async () => {
+  it("allows under the limit and arms the window expiry in the same transaction", async () => {
     const redis = fakeRedis(1);
     mockGetRedis.mockReturnValue(redis);
 
     const res = await rateLimit("k", 5, 60);
 
     expect(res).toEqual({ success: true, remaining: 4 });
-    expect(redis.expire).toHaveBeenCalledWith("rate-limit:k", 60);
+    expect(redis.queued).toEqual([
+      ["incr", "rate-limit:k"],
+      ["expire", "rate-limit:k", 60, "NX"],
+    ]);
   });
 
-  it("does not reset the expiry on subsequent hits", async () => {
+  it("re-issues EXPIRE NX on every hit, so a key that lost its TTL is healed rather than stuck", async () => {
     const redis = fakeRedis(3);
     mockGetRedis.mockReturnValue(redis);
 
     const res = await rateLimit("k", 5, 60);
 
     expect(res).toEqual({ success: true, remaining: 2 });
-    expect(redis.expire).not.toHaveBeenCalled();
+    // NX means an existing TTL is not reset, so the window is not extended.
+    expect(redis.queued[1]).toEqual(["expire", "rate-limit:k", 60, "NX"]);
   });
 
   it("denies once the count exceeds the limit", async () => {
@@ -52,6 +73,16 @@ describe("rateLimit", () => {
     mockGetRedis.mockImplementation(() => {
       throw new Error("ECONNREFUSED");
     });
+
+    const res = await rateLimit("k", 5, 60);
+
+    expect(res).toEqual({ success: true, remaining: 5 });
+  });
+
+  it("fails OPEN when the transaction is aborted", async () => {
+    const redis = fakeRedis(1);
+    redis.multi().exec.mockResolvedValue(null);
+    mockGetRedis.mockReturnValue(redis);
 
     const res = await rateLimit("k", 5, 60);
 

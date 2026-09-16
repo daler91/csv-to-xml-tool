@@ -49,7 +49,8 @@ special character.
 | Status | Meaning |
 |---|---|
 | 201 | Created |
-| 400 | Validation failure (including password complexity) |
+| 400 | Validation failure: body not a JSON object, missing/invalid email (shape and ≤254 characters), non-string name, or password complexity |
+| 409 | Email already registered — also when two signups for one address race past the pre-check |
 | 429 | Rate limited |
 
 Emails are trimmed and lowercased on write and on lookup, so `User@example.com`
@@ -75,9 +76,9 @@ Auth.js handlers — sign in, sign out, session, CSRF.
 
 | Status | Meaning |
 |---|---|
-| 400 | Missing field, non-`.csv` name, unknown converter type, or a `previousJobId` that is not yours |
+| 400 | Missing field, a `file` part that is not a file, a name not ending in `.csv` (case-insensitive), unknown converter type, or a `previousJobId` that is not yours |
 | 401 | Not signed in |
-| 413 | Over the size cap |
+| 413 | Over the size cap — checked against the declared `Content-Length` before the body is buffered, then against the file itself |
 | 429 | Rate limited |
 | 500 | Write failed — the job row is deleted and the partial upload directory removed, so no orphan is left behind |
 
@@ -107,11 +108,15 @@ and `progressUpdatedAt` — that is what drives the progress bar.
 ### `PATCH /api/jobs/:jobId`
 
 Update `columnMapping` and/or `status`. Any other field in the body is ignored.
+`columnMapping` must be a flat object of non-empty column-name strings (at most
+200 entries of 200 characters; `{}` is allowed). `status` may only be set to
+`mapping` — every other transition belongs to a server-side actor (`/start`,
+the queue consumer, `/cancel`, `/preview`).
 
 | Status | Meaning |
 |---|---|
 | 200 | Updated; returns the fresh row |
-| 400 | No updatable field in the body |
+| 400 | Body is not a JSON object, no updatable field, an invalid `columnMapping`, or a `status` other than `mapping` |
 | 409 | The job is `cancelled`, `complete` or `error` and cannot be modified |
 
 The update is a guarded `updateMany`; if a cancel lands between the read and the
@@ -153,7 +158,20 @@ column status (matched / missing / extra plus fuzzy rename suggestions) and the
 data-quality summary. Flips the job to `previewed` unless it is already terminal
 or in flight.
 
-`410` if the file has been purged; `413` if it exceeds the cap.
+For the `training` converter a column counts as matched when the file carries
+**any** of its accepted spellings (`city` for `City`, `Zip code` for
+`Zip/Postal Code`); `column_status.aliases` maps each such canonical column to
+the header that satisfied it. `training-client` expects only the columns its
+converter reads, so export-only columns (`Member Status`, `Related Record ID`, …)
+are neither expected nor reported missing.
+
+`400` with the worker's own message when the worker rejects the CSV content
+(malformed file); `410` if the file has been purged; `413` if it exceeds the cap.
+
+The file is decoded as strict UTF-8 (BOM preserved) with a fallback to
+Windows-1252 for Excel's "CSV (Comma delimited)" exports — the same decoding
+the conversion itself uses — so the preview shows the characters the filing
+will carry.
 
 ### `POST /api/jobs/:jobId/cancel`
 

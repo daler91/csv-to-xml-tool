@@ -37,6 +37,12 @@ describe("purgeExpiredJobFiles", () => {
       inputFilePath: "",
       outputFilePath: null,
     });
+    // The claim repeats the status guard: a POST /start that flips the job to
+    // queued between the select and the claim must not lose its input file.
+    expect(db.job.updateMany.mock.calls[0][0].where).toMatchObject({
+      filesPurgedAt: null,
+      status: { notIn: expect.arrayContaining(["queued", "converting"]) },
+    });
     expect(db.auditEntry.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ action: "files_purged", jobId: "old-1" }),

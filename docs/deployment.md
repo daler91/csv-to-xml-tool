@@ -79,6 +79,21 @@ Web: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `WORKER_URL`,
 `WORKER_AUTH_TOKEN`, `REDIS_URL`, `DATA_DIR` (a mounted volume).
 Worker: `WORKER_AUTH_TOKEN` (identical), `ALLOWED_ORIGINS`, `ENVIRONMENT=production`.
 
+### Volume ownership on Railway
+
+The web image drops to the unprivileged `node` user and `chown`s `/data` at
+build time. That covers Docker named volumes, which inherit the image
+directory's ownership on first mount, but **a Railway volume is mounted
+root-owned** and the build-time `chown` does not apply to it. If uploads fail
+with `EACCES` (the UI shows "Upload failed"), either set `RAILWAY_RUN_UID=0` on
+the web service so the process runs as root — Railway's documented workaround —
+or fix the ownership once from a shell on the volume. Verify with an upload
+after the first deploy; this cannot be checked from the repository.
+
+Redis must be **7.0 or newer**: the rate limiter arms its window with
+`EXPIRE … NX`, which older servers reject (the limiter then fails open, so
+signup and upload throttling would be silently off). Compose pins `redis:7`.
+
 Full reference: [configuration.md](./configuration.md).
 
 ---
@@ -160,7 +175,9 @@ boot migration on the unique index.
 - [ ] `ALLOWED_ORIGINS` names only your web origin
 - [ ] The worker is **not** publicly reachable (private network or firewall)
 - [ ] `NEXTAUTH_URL` is the real public origin
-- [ ] `DATA_DIR` points at durable, writable storage
+- [ ] `DATA_DIR` points at durable, writable storage — on Railway, confirm the
+      volume is writable by the `node` user (see [Volume ownership](#volume-ownership-on-railway))
+- [ ] Redis is 7.0 or newer
 - [ ] Schema changes are mirrored in `scripts/migrate.js`
 - [ ] `RETENTION_DAYS` matches what you tell users
 - [ ] The three durability timeouts are still correctly ordered

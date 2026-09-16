@@ -2,10 +2,13 @@
 
 /**
  * Client half of the convert page. The retention window shown in the
- * privacy copy is passed in as a prop by the server page (page.tsx) so
- * it always reflects the RETENTION_DAYS the server enforces at runtime —
- * a NEXT_PUBLIC_* env read here would be baked in at build time and go
- * stale when the deployment overrides the value.
+ * privacy copy and the upload size cap are passed in as props by the
+ * server page (page.tsx) so they always reflect the RETENTION_DAYS and
+ * MAX_UPLOAD_BYTES the server enforces at runtime. This file used to import
+ * MAX_UPLOAD_BYTES directly, which reads process.env -- undefined in the
+ * browser bundle -- so the client always applied the 50 MB default while
+ * a deployment that lowered the cap rejected the file server-side with a
+ * message that still said 50 MB.
  */
 
 import { useState, useEffect, Suspense } from "react";
@@ -16,13 +19,18 @@ import { Skeleton } from "@/components/skeleton";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { formatMegabytes } from "@/lib/limits";
 
 function isCsvFile(f: File): boolean {
   return f.name.toLowerCase().endsWith(".csv");
 }
 
-function ConvertFormInner({ retentionDays }: Readonly<{ retentionDays: number }>) {
+interface ConvertFormProps {
+  retentionDays: number;
+  maxUploadBytes: number;
+}
+
+function ConvertFormInner({ retentionDays, maxUploadBytes }: Readonly<ConvertFormProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -41,9 +49,9 @@ function ConvertFormInner({ retentionDays }: Readonly<{ retentionDays: number }>
       );
       return;
     }
-    if (candidate.size > MAX_UPLOAD_BYTES) {
+    if (candidate.size > maxUploadBytes) {
       toast.error(
-        "That file is larger than 50MB. Split it into smaller batches and try again."
+        `That file is larger than ${formatMegabytes(maxUploadBytes)}. Split it into smaller batches and try again.`
       );
       return;
     }
@@ -84,7 +92,7 @@ function ConvertFormInner({ retentionDays }: Readonly<{ retentionDays: number }>
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(uploadErrorMessage(res.status, data.error));
+        setError(uploadErrorMessage(res.status, data.error, maxUploadBytes));
         return;
       }
 
@@ -167,7 +175,7 @@ function ConvertFormInner({ retentionDays }: Readonly<{ retentionDays: number }>
             CSV File
           </span>
           <p id="file-help" className="text-xs text-gray-600 mb-2">
-            .csv files only, up to 50MB.
+            .csv files only, up to {formatMegabytes(maxUploadBytes)}.
           </p>
           <label
             htmlFor="file-input"
@@ -223,7 +231,7 @@ function ConvertFormInner({ retentionDays }: Readonly<{ retentionDays: number }>
   );
 }
 
-export function ConvertForm({ retentionDays }: Readonly<{ retentionDays: number }>) {
+export function ConvertForm({ retentionDays, maxUploadBytes }: Readonly<ConvertFormProps>) {
   return (
     <Suspense
       fallback={
@@ -236,7 +244,7 @@ export function ConvertForm({ retentionDays }: Readonly<{ retentionDays: number 
         </main>
       }
     >
-      <ConvertFormInner retentionDays={retentionDays} />
+      <ConvertFormInner retentionDays={retentionDays} maxUploadBytes={maxUploadBytes} />
     </Suspense>
   );
 }

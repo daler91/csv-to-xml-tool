@@ -18,3 +18,12 @@ export const MAX_UPLOAD_BYTES =
 // component, so the browser always shows the number the server enforces.
 // Defaults to 30.
 export const RETENTION_DAYS = Number(process.env.RETENTION_DAYS) || 30;
+
+/**
+ * A byte count as the "50MB" style figure the UI shows. Whole megabytes stay
+ * whole; anything else keeps one decimal so a lowered cap reads sensibly.
+ */
+export function formatMegabytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)}MB`;
+}

@@ -8,6 +8,8 @@ import { DeleteJobButton } from "@/components/delete-job-button";
 import { XsdErrorDetailItem } from "@/components/xsd-error-details";
 import { resolveWithinDataDir } from "@/lib/paths";
 import { RETENTION_DAYS } from "@/lib/limits";
+import { Alert } from "@/components/ui/alert";
+import { describeJobFailure, FAILURE_ACTIONS } from "@/lib/job-failure";
 import type { XsdErrorDetail } from "@/types";
 
 // Inline preview cap. A 50MB <pre> would freeze the tab, so only the
@@ -105,6 +107,20 @@ export default async function ResultsPage({
     redirect("/dashboard");
   }
 
+  // A failed job's reason lives only in the audit trail (deadLetter and the
+  // reaper write it there; Job has no error column), so without this lookup
+  // the page rendered an error job as an empty "Conversion Results".
+  const failure =
+    job.status === "error"
+      ? describeJobFailure(
+          await prisma.auditEntry.findFirst({
+            where: { jobId, action: { in: [...FAILURE_ACTIONS] } },
+            orderBy: { createdAt: "desc" },
+            select: { action: true, metadata: true },
+          })
+        )
+      : null;
+
   const xmlPreview = await readXmlPreview(job.outputFilePath);
   const summary = job.summary as unknown as Record<string, number> | null;
   const issues = (job.issues as unknown as ValidationIssue[]) || [];
@@ -193,6 +209,15 @@ export default async function ResultsPage({
           />
         </div>
       </div>
+
+      {/* Failure reason (status "error") */}
+      {failure && (
+        <div className="mb-6">
+          <Alert variant="error" title="Conversion failed">
+            {failure} You can re-upload a corrected file from this page.
+          </Alert>
+        </div>
+      )}
 
       {/* Retention notice */}
       {job.filesPurgedAt && (

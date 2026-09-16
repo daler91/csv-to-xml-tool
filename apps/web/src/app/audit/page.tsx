@@ -46,6 +46,10 @@ function formatAuditMetadata(
     }
     case "conversion_started":
       return "Conversion started";
+    case "conversion_retried": {
+      const attempt = get<number>("attempt");
+      return attempt ? `Retried (attempt ${attempt})` : "Retried";
+    }
     case "conversion_complete": {
       const successful = get<number>("successful") ?? 0;
       const total = get<number>("total") ?? 0;
@@ -69,6 +73,7 @@ function formatActionLabel(action: string): string {
   const labels: Record<string, string> = {
     upload: "Upload",
     conversion_started: "Conversion started",
+    conversion_retried: "Conversion retried",
     conversion_complete: "Conversion complete",
     conversion_failed: "Conversion failed",
     conversion_cancelled: "Conversion cancelled",

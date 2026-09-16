@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
-import { workerFetch } from "@/lib/worker-client";
+import { workerFetch, workerClientError } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 
 /**
@@ -79,21 +79,39 @@ function tryDecode(bytes: Buffer, encoding: string): string | null {
 }
 
 /**
- * A deterministic 4xx from the worker (e.g. unsupported schema type,
- * empty content) is the caller's problem, not an outage — surface the
- * worker's detail as a 400 instead of mislabeling it a transient 502.
+ * A multipart part is a file when it exposes the Blob surface; a plain text
+ * part sent under the "file" name is a string, and reading `.name` off it
+ * used to throw and surface as a 500 "service may be busy".
  */
-function workerClientError(error: unknown): string | null {
-  if (!(error instanceof Error)) return null;
-  const match = /^Worker error (4\d\d): ([\s\S]*)$/.exec(error.message);
-  if (!match) return null;
-  try {
-    const detail = JSON.parse(match[2])?.detail;
-    if (typeof detail === "string" && detail) return detail;
-  } catch {
-    // Non-JSON body — use a generic message below.
+export function isUploadedFile(part: FormDataEntryValue | null): part is File {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    typeof (part as File).arrayBuffer === "function" &&
+    typeof (part as File).name === "string"
+  );
+}
+
+// Multipart framing (boundaries, part headers, the schema/converter fields)
+// on top of the file itself. Generous; the file's own size is checked exactly
+// once it is parsed.
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
+/**
+ * Rejects a request whose declared Content-Length cannot hold a file within
+ * the cap, *before* `req.formData()` buffers the whole body. The size check
+ * on `file.size` still runs afterwards; this one is what keeps the cap a
+ * bound on memory rather than only on what reaches disk.
+ */
+export function declaredBodyTooLarge(req: Request): NextResponse | null {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return NextResponse.json(
+      { error: "File size exceeds 50MB limit" },
+      { status: 413 }
+    );
   }
-  return "The file could not be processed";
+  return null;
 }
 
 export function createXmlToolRoute<T>(
@@ -118,11 +136,14 @@ export function createXmlToolRoute<T>(
         );
       }
 
-      const formData = await req.formData();
-      const file = formData.get("file") as File;
-      const schemaType = formData.get("schemaType") as string;
+      const tooLarge = declaredBodyTooLarge(req);
+      if (tooLarge) return tooLarge;
 
-      if (!file || !schemaType) {
+      const formData = await req.formData();
+      const file = formData.get("file");
+      const schemaType = formData.get("schemaType");
+
+      if (!isUploadedFile(file) || typeof schemaType !== "string" || !schemaType) {
         return NextResponse.json(
           { error: "File and schema type are required" },
           { status: 400 }

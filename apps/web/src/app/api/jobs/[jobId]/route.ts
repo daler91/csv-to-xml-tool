@@ -7,6 +7,7 @@ import { getRequiredUser } from "@/lib/session";
 import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
+import { sanitizeMapping } from "@/lib/column-mapping";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -79,6 +80,15 @@ export async function GET(
 // in the /cancel, /start, and /preview routes.
 const TERMINAL_STATUSES = new Set<JobStatus>(["cancelled", "complete", "error"]);
 
+// The only status a client may write. Every other transition belongs to a
+// server-side actor: /start moves to queued, the consumer to converting and
+// complete/error, /cancel to cancelled, /preview to previewed. This route
+// used to accept any value -- a browser could mark an uploaded job
+// "complete" (dashboard says done, download 404s), "queued" (never enqueued,
+// polled the worker for an hour, then reaped as a timeout) or "cancelled"
+// from "uploaded", the contradictory state /cancel's own comment rules out.
+const CLIENT_WRITABLE_STATUS: JobStatus = "mapping";
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -86,7 +96,14 @@ export async function PATCH(
   try {
     const user = await getRequiredUser();
     const { jobId } = await params;
-    const data = await req.json();
+    const data: unknown = await req.json().catch(() => null);
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return NextResponse.json(
+        { error: "Request body must be a JSON object" },
+        { status: 400 }
+      );
+    }
+    const body = data as Record<string, unknown>;
 
     const job = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
@@ -106,13 +123,28 @@ export async function PATCH(
       );
     }
 
-    // Whitelist fields that clients are allowed to update
-    const allowedFields = ["columnMapping", "status"] as const;
-    const sanitizedData: Record<string, unknown> = {};
-    for (const key of allowedFields) {
-      if (key in data) {
-        sanitizedData[key] = data[key];
+    // Whitelist the fields a client may update, and validate their values,
+    // not just their names.
+    const sanitizedData: { columnMapping?: Record<string, string>; status?: JobStatus } = {};
+    if ("columnMapping" in body) {
+      // Empty is legitimate here: a file whose columns all matched saves {}.
+      const mapping = sanitizeMapping(body.columnMapping, { allowEmpty: true });
+      if (mapping === null) {
+        return NextResponse.json(
+          { error: "columnMapping must be an object of column-name strings" },
+          { status: 400 }
+        );
       }
+      sanitizedData.columnMapping = mapping;
+    }
+    if ("status" in body) {
+      if (body.status !== CLIENT_WRITABLE_STATUS) {
+        return NextResponse.json(
+          { error: `status may only be set to '${CLIENT_WRITABLE_STATUS}'` },
+          { status: 400 }
+        );
+      }
+      sanitizedData.status = CLIENT_WRITABLE_STATUS;
     }
 
     if (Object.keys(sanitizedData).length === 0) {

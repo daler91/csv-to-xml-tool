@@ -5,7 +5,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { job: { findFirst: vi.fn(), updateMany: vi.fn() } },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
-vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
+vi.mock("@/lib/worker-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/worker-client")>()),
+  workerFetch: vi.fn(),
+}));
 vi.mock("@/lib/limits", () => ({ MAX_UPLOAD_BYTES: 1000 }));
 vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }));
 
@@ -31,7 +34,7 @@ beforeEach(() => {
     inputFileName: "in.csv",
     converterType: "counseling",
   } as never);
-  readMock.mockResolvedValue("Contact ID\n003\n" as never);
+  readMock.mockResolvedValue(Buffer.from("Contact ID\n003\n") as never);
   worker.mockResolvedValue({ total_rows: 42 } as never);
   db.job.updateMany.mockResolvedValue({ count: 1 } as never);
 });
@@ -44,7 +47,7 @@ describe("GET /api/jobs/[jobId]/preview", () => {
   });
 
   it("re-checks the size cap and returns 413 when too large", async () => {
-    readMock.mockResolvedValue("x".repeat(5000) as never);
+    readMock.mockResolvedValue(Buffer.from("x".repeat(5000)) as never);
     const res = await GET(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(413);
     expect(worker).not.toHaveBeenCalled();
@@ -90,5 +93,31 @@ describe("GET /api/jobs/[jobId]/preview — expired uploads", () => {
     const res = await GET(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(410);
     expect(worker).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/jobs/[jobId]/preview — worker responses", () => {
+  it("relays the worker's own 400 detail instead of a 500 'busy' message", async () => {
+    worker.mockRejectedValue(
+      new Error('Worker error 400: {"detail":"CSV has no header row"}')
+    );
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("CSV has no header row");
+  });
+
+  it("still reports a worker outage as 500", async () => {
+    worker.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(500);
+  });
+
+  it("decodes a cp1252 export before sending it to the worker", async () => {
+    readMock.mockResolvedValue(
+      Buffer.concat([Buffer.from("Last Name\nMu", "latin1"), Buffer.from([0xf1]), Buffer.from("oz\n", "latin1")]) as never
+    );
+    await GET(new Request("http://localhost"), jobParams("j1"));
+    const body = JSON.parse(String(worker.mock.calls[0][1]?.body));
+    expect(body.csv_content).toBe("Last Name\nMuñoz\n");
   });
 });

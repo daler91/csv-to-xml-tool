@@ -9,6 +9,16 @@ import { getRedis } from "./redis";
  * The alternative (fail-closed on any Redis error) would brick the
  * entire app whenever Redis hiccups, which is worse than a brief
  * rate-limit gap.
+ *
+ * The counter and its expiry are set in one MULTI. They used to be two
+ * round trips — INCR, then EXPIRE only when the count had just become 1 —
+ * so if the EXPIRE was lost (Redis blip between the two, process killed in
+ * the gap) the key lived forever with no TTL and was never re-armed: after
+ * `limit` more hits it answered 429 for good, and the shared
+ * `signup:unknown` bucket or one user's `upload:<id>` stayed locked until
+ * someone deleted the key by hand. `EXPIRE ... NX` (Redis 7) sets the TTL
+ * only when the key has none, so it is idempotent across hits and also
+ * heals a key that already lost its TTL.
  */
 export async function rateLimit(
   key: string,
@@ -18,11 +28,18 @@ export async function rateLimit(
   const redisKey = `rate-limit:${key}`;
   try {
     const redis = getRedis();
-    const current = await redis.incr(redisKey);
-
-    if (current === 1) {
-      await redis.expire(redisKey, windowSeconds);
+    const results = await redis
+      .multi()
+      .incr(redisKey)
+      .expire(redisKey, windowSeconds, "NX")
+      .exec();
+    // exec() resolves to [[err, reply], ...] per command, or null if the
+    // transaction was aborted; either way the counter is what matters.
+    const incrResult = results?.[0];
+    if (!incrResult || incrResult[0]) {
+      throw incrResult?.[0] ?? new Error("rate-limit transaction aborted");
     }
+    const current = Number(incrResult[1]);
 
     const remaining = Math.max(0, limit - current);
     return { success: current <= limit, remaining };

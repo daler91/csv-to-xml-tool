@@ -8,7 +8,10 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
-vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
+vi.mock("@/lib/worker-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/worker-client")>()),
+  workerFetch: vi.fn(),
+}));
 
 import { POST } from "@/app/api/jobs/[jobId]/cancel/route";
 import { prisma } from "@/lib/prisma";

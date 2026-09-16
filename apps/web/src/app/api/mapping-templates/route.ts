@@ -3,40 +3,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
+import { sanitizeMapping } from "@/lib/column-mapping";
 
 const VALID_TYPES = new Set(CONVERTER_TYPES.map((t) => t.value));
 const MAX_NAME_LENGTH = 60;
-const MAX_MAPPING_ENTRIES = 200;
-const MAX_ENTRY_LENGTH = 200;
-
-/**
- * Validates the {csvColumn: xmlField} shape shared with
- * Job.columnMapping. Size caps keep a hostile payload from storing
- * megabytes of JSON per template row.
- */
-function sanitizeMapping(value: unknown): Record<string, string> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length === 0 || entries.length > MAX_MAPPING_ENTRIES) {
-    return null;
-  }
-  const mapping: Record<string, string> = {};
-  for (const [key, val] of entries) {
-    if (
-      typeof val !== "string" ||
-      key.length === 0 ||
-      key.length > MAX_ENTRY_LENGTH ||
-      val.length === 0 ||
-      val.length > MAX_ENTRY_LENGTH
-    ) {
-      return null;
-    }
-    mapping[key] = val;
-  }
-  return mapping;
-}
 
 /**
  * Lists the user's saved templates, optionally filtered by converter

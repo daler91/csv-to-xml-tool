@@ -52,7 +52,9 @@ export async function GET(
     }
 
     const fileBuffer = await readFile(/* turbopackIgnore: true */ resolvedPath);
-    const fileName = job.inputFileName.replace(".csv", ".xml");
+    // Replace the *suffix*, not the first ".csv": "q1.csv_export.csv" used to
+    // download as "q1.xml_export.csv". A name without the suffix gets ".xml".
+    const fileName = `${job.inputFileName.replace(/\.csv$/i, "")}.xml`;
 
     await prisma.auditEntry.create({
       data: { userId: user.id, jobId, action: "download" },

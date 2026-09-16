@@ -19,6 +19,11 @@ import re
 
 from lxml import etree
 
+try:
+    from .config import TrainingClientConfig
+except ImportError:  # pragma: no cover - standalone import (src/ on sys.path)
+    from config import TrainingClientConfig
+
 # Per schema type: (record element tag, identifier child tag, identifier kind
 # shown in friendly messages). training-client output is Form 641
 # counseling-format XML, so it shares the counseling shape.
@@ -142,12 +147,29 @@ _TRAINING_ELEMENT_FIELDS = {
     "Ethnicity": ("Ethnicity", "Ethnicity"),
 }
 
-# Training-client output shares the counseling XML shape, but a few elements
-# come from different CSV columns (per-attendee ids) or from constants the
-# converter injects (csv_column None drops the "(CSV column ...)" fragment in
-# friendly messages).
+# Training-client output shares the counseling XML shape, but the converter
+# renames the training-client CSV columns to counseling names before the shared
+# code runs (TrainingClientConfig.COLUMN_MAPPING), so the counseling table has
+# to be mapped back or an error cites "Mailing State/Province" to a user whose
+# file has "State". Pass-through columns (First Name, Email, ...) keep their
+# names; a few elements come from different CSV columns (per-attendee ids) or
+# from constants the converter injects (csv_column None drops the
+# "(CSV column ...)" fragment in friendly messages).
+_TRAINING_CLIENT_REVERSE = TrainingClientConfig.reverse_column_mapping()
+
+
+def _training_client_field(label: str, csv_column: str | None) -> tuple[str, str | None]:
+    if csv_column in _TRAINING_CLIENT_REVERSE:
+        source = _TRAINING_CLIENT_REVERSE[csv_column]
+        return source, source
+    return label, csv_column
+
+
 _TRAINING_CLIENT_ELEMENT_FIELDS = {
-    **_COUNSELING_ELEMENT_FIELDS,
+    **{
+        element: _training_client_field(label, csv_column)
+        for element, (label, csv_column) in _COUNSELING_ELEMENT_FIELDS.items()
+    },
     "PartnerSessionNumber": ("Member ID", "Member ID"),
     "SessionType": ("Session Type", None),  # always 'Training'
     "DateTrainingStarted": ("Start Date", "Start Date"),

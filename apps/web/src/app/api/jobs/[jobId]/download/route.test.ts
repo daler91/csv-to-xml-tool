@@ -96,3 +96,18 @@ describe("GET /api/jobs/[jobId]/download — expired files", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("GET /api/jobs/[jobId]/download — file name", () => {
+  it.each([
+    ["q1.csv_export.csv", "q1.csv_export.xml"],
+    ["EXPORT.CSV", "EXPORT.xml"],
+    ["noext", "noext.xml"],
+  ])("names %s as %s", async (inputFileName, expected) => {
+    db.job.findFirst.mockResolvedValue({
+      outputFilePath: "/data/output/j1/j1.xml",
+      inputFileName,
+    } as never);
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.headers.get("Content-Disposition")).toBe(`attachment; filename="${expected}"`);
+  });
+});

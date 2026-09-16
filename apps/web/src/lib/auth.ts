@@ -5,6 +5,7 @@ import { prisma } from "./prisma";
 import { normalizeEmail } from "./normalize";
 import { rateLimit, resetRateLimit } from "./rate-limit";
 import { authConfig } from "./auth.config";
+import { clientIpFromHeaders } from "./client-ip";
 
 /**
  * Sign-in throttling.
@@ -46,10 +47,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
         if (!byEmail.success) return null;
 
+        // Validated as an IP before it becomes a Redis key; the raw header
+        // token used to be interpolated verbatim, whatever it contained.
         const forwarded = request?.headers
-          ?.get("x-forwarded-for")
-          ?.split(",")[0]
-          ?.trim();
+          ? clientIpFromHeaders(request.headers)
+          : null;
         if (forwarded) {
           const byIp = await rateLimit(
             `login:ip:${forwarded}`,

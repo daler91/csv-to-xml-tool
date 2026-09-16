@@ -470,7 +470,7 @@ sees the client accept a 30 MB file, the server return 413, and `upload-errors.t
 the file is "larger than 50MB". The header comment of `convert-form.tsx` explains exactly this trap
 for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES` the same way.
 
-### 4.8 Remaining items — `[OPEN]`
+### 4.8 Remaining items — `[FIXED]` (every row; 4.8.12 by documentation)
 
 | # | Finding | Location | Severity |
 |---|---|---|---|

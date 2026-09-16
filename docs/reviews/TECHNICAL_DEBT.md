@@ -123,6 +123,12 @@ Added `validatePasswordComplexity()` in `apps/web/src/app/api/auth/signup/route.
 
 Extracted `getClientIdentifier()` helper that takes only the first IP from `x-forwarded-for` and validates it, instead of blindly trusting the full header.
 
+_Updated 2026-09-16: "validates it" was an overstatement until `CODEBASE_ANALYSIS_2.md` §4.8.9 —
+the helper only split and trimmed, so any string became a Redis key. `lib/client-ip.ts` now
+requires the token to parse as an IPv4/IPv6 address (`net.isIP`) and is shared by signup and the
+login throttle. The header remains spoofable without a trusted-proxy allowlist, which is why the
+login throttle keys primarily on the email._
+
 ---
 
 ### 16. Memory Risk with Large CSV Files

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { declaredBodyTooLarge, isUploadedFile } from "@/lib/xml-tool-route";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -20,19 +21,27 @@ export async function POST(req: Request) {
       );
     }
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const converterType = formData.get("converterType") as string;
-    const previousJobId = formData.get("previousJobId") as string | null;
+    // Reject an oversized body by its declared length before buffering it.
+    const tooLarge = declaredBodyTooLarge(req);
+    if (tooLarge) return tooLarge;
 
-    if (!file || !converterType) {
+    const formData = await req.formData();
+    const file = formData.get("file");
+    const converterType = formData.get("converterType");
+    const previousJobIdRaw = formData.get("previousJobId");
+    const previousJobId =
+      typeof previousJobIdRaw === "string" && previousJobIdRaw ? previousJobIdRaw : null;
+
+    if (!isUploadedFile(file) || typeof converterType !== "string" || !converterType) {
       return NextResponse.json(
         { error: "File and converter type are required" },
         { status: 400 }
       );
     }
 
-    if (!file.name.endsWith(".csv")) {
+    // Case-insensitive, matching the client-side check: EXPORT.CSV passed the
+    // browser and was then told "that file isn't a CSV" by the server.
+    if (!file.name.toLowerCase().endsWith(".csv")) {
       return NextResponse.json(
         { error: "Only CSV files are accepted" },
         { status: 400 }

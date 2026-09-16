@@ -5,7 +5,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { auditEntry: { create: vi.fn() } },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
-vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
+vi.mock("@/lib/worker-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/worker-client")>()),
+  workerFetch: vi.fn(),
+}));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: vi.fn() }));
 
 import { POST } from "@/app/api/validate-xml/route";
@@ -112,6 +115,17 @@ describe("POST /api/validate-xml", () => {
     const res = await POST(validateRequest({ schemaType: "counseling" }));
     expect(res.status).toBe(502);
   });
+
+  it.each([401, 403, 413, 429])(
+    "treats a worker %s as a deployment problem (502), not a bad file",
+    async (status) => {
+      worker.mockRejectedValue(
+        new Error(`Worker error ${status}: {"detail":"Invalid or missing worker credentials"}`)
+      );
+      const res = await POST(validateRequest({ schemaType: "counseling" }));
+      expect(res.status).toBe(502);
+    }
+  );
 
   it("passes a deterministic worker 400 through as a 400, not a 502", async () => {
     worker.mockRejectedValue(

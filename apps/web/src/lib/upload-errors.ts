@@ -10,13 +10,20 @@
  * Keep the mapping in sync with ``apps/web/src/app/api/upload/route.ts``.
  */
 
+import { formatMegabytes } from "@/lib/limits";
+
+const DEFAULT_CAP_BYTES = 50 * 1024 * 1024;
+
 export function uploadErrorMessage(
   status: number,
-  serverError?: string
+  serverError?: string,
+  // The cap the server enforces, passed down from a server component so the
+  // message matches a deployment that overrides MAX_UPLOAD_BYTES.
+  maxUploadBytes: number = DEFAULT_CAP_BYTES
 ): string {
   switch (status) {
     case 413:
-      return "This file is larger than 50MB. Split it into smaller batches or remove unused columns and try again.";
+      return `This file is larger than ${formatMegabytes(maxUploadBytes)}. Split it into smaller batches or remove unused columns and try again.`;
     case 429:
       return "You've uploaded several files in a short window. Please wait about a minute and try again.";
     case 401:

@@ -45,3 +45,25 @@ export async function workerFetch<T>(
     clearTimeout(timeout);
   }
 }
+
+/**
+ * The worker's own detail message when it rejected the *request content*
+ * with a deterministic 400 or 422 (malformed CSV, unsupported schema type,
+ * empty content) — the caller's problem, to surface as a 400. Returns null
+ * for everything else, including the other 4xx codes that are the
+ * deployment's problem and must not be relabelled as a bad file: 401/403 is a
+ * wrong WORKER_AUTH_TOKEN, 413 is the worker's MAX_REQUEST_BYTES, 429 is
+ * throttling. Those fall through to the route's 502 path and its log line.
+ */
+export function workerClientError(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const match = /^Worker error (400|422): ([\s\S]*)$/.exec(error.message);
+  if (!match) return null;
+  try {
+    const detail = JSON.parse(match[2])?.detail;
+    if (typeof detail === "string" && detail) return detail;
+  } catch {
+    // Non-JSON body — use a generic message below.
+  }
+  return "The file could not be processed";
+}

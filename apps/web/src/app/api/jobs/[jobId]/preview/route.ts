@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { routeError } from "@/lib/api-errors";
-import { workerFetch } from "@/lib/worker-client";
+import { workerFetch, workerClientError } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { decodeCsvBuffer } from "@/lib/csv-decode";
 import type { PreviewResponse } from "@/types";
 
 export async function GET(
@@ -36,24 +37,38 @@ export async function GET(
     }
 
     // SEC-1: enforce the upload size cap server-side before sending to the worker.
-    const csvContent = await readFile(job.inputFilePath, "utf-8");
-    if (Buffer.byteLength(csvContent, "utf-8") > MAX_UPLOAD_BYTES) {
+    const bytes = await readFile(job.inputFilePath);
+    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
         { error: "File size exceeds 50MB limit" },
         { status: 413 }
       );
     }
+    // Same decoder as the conversion itself (job-runner.ts), so the preview
+    // shows the names the filing will carry, cp1252 exports included.
+    const { text: csvContent } = decodeCsvBuffer(bytes);
 
     // Web and worker are separate Railway services with no shared volume, so we
     // send the CSV content in the request body (job_id is for log correlation).
-    const preview = await workerFetch<PreviewResponse>("/preview", {
-      method: "POST",
-      body: JSON.stringify({
-        job_id: jobId,
-        csv_content: csvContent,
-        converter_type: job.converterType,
-      }),
-    });
+    let preview: PreviewResponse;
+    try {
+      preview = await workerFetch<PreviewResponse>("/preview", {
+        method: "POST",
+        body: JSON.stringify({
+          job_id: jobId,
+          csv_content: csvContent,
+          converter_type: job.converterType,
+        }),
+      });
+    } catch (error) {
+      // The worker answers a malformed CSV with a specific 400; relaying it
+      // as a 500 told the user the server "may be busy" for a file problem.
+      const clientError = workerClientError(error);
+      if (clientError) {
+        return NextResponse.json({ error: clientError }, { status: 400 });
+      }
+      throw error;
+    }
 
     // Update job with row count and advance status to "previewed",
     // but only from non-terminal states. A stale tab fetching the

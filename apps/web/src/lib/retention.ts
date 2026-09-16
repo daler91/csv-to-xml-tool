@@ -55,9 +55,16 @@ async function sweepExpiredJobFiles(userId: string): Promise<number> {
   let purged = 0;
   for (const job of expired) {
     // Claim before deleting so two concurrent read paths can't both
-    // purge (and double-write audit entries) for the same job.
+    // purge (and double-write audit entries) for the same job. The status
+    // predicate is repeated here, not only in the findMany above: a
+    // POST /start landing between the two flips the job to queued, and
+    // purging its input then would dead-letter the conversion with ENOENT.
     const claimed = await prisma.job.updateMany({
-      where: { id: job.id, filesPurgedAt: null },
+      where: {
+        id: job.id,
+        filesPurgedAt: null,
+        status: { notIn: ACTIVE_STATUSES },
+      },
       data: {
         filesPurgedAt: new Date(),
         inputFilePath: "",

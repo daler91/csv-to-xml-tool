@@ -7,6 +7,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: vi.fn() }));
 vi.mock("bcryptjs", () => ({ hash: vi.fn() }));
 
+import { Prisma } from "@prisma/client";
 import { POST } from "@/app/api/auth/signup/route";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
@@ -92,5 +93,44 @@ describe("POST /api/auth/signup", () => {
     expect(res.status).toBe(400);
     expect(db.user.findUnique).not.toHaveBeenCalled();
     expect(db.user.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/auth/signup — input and error mapping", () => {
+  it("returns 400, not 500, for malformed JSON", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/auth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{not json",
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it.each(["not-an-email", "a@b", `${"x".repeat(250)}@example.com`])(
+    "rejects an invalid email %s with 400",
+    async (email) => {
+      const res = await signup({ email, password: "Password1!" });
+      expect(res.status).toBe(400);
+      expect(db.user.create).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects a non-string name with 400 instead of a Prisma 500", async () => {
+    const res = await signup({ email: "new@example.com", password: "Password1!", name: { x: 1 } });
+    expect(res.status).toBe(400);
+    expect(db.user.create).not.toHaveBeenCalled();
+  });
+
+  it("maps a unique-index race (P2002) to 409, not 500", async () => {
+    db.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "test",
+      }) as never
+    );
+    const res = await signup({ email: "new@example.com", password: "Password1!" });
+    expect(res.status).toBe(409);
   });
 });

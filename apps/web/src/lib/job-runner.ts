@@ -3,6 +3,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { workerFetch } from "@/lib/worker-client";
 import { CONVERSION_TIMEOUT_MS } from "@/lib/durability-timeouts";
+import { decodeCsvBuffer } from "@/lib/csv-decode";
 import type { ConvertResponse } from "@/types";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -50,7 +51,16 @@ export async function runJob(jobId: string, attempt = 1): Promise<void> {
 
   // Web and worker are separate Railway services with no shared volume, so we
   // send the CSV content and persist the XML the worker returns on our own disk.
-  const csvContent = await readFile(job.inputFilePath, "utf-8");
+  // Decoded with a cp1252 fallback rather than as bare UTF-8: an Excel
+  // "CSV (Comma delimited)" export is the system code page, and a plain
+  // utf-8 read turned every accented name into U+FFFD before the worker saw
+  // it -- silently, since what the worker received was valid UTF-8.
+  const { text: csvContent, encoding } = decodeCsvBuffer(
+    await readFile(job.inputFilePath)
+  );
+  if (encoding !== "utf-8") {
+    console.warn(`[job-runner] job ${jobId}: input decoded as ${encoding}, not UTF-8`);
+  }
   const result = await workerFetch<ConvertResponse>("/convert", {
     method: "POST",
     body: JSON.stringify({

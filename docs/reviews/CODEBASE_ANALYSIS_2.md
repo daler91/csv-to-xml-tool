@@ -386,7 +386,10 @@ Redis is restarting → the process listens on nothing → Railway's `/` healthc
 other Redis path in the app deliberately fails open; this one fails closed at the worst moment. Fix:
 do not block `register()` on the boot sweep (fire-and-forget, or race it against a short timeout).
 
-### 4.2 `PATCH /api/jobs/[jobId]` lets the browser write any job status — `[OPEN]` — HIGH, verified
+### 4.2 `PATCH /api/jobs/[jobId]` lets the browser write any job status — `[FIXED]` — HIGH, verified
+
+> Fixed: the body must be a JSON object; `status` is accepted only as `mapping`; `columnMapping` goes through the shared `lib/column-mapping.ts::sanitizeMapping` (moved out of the template route, with `allowEmpty` for the legitimate empty job mapping). `api-reference.md` says so.
+
 
 `jobs/[jobId]/route.ts:110-134` whitelists `["columnMapping", "status"]` and guards the *current*
 status (not terminal) but never validates the *target* value. The only legitimate client write is
@@ -442,7 +445,10 @@ failure (socket reset mid-body, invalid JSON) also bypasses the `catch`, so it s
 `SyntaxError`/`TypeError` instead of the "timed out"/"Worker error" shapes that
 `job-consumer.ts:97-98` classifies on. Fix: `return await res.json()`.
 
-### 4.6 CSV bytes are decoded as UTF-8 with no detection — `[OPEN]` — MEDIUM, verified
+### 4.6 CSV bytes are decoded as UTF-8 with no detection — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `lib/csv-decode.ts` decodes UTF-16 by BOM, then strict UTF-8, then Windows-1252; the runner and the preview route both use it and log a non-UTF-8 fallback. `csv-decode.test.ts` covers a cp1252 Excel export.
+
 
 `job-runner.ts:44` and `preview/route.ts:39` do `readFile(path, "utf-8")`. Excel's default "CSV
 (Comma delimited)" on Windows writes cp1252, so every non-ASCII byte (José, Muñoz, an en-dash in
@@ -452,7 +458,10 @@ spirit of rule 4. `xml-tool-route.ts:44-70` already has a BOM/declaration-aware 
 uploads; the CSV path has nothing. Fix: decode with `TextDecoder("utf-8", {fatal: true})` and fall
 back to windows-1252, or reject invalid UTF-8 at upload with a clear message.
 
-### 4.7 Client components read a server-only env var — `[OPEN]` — MEDIUM, verified
+### 4.7 Client components read a server-only env var — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `MAX_UPLOAD_BYTES` is passed as a prop from the server pages (`convert/page.tsx`, and a new server `validate/page.tsx` wrapping the client `validate-tool.tsx`), and the size messages on that path are formatted from the real cap via `formatMegabytes`.
+
 
 `limits.ts:9-10` reads `process.env.MAX_UPLOAD_BYTES`; it is imported by the client components
 `convert-form.tsx:19` and `validate/page.tsx:20`. It is not `NEXT_PUBLIC_`, so in the browser it is
@@ -466,15 +475,15 @@ for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES`
 | # | Finding | Location | Severity |
 |---|---|---|---|
 | 4.8.1 | Rate-limit key can lose its TTL permanently: `INCR` then a separate `EXPIRE` only when `current === 1`; if the `EXPIRE` fails the key never expires and, after `limit` more hits, is 429 forever (`signup:unknown` and `upload:<userId>` included). Use `SET … EX … NX` + `INCR` or a MULTI. | `rate-limit.ts:21-25` | MEDIUM, plausible |
-| 4.8.2 | Preview route hides the worker's 4xx detail behind a 500 "Failed to generate preview", so a malformed CSV reads as "server may be busy". `xml-tool-route.ts:86-97` already does the right translation. | `preview/route.ts:49-56,82-83` | MEDIUM, verified |
-| 4.8.3 | Retention purge can race `POST /start`: candidates are selected by status but the purge claim guards only `filesPurgedAt: null`, so a job started in the window loses its input and dead-letters after three ENOENTs. One predicate fixes it. | `retention.ts:44-66` | LOW/MEDIUM, plausible |
+| 4.8.2 | **`[FIXED]`** Preview route hid the worker's 4xx detail behind a 500. The route now relays a worker 400/422 detail as a 400 through the shared `workerClientError`. "Failed to generate preview", so a malformed CSV reads as "server may be busy". `xml-tool-route.ts:86-97` already does the right translation. | `preview/route.ts:49-56,82-83` | MEDIUM, verified |
+| 4.8.3 | **`[FIXED]`** Retention purge could race `POST /start`. The purge claim now repeats the `status notIn` predicate.: candidates are selected by status but the purge claim guards only `filesPurgedAt: null`, so a job started in the window loses its input and dead-letters after three ENOENTs. One predicate fixes it. | `retention.ts:44-66` | LOW/MEDIUM, plausible |
 | 4.8.4 | A failed conversion has no user-visible reason: `deadLetter` and the reaper put it only in `AuditEntry.metadata`, and `results/page.tsx:97-105` renders an `error` job as an empty "Conversion Results" page. Distinct from the tracked audit-label item: fixing that only makes the reason findable on a different page. | `job-consumer.ts:113-116`, `results/page.tsx` | LOW/MEDIUM, verified |
-| 4.8.5 | Upload extension check is case-sensitive on the server only (`endsWith(".csv")`); the client lower-cases. `EXPORT.CSV` passes the client and is told "That file isn't a CSV". | `upload/route.ts:35` | LOW, verified |
-| 4.8.6 | Multipart bodies are fully buffered by `req.formData()` before the size cap is applied, and a non-file `file` part → TypeError → 500. | `upload/route.ts:23`, `xml-tool-route.ts:121` | LOW, plausible |
-| 4.8.7 | Every worker 4xx is relabelled a user error: a wrong `WORKER_AUTH_TOKEN` (401), the worker's 413 or a 429 is shown to the partner as if their file were bad, and not logged. | `xml-tool-route.ts:86-97` | LOW, verified |
-| 4.8.8 | Download filename replaces the *first* `.csv`: `q1.csv_export.csv` downloads as `q1.xml_export.csv`. Use `/\.csv$/i`. | `download/route.ts:55` | LOW, verified |
-| 4.8.9 | Login IP key is an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
-| 4.8.10 | Signup: malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
+| 4.8.5 | **`[FIXED]`** Upload extension check was case-sensitive on the server only (`endsWith(".csv")`); the client lower-cases. `EXPORT.CSV` passes the client and is told "That file isn't a CSV". | `upload/route.ts:35` | LOW, verified |
+| 4.8.6 | **`[FIXED]`** Multipart bodies were fully buffered before the size cap applied: `declaredBodyTooLarge` now rejects on `Content-Length` first, and `isUploadedFile` rejects a non-file part with a 400. Previously, and a non-file `file` part → TypeError → 500. | `upload/route.ts:23`, `xml-tool-route.ts:121` | LOW, plausible |
+| 4.8.7 | **`[FIXED]`** `workerClientError` now recognises only 400/422; a 401/403/413/429 falls through to the logged 502 path. Previously every worker 4xx was relabelled a user error: a wrong `WORKER_AUTH_TOKEN` (401), the worker's 413 or a 429 is shown to the partner as if their file were bad, and not logged. | `xml-tool-route.ts:86-97` | LOW, verified |
+| 4.8.8 | **`[FIXED]`** Download filename replaced the *first* `.csv`; now the suffix, case-insensitively: `q1.csv_export.csv` downloads as `q1.xml_export.csv`. Use `/\.csv$/i`. | `download/route.ts:55` | LOW, verified |
+| 4.8.9 | **`[FIXED]`** `lib/client-ip.ts` requires an IPv4/IPv6 address (`net.isIP`, ≤45 chars) and is shared by signup and login; `TECHNICAL_DEBT.md` #15 is corrected. The email-keyed lockout is unchanged and documented. Previously the login IP key was an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
+| 4.8.10 | **`[FIXED]`** Signup: malformed JSON → 400, non-string name → 400, email shape/length checked, P2002 → 409. Previously malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
 | 4.8.11 | **`[FIXED]`** `conversion_started` was audited on every successful claim. `runJob` now takes the attempt number from the consumer and writes `conversion_retried` (with `metadata.attempt`) for later attempts; the audit page labels it. | `job-runner.ts` | LOW, verified |
 | 4.8.12 | `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
 | 4.8.13 | **`[FIXED]`** The three timeouts now live in `lib/durability-timeouts.ts` and `assertTimeoutOrdering()` runs at consumer startup, refusing to start on a misordered override. | `lib/durability-timeouts.ts` | LOW |

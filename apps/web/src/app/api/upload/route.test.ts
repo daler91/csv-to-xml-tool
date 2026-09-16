@@ -144,3 +144,35 @@ describe("POST /api/upload", () => {
     expect(res.status).toBe(429);
   });
 });
+
+describe("POST /api/upload — input hardening", () => {
+  it("accepts an upper-case .CSV extension like the client does", async () => {
+    const res = await POST(uploadRequest({ fileName: "EXPORT.CSV", converterType: "counseling" }));
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an oversized declared body before buffering it (413)", async () => {
+    const form = new FormData();
+    form.append("file", new File(["a,b\n"], "data.csv", { type: "text/csv" }));
+    form.append("converterType", "counseling");
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: form,
+      headers: { "content-length": String(50 * 1024 * 1024) },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    expect(db.job.create).not.toHaveBeenCalled();
+  });
+
+  it("returns 400, not 500, when the file part is plain text", async () => {
+    const form = new FormData();
+    form.append("file", "not a file");
+    form.append("converterType", "counseling");
+    const res = await POST(
+      new Request("http://localhost/api/upload", { method: "POST", body: form })
+    );
+    expect(res.status).toBe(400);
+    expect(db.job.create).not.toHaveBeenCalled();
+  });
+});

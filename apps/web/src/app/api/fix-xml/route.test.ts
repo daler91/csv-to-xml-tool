@@ -5,7 +5,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { auditEntry: { create: vi.fn() } },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
-vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
+vi.mock("@/lib/worker-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/worker-client")>()),
+  workerFetch: vi.fn(),
+}));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: vi.fn() }));
 
 import { POST } from "@/app/api/fix-xml/route";

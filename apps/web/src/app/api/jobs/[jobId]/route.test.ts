@@ -13,7 +13,10 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
-vi.mock("@/lib/worker-client", () => ({ workerFetch: vi.fn() }));
+vi.mock("@/lib/worker-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/worker-client")>()),
+  workerFetch: vi.fn(),
+}));
 vi.mock("@/lib/job-reaper", () => ({ reapStuckConvertingJobs: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ rm: vi.fn() }));
 
@@ -74,7 +77,7 @@ describe("PATCH /api/jobs/[jobId]", () => {
   it("refuses to modify a terminal job (409)", async () => {
     db.job.findFirst.mockResolvedValue({ id: "j1", status: "complete" } as never);
     const res = await PATCH(
-      jsonRequest("http://localhost", "PATCH", { columnMapping: { a: 1 } }),
+      jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "b" } }),
       jobParams("j1")
     );
     expect(res.status).toBe(409);
@@ -88,7 +91,7 @@ describe("PATCH /api/jobs/[jobId]", () => {
 
     await PATCH(
       jsonRequest("http://localhost", "PATCH", {
-        columnMapping: { a: 1 },
+        columnMapping: { a: "b" },
         userId: "attacker",
         inputFilePath: "/etc/passwd",
       }),
@@ -96,7 +99,7 @@ describe("PATCH /api/jobs/[jobId]", () => {
     );
 
     const dataArg = db.job.updateMany.mock.calls[0][0].data;
-    expect(dataArg).toEqual({ columnMapping: { a: 1 } });
+    expect(dataArg).toEqual({ columnMapping: { a: "b" } });
   });
 
   it("returns 400 when no whitelisted fields are present", async () => {
@@ -113,11 +116,71 @@ describe("PATCH /api/jobs/[jobId]", () => {
     db.job.updateMany.mockResolvedValue({ count: 0 } as never);
     db.job.findUnique.mockResolvedValue({ status: "cancelled" } as never);
     const res = await PATCH(
-      jsonRequest("http://localhost", "PATCH", { columnMapping: { a: 1 } }),
+      jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "b" } }),
       jobParams("j1")
     );
     expect(res.status).toBe(409);
   });
+
+  it("accepts status 'mapping' (the one client-driven transition)", async () => {
+    db.job.findFirst.mockResolvedValue({ id: "j1", status: "uploaded" } as never);
+    db.job.updateMany.mockResolvedValue({ count: 1 } as never);
+    db.job.findUnique.mockResolvedValue({ id: "j1", status: "mapping" } as never);
+
+    const res = await PATCH(
+      jsonRequest("http://localhost", "PATCH", { columnMapping: {}, status: "mapping" }),
+      jobParams("j1")
+    );
+    expect(res.status).toBe(200);
+    expect(db.job.updateMany.mock.calls[0][0].data).toEqual({
+      columnMapping: {},
+      status: "mapping",
+    });
+  });
+
+  it.each(["complete", "queued", "converting", "cancelled", "bogus"])(
+    "refuses to let the client set status %s (400, no write)",
+    async (status) => {
+      db.job.findFirst.mockResolvedValue({ id: "j1", status: "uploaded" } as never);
+      const res = await PATCH(
+        jsonRequest("http://localhost", "PATCH", { status }),
+        jobParams("j1")
+      );
+      expect(res.status).toBe(400);
+      expect(db.job.updateMany).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ["an array", ["a"]],
+    ["a nested object", { a: { b: "c" } }],
+    ["a non-string value", { a: 1 }],
+    ["a string", "a=b"],
+  ])("rejects columnMapping that is %s (400, no write)", async (_label, columnMapping) => {
+    db.job.findFirst.mockResolvedValue({ id: "j1", status: "uploaded" } as never);
+    const res = await PATCH(
+      jsonRequest("http://localhost", "PATCH", { columnMapping }),
+      jobParams("j1")
+    );
+    expect(res.status).toBe(400);
+    expect(db.job.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['"abc"', "null", "[1]", "not json"])(
+    "returns 400, not 500, for a body of %s",
+    async (raw) => {
+      db.job.findFirst.mockResolvedValue({ id: "j1", status: "uploaded" } as never);
+      const res = await PATCH(
+        new Request("http://localhost", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: raw,
+        }),
+        jobParams("j1")
+      );
+      expect(res.status).toBe(400);
+    }
+  );
 });
 
 describe("DELETE /api/jobs/[jobId]", () => {

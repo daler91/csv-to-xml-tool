@@ -10,9 +10,16 @@ import { decodeXmlUpload } from "@/lib/xml-tool-route";
 
 describe("decodeXmlUpload declaration rewrite", () => {
   it("restates a declared encoding as UTF-8 and leaves the body alone", () => {
-    const xml = "<?xml version=\"1.0\"   encoding='ISO-8859-1'?>\n<Doc>é</Doc>";
+    const xml = "<?xml version=\"1.0\" encoding='ISO-8859-1'?>\n<Doc>é</Doc>";
     const out = decodeXmlUpload(Buffer.from(xml, "latin1"));
     expect(out).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<Doc>é</Doc>');
+  });
+
+  it("keeps surrounding whitespace and still rewrites the encoding", () => {
+    const xml = '<?xml version="1.0"   encoding="latin1"  ?><Doc/>';
+    expect(decodeXmlUpload(Buffer.from(xml))).toBe(
+      '<?xml version="1.0"   encoding="UTF-8"  ?><Doc/>'
+    );
   });
 
   it("leaves a declaration without an encoding untouched", () => {

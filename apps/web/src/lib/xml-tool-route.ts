@@ -76,8 +76,11 @@ export function decodeXmlUpload(bytes: Buffer): string {
 function restateDeclarationAsUtf8(text: string): string {
   const declaration = /^\s*<\?xml[^>]*>/.exec(text)?.[0];
   if (!declaration) return text;
+  // One whitespace character, not `\s+`: this search is unanchored, and a
+  // greedy run over a long whitespace stretch would backtrack quadratically.
+  // Any extra whitespace before the attribute is simply left in place.
   const rewritten = declaration.replace(
-    /\s+encoding=["'][^"']*["']/,
+    /\sencoding=["'][^"']*["']/,
     ' encoding="UTF-8"'
   );
   return rewritten + text.slice(declaration.length);

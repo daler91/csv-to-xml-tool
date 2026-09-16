@@ -275,9 +275,9 @@ def _fix_and_revalidate(file_path, output_path, xsd_file, add_missing):
 def _files_within(files, input_dir):
     """Drop glob results that resolve outside ``input_dir``.
 
-    ``--pattern`` is also caller-controlled, so ``../*.xml`` (or a symlink
-    inside the directory) can make the glob return paths that escape the
-    confined input directory even though the directory itself was checked.
+    A symlink inside the directory can make the glob return a path that
+    escapes the confined input directory even though the directory itself
+    (and the pattern) were checked.
     """
     kept = []
     for file_path in files:
@@ -312,6 +312,15 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
     # otherwise point the glob (and, with --fix, the in-place rewrite) anywhere
     # on the filesystem. Same base as --output; SBA_OUTPUT_BASE widens it.
     input_dir = resolve_within(output_base(), input_dir)
+    # --pattern is caller-controlled too. It is a file-name glob, so it must
+    # carry no directory part: "../*.xml" would otherwise walk the glob out of
+    # the confined directory. basename() is the sanitizer; anything it changes
+    # was a path, not a pattern.
+    if os.path.basename(pattern) != pattern:
+        raise ValueError(
+            f"--pattern must be a file name pattern such as '*.xml', not a path: {pattern!r}"
+        )
+    pattern = os.path.basename(pattern)
     logger.info(f"Processing XML files in directory: {input_dir}")
     if recursive:
         logger.info(f"Recursive mode enabled, pattern: {pattern}")

@@ -164,15 +164,30 @@ class TestProcessDirectory(unittest.TestCase):
         try:
             with self.assertRaises(ValueError):
                 xml_validator.process_directory(outside)
+            via_parent = os.path.join(self.test_dir, "..", os.path.basename(outside))
             with self.assertRaises(ValueError):
-                xml_validator.process_directory(os.path.join(self.test_dir, "..", os.path.basename(outside)))
+                xml_validator.process_directory(via_parent)
         finally:
             shutil.rmtree(outside)
 
-    def test_process_directory_pattern_cannot_escape_input_dir(self):
-        """A traversal --pattern must not surface files outside --directory."""
-        processed_count = xml_validator.process_directory(self.sub_dir, pattern=os.path.join("..", "*.xml"))
-        self.assertEqual(processed_count, 0)
+    def test_process_directory_rejects_pattern_with_a_directory_part(self):
+        """--pattern is a file-name glob; a path such as ../*.xml is refused."""
+        traversal = os.path.join("..", "*.xml")
+        with self.assertRaises(ValueError):
+            xml_validator.process_directory(self.sub_dir, pattern=traversal)
+
+    def test_process_directory_skips_symlink_escaping_input_dir(self):
+        """A symlink inside --directory that points outside it is not processed."""
+        outside = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(outside, "escape.xml"), "w") as f:
+                f.write("<CounselingRecord/>")
+            os.symlink(os.path.join(outside, "escape.xml"), os.path.join(self.sub_dir, "link.xml"))
+            processed_count = xml_validator.process_directory(self.sub_dir)
+        finally:
+            shutil.rmtree(outside)
+        # file4.xml is listed; the escaping link is not.
+        self.assertEqual(processed_count, 1)
 
 
 class TestFixClientIntakeElementOrder(unittest.TestCase):

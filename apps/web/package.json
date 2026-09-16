@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "tsc --noEmit && node scripts/check-ui-classes.mjs",
     "test": "vitest run",
-    "postinstall": "prisma generate"
+    "generate": "prisma generate",
+    "postinstall": "npm run generate"
   },
   "keywords": [],
   "author": "",

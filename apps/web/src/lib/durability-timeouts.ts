@@ -20,7 +20,7 @@
 
 function envMs(name: string, fallbackMs: number): number {
   const raw = process.env[name];
-  const value = raw === undefined || raw === "" ? NaN : Number(raw);
+  const value = raw === undefined || raw === "" ? Number.NaN : Number(raw);
   return Number.isFinite(value) && value > 0 ? value : fallbackMs;
 }
 
@@ -34,18 +34,16 @@ export const REAP_DEADLINE_MS = envMs("REAP_DEADLINE_MS", 60 * 60 * 1000);
  * with a message naming the values, rather than silently double-running
  * conversions.
  */
-export function assertTimeoutOrdering(
-  timeouts: {
-    conversion: number;
-    visibility: number;
-    reap: number;
-  } = {
+export function assertTimeoutOrdering(timeouts?: {
+  conversion: number;
+  visibility: number;
+  reap: number;
+}): void {
+  const { conversion, visibility, reap } = timeouts ?? {
     conversion: CONVERSION_TIMEOUT_MS,
     visibility: VISIBILITY_TIMEOUT_MS,
     reap: REAP_DEADLINE_MS,
-  }
-): void {
-  const { conversion, visibility, reap } = timeouts;
+  };
   if (conversion < visibility && visibility < reap) return;
   throw new Error(
     "Durability timeouts are misordered: require " +

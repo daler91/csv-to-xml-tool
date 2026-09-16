@@ -26,8 +26,16 @@ npm run lint      # tsc --noEmit + check-ui-classes.mjs
 npm run build     # next build
 
 # Python lint
-pip install ruff && ruff check .
+pip install -r requirements-ci.txt && ruff check .
 ```
+
+The `requirements*.txt` files are hash-locked resolutions compiled from the
+human-edited `requirements*.in` files next to them (root, `apps/worker/`, and
+`requirements-ci.in` for `ruff` and `pip-audit`). CI and the worker image
+install them with `pip install --only-binary :all: --require-hashes`, so a
+version or hash that drifts from the lockfile fails the install. To change a
+dependency, edit the `.in` file and regenerate with the `uv pip compile`
+command in the `.txt` header (`pip install uv` if you don't have it).
 
 `apps/worker/requirements-dev.txt` matters: without it the worker route and
 registry tests under `tests/` error on a missing `fastapi` or `fakeredis` import.

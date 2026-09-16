@@ -12,6 +12,10 @@ Each CLI entry point seeds ``SBA_OUTPUT_BASE`` with its natural root via
 uses the cwd) so the existing relative-path defaults (``logs/``, ``reports/``,
 ``output/``) keep resolving the same way regardless of where the process was
 started, while an absolute path that points outside the base is refused.
+
+The same base also bounds the one directory the CLI *reads* on request:
+``xml_validator --directory`` (see ``process_directory``), since that path
+drives a filesystem glob and, with ``--fix``, in-place rewrites.
 """
 
 import os

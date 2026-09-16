@@ -1,0 +1,5 @@
+# Tooling the CI workflow installs on top of the project requirements. Pinned
+# and hash-locked like the rest so a poisoned release can't reach the runner.
+#   uv pip compile requirements-ci.in -o requirements-ci.txt --generate-hashes --universal --python-version 3.10
+pip-audit==2.10.1
+ruff==0.16.8

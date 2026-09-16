@@ -61,12 +61,29 @@ export function decodeXmlUpload(bytes: Buffer): string {
 
   text ??= bytes.toString("utf-8");
   // Strip a decoded BOM and restate the declaration as UTF-8.
-  return text
-    .replace(/^﻿/, "")
-    .replace(
-      /^(\s*<\?xml[^>]*?)\s+encoding=["'][^"']*["']/,
-      '$1 encoding="UTF-8"'
-    );
+  return restateDeclarationAsUtf8(text.replace(/^﻿/, ""));
+}
+
+/**
+ * Rewrites the encoding pseudo-attribute of a leading XML declaration to
+ * UTF-8, leaving the text untouched when there is no declaration or it names
+ * no encoding. Done in two steps -- isolate the declaration, then substitute
+ * inside it -- because the single regex this replaced
+ * (`^(\s*<\?xml[^>]*?)\s+encoding=...`) had `[^>]*?` and `\s+` competing
+ * for the same whitespace, which backtracks super-linearly on a long prolog
+ * that never closes.
+ */
+function restateDeclarationAsUtf8(text: string): string {
+  const declaration = /^\s*<\?xml[^>]*>/.exec(text)?.[0];
+  if (!declaration) return text;
+  // One whitespace character, not `\s+`: this search is unanchored, and a
+  // greedy run over a long whitespace stretch would backtrack quadratically.
+  // Any extra whitespace before the attribute is simply left in place.
+  const rewritten = declaration.replace(
+    /\sencoding=["'][^"']*["']/,
+    ' encoding="UTF-8"'
+  );
+  return rewritten + text.slice(declaration.length);
 }
 
 function tryDecode(bytes: Buffer, encoding: string): string | null {

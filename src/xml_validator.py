@@ -272,6 +272,22 @@ def _fix_and_revalidate(file_path, output_path, xsd_file, add_missing):
         _validate_and_log(output_path, xsd_file, "fixed ")
     return True
 
+def _files_within(files, input_dir):
+    """Drop glob results that resolve outside ``input_dir``.
+
+    A symlink inside the directory can make the glob return a path that
+    escapes the confined input directory even though the directory itself
+    (and the pattern) were checked.
+    """
+    kept = []
+    for file_path in files:
+        if _is_within(os.path.realpath(file_path), input_dir):
+            kept.append(file_path)
+        else:
+            logger.warning(f"Skipping {file_path}: resolves outside {input_dir}")
+    return kept
+
+
 def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xml", xsd_file=None, fix=False, add_missing_elements_flag=False):
     """
     Process all XML files in a directory.
@@ -291,6 +307,20 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
     """
     import glob
 
+    # Confine the input directory within the allowed base (CWE-22): --directory
+    # comes straight from the command line, and a "../.." or absolute path would
+    # otherwise point the glob (and, with --fix, the in-place rewrite) anywhere
+    # on the filesystem. Same base as --output; SBA_OUTPUT_BASE widens it.
+    input_dir = resolve_within(output_base(), input_dir)
+    # --pattern is caller-controlled too. It is a file-name glob, so it must
+    # carry no directory part: "../*.xml" would otherwise walk the glob out of
+    # the confined directory. basename() is the sanitizer; anything it changes
+    # was a path, not a pattern.
+    if os.path.basename(pattern) != pattern:
+        raise ValueError(
+            f"--pattern must be a file name pattern such as '*.xml', not a path: {pattern!r}"
+        )
+    pattern = os.path.basename(pattern)
     logger.info(f"Processing XML files in directory: {input_dir}")
     if recursive:
         logger.info(f"Recursive mode enabled, pattern: {pattern}")
@@ -303,7 +333,7 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
             logger.info(f"Created output directory: {output_dir}")
 
     search_pattern = os.path.join(input_dir, "**", pattern) if recursive else os.path.join(input_dir, pattern)
-    files = glob.glob(search_pattern, recursive=recursive)
+    files = _files_within(glob.glob(search_pattern, recursive=recursive), input_dir)
     logger.info(f"Found {len(files)} XML files to process.")
 
     processed_count = 0

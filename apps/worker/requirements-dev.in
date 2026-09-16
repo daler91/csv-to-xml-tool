@@ -1,0 +1,8 @@
+# Test-only dependencies for the worker, on top of its runtime set. Compiled to
+# requirements-dev.txt (which is what gets installed):
+#   uv pip compile apps/worker/requirements-dev.in -o apps/worker/requirements-dev.txt --generate-hashes --universal --python-version 3.10
+-r requirements.in
+
+# Hermetic in-memory Redis so the registry tests need no live server.
+fakeredis==2.38.0
+pytest==9.1.1

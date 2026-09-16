@@ -29,7 +29,13 @@ export async function workerFetch<T>(
       throw new Error(`Worker error ${res.status}: ${text}`);
     }
 
-    return res.json();
+    // `await`, not a bare `return res.json()`: without it the `finally` ran
+    // (and cleared the timeout) as soon as the headers arrived, so a stalled
+    // body download -- and for /convert the body is the payload -- was never
+    // aborted, and a body-read failure bypassed the `catch` and surfaced as a
+    // raw SyntaxError instead of the "Worker error" shapes the consumer's
+    // retry classification keys on.
+    return (await res.json()) as T;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(`Worker request to ${path} timed out after ${timeoutMs}ms`);

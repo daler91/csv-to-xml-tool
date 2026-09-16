@@ -1,5 +1,6 @@
 import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { REAP_DEADLINE_MS } from "@/lib/durability-timeouts";
 
 // Backstop deadline: a job stuck in "queued" or "converting" past this is failed.
 //
@@ -15,7 +16,9 @@ import { prisma } from "@/lib/prisma";
 // A queued/converting job's row isn't written until it terminalizes (progress is
 // read live from the worker, never persisted), so `updatedAt` reliably marks when
 // it entered that state and is a sound staleness baseline.
-const REAP_DEADLINE_MS = Number(process.env.REAP_DEADLINE_MS) || 60 * 60 * 1000;
+//
+// REAP_DEADLINE_MS itself lives in durability-timeouts.ts with the other two,
+// where the ordering above is asserted at consumer startup.
 
 const STUCK_STATUSES: JobStatus[] = ["queued", "converting"];
 

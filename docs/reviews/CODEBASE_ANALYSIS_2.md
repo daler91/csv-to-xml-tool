@@ -368,7 +368,10 @@ surface turned up. Items marked **verified** were confirmed against the code and
 running it; **plausible** means the code path is clear but the trigger needs a runtime condition not
 reproduced here.
 
-### 4.1 The web server never starts if Redis is unreachable at boot — `[OPEN]` — HIGH, verified
+### 4.1 The web server never starts if Redis is unreachable at boot — `[FIXED]` — HIGH, verified
+
+> Fixed: `startConsumer` no longer awaits the boot sweep (fire-and-forget with its own error log), so `register()` resolves whatever Redis is doing. `job-consumer.test.ts` starts the consumer against a sweep whose promise never settles.
+
 
 `instrumentation.ts:17` awaits `startConsumer()`, which awaits `sweepStaleClaims()`
 (`job-consumer.ts:35`) on the queue client. That client is built with `maxRetriesPerRequest: null`
@@ -399,7 +402,10 @@ body (`"abc"`, `null`) hits `key in data` at `:113` → TypeError → 500. `rout
 `status`, and `api-reference.md:109` documents `status` as freely updatable. Fix: accept only
 `status: "mapping"` and reuse `sanitizeMapping`.
 
-### 4.3 The consumer loop dies permanently if `handleFailure` throws — `[OPEN]` — HIGH, verified
+### 4.3 The consumer loop dies permanently if `handleFailure` throws — `[FIXED]` — HIGH, verified
+
+> Fixed: the per-job work moved into `processClaim`, and `runLoop` wraps it in its own try/catch with a backoff, so a throwing failure handler is logged and the loop claims again. Tested with a `getAttempts` that rejects inside the handler.
+
 
 `job-consumer.ts:72-77`: `handleFailure` runs inside the `catch` with no guard of its own and calls
 `ackJob`/`getAttempts`/`requeueJob` (Redis) and `deadLetter` (Prisma). Any of those throwing rejects
@@ -411,7 +417,10 @@ Redis restart during a completing conversion leaves every later job `queued` unt
 fails it. No test covers a throwing `handleFailure`. Fix: guard `handleFailure` with its own
 try/catch and sleep, and clear the started flag (or restart the loop) on exit.
 
-### 4.4 `JOB_MAX_ATTEMPTS` is not enforced for sweep-reclaimed jobs — `[OPEN]` — MEDIUM, plausible
+### 4.4 `JOB_MAX_ATTEMPTS` is not enforced for sweep-reclaimed jobs — `[FIXED]` — MEDIUM, plausible
+
+> Fixed: `processClaim` reads the attempt counter before running and dead-letters a job claimed more than `JOB_MAX_ATTEMPTS` times, with a `conversion_deadlettered` audit row naming the count.
+
 
 The attempts cap is checked only in `handleFailure` (`job-consumer.ts:100`). A job that kills the
 process instead of throwing — realistic, since `job-runner.ts:44-54` holds the CSV string, its
@@ -421,7 +430,10 @@ minutes later `sweepStaleClaims` re-queues (`job-queue.ts:116-130` never consult
 (attempts=2, unchecked) → crash… The reaper never fires because `updatedAt` is refreshed every 40
 minutes and its deadline is 60. Fix: check `getAttempts(jobId) > MAX_ATTEMPTS` at claim time.
 
-### 4.5 `workerFetch` timeout does not cover the response body — `[OPEN]` — MEDIUM, verified
+### 4.5 `workerFetch` timeout does not cover the response body — `[FIXED]` — MEDIUM, verified
+
+> Fixed: `return (await res.json())`. `worker-client.test.ts` (new) checks the abort fires while a body is still downloading and that a body-read failure goes through the same catch as a network error.
+
 
 `worker-client.ts:32` is `return res.json()` with no `await`, inside `try … finally`. The `finally`
 runs — and `clearTimeout` fires — as soon as headers arrive, so the `AbortController` never aborts a
@@ -463,9 +475,9 @@ for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES`
 | 4.8.8 | Download filename replaces the *first* `.csv`: `q1.csv_export.csv` downloads as `q1.xml_export.csv`. Use `/\.csv$/i`. | `download/route.ts:55` | LOW, verified |
 | 4.8.9 | Login IP key is an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
 | 4.8.10 | Signup: malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
-| 4.8.11 | `conversion_started` is audited on every successful claim, including sweep re-claims and requeues, so a job retried three times shows three starts. | `job-runner.ts:38-40` | LOW, verified |
+| 4.8.11 | **`[FIXED]`** `conversion_started` was audited on every successful claim. `runJob` now takes the attempt number from the consumer and writes `conversion_retried` (with `metadata.attempt`) for later attempts; the audit page labels it. | `job-runner.ts` | LOW, verified |
 | 4.8.12 | `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
-| 4.8.13 | The `CONVERSION_TIMEOUT_MS < VISIBILITY_TIMEOUT_MS < REAP_DEADLINE_MS` ordering (rule 7) is correct in the defaults and both `.env.example` files but has no runtime assertion; a misordered override silently lets the sweep re-queue a job a live consumer is still running. | `job-queue.ts`, `job-reaper.ts` | LOW |
+| 4.8.13 | **`[FIXED]`** The three timeouts now live in `lib/durability-timeouts.ts` and `assertTimeoutOrdering()` runs at consumer startup, refusing to start on a misordered override. | `lib/durability-timeouts.ts` | LOW |
 
 **Web test gaps:** no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`; a throwing
 `handleFailure` is untested; `PATCH` with a `status` value is untested; an upper-case `.CSV` upload is

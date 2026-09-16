@@ -1,6 +1,7 @@
 import Redis from "ioredis";
 
 import { getRedis } from "@/lib/redis";
+import { VISIBILITY_TIMEOUT_MS } from "@/lib/durability-timeouts";
 
 /**
  * Durable, web-owned job queue (ARCH-1) built on Redis.
@@ -24,13 +25,13 @@ const PROCESSING = `${PREFIX}processing`;
 const CLAIMS = `${PREFIX}claims`;
 const ATTEMPTS = `${PREFIX}attempts`;
 
-// A job claimed (in PROCESSING) longer than this is treated as abandoned and
-// re-queued by the sweep. MUST exceed CONVERSION_TIMEOUT_MS (the per-attempt
-// worker timeout) so the sweep never reclaims a job a live consumer is still
-// legitimately running, and SHOULD be below the reaper deadline so the sweep's
-// retry gets first crack before the reaper backstops the job to "error".
-const VISIBILITY_TIMEOUT_MS =
-  Number(process.env.VISIBILITY_TIMEOUT_MS) || 40 * 60 * 1000;
+// A job claimed (in PROCESSING) longer than VISIBILITY_TIMEOUT_MS is treated as
+// abandoned and re-queued by the sweep. It MUST exceed CONVERSION_TIMEOUT_MS
+// (the per-attempt worker timeout) so the sweep never reclaims a job a live
+// consumer is still legitimately running, and SHOULD be below the reaper
+// deadline so the sweep's retry gets first crack before the reaper backstops
+// the job to "error". The three live in durability-timeouts.ts, which asserts
+// that ordering at consumer startup.
 
 /**
  * Dedicated Redis connection for the blocking consumer.

@@ -119,7 +119,10 @@ describe("runJob", () => {
     expect(db.auditEntry.create).toHaveBeenCalledTimes(1);
     expect(db.auditEntry.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ action: "conversion_started" }),
+        data: expect.objectContaining({
+          action: "conversion_started",
+          metadata: { attempt: 1 },
+        }),
       })
     );
   });
@@ -194,5 +197,33 @@ describe("runJob", () => {
     worker.mockRejectedValue(new Error("Worker error 422: bad data"));
 
     await expect(runJob("j1")).rejects.toThrow(/Worker error 422/);
+  });
+});
+
+
+describe("runJob audit on retries", () => {
+  it("records later attempts as conversion_retried, not another start", async () => {
+    db.job.findUnique.mockResolvedValue(JOB as never);
+    db.job.updateMany
+      .mockResolvedValueOnce({ count: 1 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+    db.auditEntry.create.mockResolvedValue({} as never);
+    read.mockResolvedValue("Contact ID\n003\n" as never);
+    worker.mockResolvedValue(RESULT as never);
+
+    await runJob("j1", 2);
+
+    expect(db.auditEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "conversion_retried",
+          metadata: { attempt: 2 },
+        }),
+      })
+    );
+    const actions = db.auditEntry.create.mock.calls.map(
+      (c) => (c[0] as { data: { action: string } }).data.action
+    );
+    expect(actions).not.toContain("conversion_started");
   });
 });

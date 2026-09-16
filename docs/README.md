@@ -29,8 +29,10 @@ registers. They are point-in-time findings with per-finding status markers, not
 descriptions of how the system works — read them when you want to know *what is
 wrong or was wrong*, not *how it works*.
 
-- [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md) — the current
-  findings register. Most authoritative of the four.
+- [`reviews/CODEBASE_ANALYSIS_2.md`](./reviews/CODEBASE_ANALYSIS_2.md) — the
+  current findings register: the second-pass review at `482d235`. Start here.
+- [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md) — the first
+  full review; mostly `[FIXED]` now, kept for the history and the still-open items.
 - [`reviews/TECHNICAL_DEBT.md`](./reviews/TECHNICAL_DEBT.md) — code and security
   debt, item by item.
 - [`reviews/UX_REVIEW.md`](./reviews/UX_REVIEW.md) and

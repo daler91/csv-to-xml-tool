@@ -3,5 +3,5 @@
 -r requirements.txt
 
 # Hermetic in-memory Redis so the registry tests need no live server.
-fakeredis==2.36.2
-pytest==9.0.3
+fakeredis==2.38.0
+pytest==9.1.1

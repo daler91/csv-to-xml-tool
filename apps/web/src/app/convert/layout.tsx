@@ -8,7 +8,7 @@ import { StepIndicator } from "@/components/ui/step-indicator";
  * Progress, Results, Reupload). The indicator is a client component
  * that derives the active step from usePathname().
  *
- * See UX_REVIEW.md §1.2.
+ * See docs/reviews/UX_REVIEW.md §1.2.
  */
 export default function ConvertLayout({
   children,

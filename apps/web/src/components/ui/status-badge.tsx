@@ -3,7 +3,7 @@
  *
  * Extracted from dashboard/page.tsx so results, audit, and future
  * screens can reuse the same icon + label + color combo without
- * duplicating the STATUS_META map. Resolves UX_REVIEW.md §8.2.
+ * duplicating the STATUS_META map. Resolves docs/reviews/UX_REVIEW.md §8.2.
  *
  * Labels are intentionally human-friendly (§9.1):
  *   uploaded   -> Uploaded

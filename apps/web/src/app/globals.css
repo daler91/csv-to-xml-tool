@@ -3,7 +3,7 @@
 /*
  * Global focus ring. Keyboard users get a visible blue outline on any
  * focused interactive element; mouse users do not (thanks to
- * :focus-visible). Added in UX Phase 2 — see UX_IMPLEMENTATION_PLAN.md §6.4.
+ * :focus-visible). Added in UX Phase 2 — see docs/reviews/UX_IMPLEMENTATION_PLAN.md §6.4.
  */
 @layer base {
   :focus-visible {

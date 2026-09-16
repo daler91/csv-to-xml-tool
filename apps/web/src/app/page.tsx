@@ -5,7 +5,7 @@ import { buttonClasses } from "@/components/ui/button-classes";
 /**
  * Homepage for unauthenticated users.
  *
- * Resolves UX_REVIEW.md §2.1. The old landing page was one
+ * Resolves docs/reviews/UX_REVIEW.md §2.1. The old landing page was one
  * paragraph + two buttons and told partners nothing about what to
  * bring, what the three converter types mean, or where samples
  * live. The rebuild has three sections — hero, "What this

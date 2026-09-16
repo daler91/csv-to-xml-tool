@@ -1,7 +1,7 @@
 /**
  * Skeleton placeholder primitives.
  *
- * Added for UX_REVIEW.md §5.3. Pages that load async data previously
+ * Added for docs/reviews/UX_REVIEW.md §5.3. Pages that load async data previously
  * showed a centered "Loading…" string; the layout jumped when the
  * real content arrived and on slow mobile connections it felt like a
  * stall. These primitives render animated gray bars that mirror the

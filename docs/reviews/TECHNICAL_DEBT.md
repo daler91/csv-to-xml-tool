@@ -4,6 +4,10 @@ This document catalogs known technical debt across the CSV-to-XML tool codebase,
 
 Items marked with **[RESOLVED]** have been addressed.
 
+> Last verified against the code on **2026-09-16** at `d0e71f0`. Items #5, #16, #18
+> and #19 are genuinely still open; everything else marked `[RESOLVED]` was
+> spot-checked. When you fix an item, flip its marker in the same commit.
+
 ---
 
 ## HIGH Priority
@@ -16,7 +20,11 @@ Replaced `object` with proper types (`logging.Logger`, `ValidationTracker`, `Any
 
 ### 2. Overly Broad Exception Handling **[RESOLVED]**
 
-Replaced generic `except Exception` blocks with specific exception types (`OSError`, `csv.Error`, `pd.errors.ParserError`, `etree.XMLSyntaxError`, `ValueError`, `KeyError`, etc.) across all converters, `xml_validator.py`, and `fix_sba_xml.py`. Updated corresponding tests.
+Replaced generic `except Exception` blocks with specific exception types (`OSError`, `csv.Error`, `etree.XMLSyntaxError`, `ValueError`, `KeyError`, etc.) across all converters, `xml_validator.py`, and `fix_sba_xml.py`. Updated corresponding tests.
+
+_Updated 2026-09-16: this entry also listed `pd.errors.ParserError`. pandas was removed
+from the project entirely (finding 5.1 in `CODEBASE_ANALYSIS.md`) — all three converters
+read with stdlib `csv` — so that type no longer appears anywhere._
 
 ---
 
@@ -51,7 +59,12 @@ Added `realpath()` validation in `apps/web/src/app/api/jobs/[jobId]/download/rou
 
 ### 7. Unpinned Python Dependencies **[RESOLVED]**
 
-Added version range pins to `requirements.txt` (e.g., `pandas>=2.2.0,<3`).
+Dependencies are pinned in `requirements.txt` and `apps/worker/requirements.txt`, and
+`pip-audit` runs against both in CI.
+
+_Updated 2026-09-16: this entry described range pins and used `pandas>=2.2.0,<3` as its
+example. Both are out of date — pins are now **exact** (`lxml==6.1.3`, `fastapi==0.141.1`,
+…), and pandas is no longer a dependency at all._
 
 ---
 
@@ -82,8 +95,9 @@ Added named constants in `data_cleaning.py` (`PHONE_NUMBER_DIGITS`, `PHONE_WITH_
 ### 11. No Web Application Tests **[RESOLVED]**
 
 Vitest is wired up (`apps/web/package.json` `"test": "vitest run"`, `vitest.config.ts`) and runs
-in CI. 166 tests across 22 files cover the API routes, the job queue/consumer/runner/reaper,
-retention, rate limiting, path confinement, auth throttling and the security headers.
+in CI. **173 tests across 23 files** (at `d0e71f0`, 2026-09-16) cover the API routes, the job
+queue/consumer/runner/reaper, retention, rate limiting, path confinement, auth throttling and the
+security headers.
 ---
 
 ### 12. Docker Compose Missing Health Checks **[RESOLVED]**

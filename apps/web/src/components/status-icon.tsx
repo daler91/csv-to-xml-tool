@@ -2,7 +2,7 @@
  * Inline status icons — used wherever the app conveys state with
  * color (success / warning / error / info / neutral).
  *
- * Resolves UX_REVIEW.md §6.3: the app previously leaned on color
+ * Resolves docs/reviews/UX_REVIEW.md §6.3: the app previously leaned on color
  * alone (green/yellow/red/blue) for summary cards, status badges,
  * column-status cards, and cleaning diff rows, which is a WCAG 1.4.1
  * violation. Pairing each color with a text label *and* a shape gives

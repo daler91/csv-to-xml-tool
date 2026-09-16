@@ -1,7 +1,7 @@
 /**
  * Inline loading spinner.
  *
- * Added for UX_REVIEW.md §5.2: buttons that are in a loading state
+ * Added for docs/reviews/UX_REVIEW.md §5.2: buttons that are in a loading state
  * previously relied entirely on text changes ("Uploading…") and a
  * dimmed background. Pair this component with `aria-busy` on the
  * parent button so assistive tech announces the state change.

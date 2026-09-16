@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 /**
  * Stable stringification of the mapping dict, used to detect dirty
  * state so the Cancel button can confirm before discarding unsaved
- * edits (UX_REVIEW.md §9.5).
+ * edits (docs/reviews/UX_REVIEW.md §9.5).
  */
 function mappingKey(m: Record<string, string>): string {
   return Object.keys(m)

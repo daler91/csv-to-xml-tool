@@ -3,7 +3,7 @@
 /**
  * Minimal toast primitive for the app.
  *
- * Built to resolve UX_REVIEW.md §3.9 / §5.1: every successful action
+ * Built to resolve docs/reviews/UX_REVIEW.md §3.9 / §5.1: every successful action
  * (upload, mapping save, conversion complete, sign-in, sign-up,
  * re-upload) needs an acknowledgement beyond a silent redirect, and
  * every recoverable error needs a surface that screen readers actually

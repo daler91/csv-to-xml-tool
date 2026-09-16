@@ -88,7 +88,7 @@ def run_conversion(
     If ``on_progress`` is provided, it is installed as the converter's
     ``progress_callback`` and receives ``(processed, total)`` tuples
     roughly every 25 rows (counseling) or every 5 event groups
-    (training). See UX_REVIEW.md §3.6.
+    (training). See docs/reviews/UX_REVIEW.md §3.6.
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")

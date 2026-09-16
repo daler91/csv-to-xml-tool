@@ -488,11 +488,13 @@ for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES`
 | 4.8.12 | **`[FIXED]`** (documented; not verifiable here) `deployment.md` now has a *Volume ownership on Railway* section and a checklist item naming `RAILWAY_RUN_UID=0`. `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
 | 4.8.13 | **`[FIXED]`** The three timeouts now live in `lib/durability-timeouts.ts` and `assertTimeoutOrdering()` runs at consumer startup, refusing to start on a misordered override. | `lib/durability-timeouts.ts` | LOW |
 
-**Web test gaps:** no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`; a throwing
-`handleFailure` is untested; `PATCH` with a `status` value is untested; an upper-case `.CSV` upload is
-untested. `GET /api/jobs/[jobId]` returns `inputFilePath`/`outputFilePath` (absolute server paths)
-plus the full `issues` and `cleaningDiffs` arrays on every 1–5 s progress poll — not a bug, but
-unnecessary disclosure and payload.
+**Web test gaps:** _(as found)_ no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`;
+a throwing `handleFailure` is untested; `PATCH` with a `status` value is untested; an upper-case
+`.CSV` upload is untested. _(Now)_ all but the `[templateId]` route are covered by the Tier 4 fixes
+(`worker-client.test.ts`, `job-consumer.test.ts`, the PATCH and upload route tests); the web suite
+went from 173 to 237 tests. `GET /api/jobs/[jobId]` still returns `inputFilePath`/`outputFilePath`
+(absolute server paths) plus the full `issues` and `cleaningDiffs` arrays on every 1–5 s progress
+poll — not a bug, but unnecessary disclosure and payload, and still open.
 
 ---
 

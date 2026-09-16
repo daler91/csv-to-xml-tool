@@ -22,7 +22,7 @@
     "@types/react-dom": "^19.2.3",
     "bcryptjs": "^3.0.3",
     "ioredis": "^5.10.1",
-    "next": "^16.2.1",
+    "next": "^16.3.3",
     "next-auth": "^5.0.0-beta.30",
     "postcss": "^8.5.8",
     "prisma": "6.19.3",
@@ -38,7 +38,9 @@
   "overrides": {
     "next": {
       "postcss": "^8.5.10",
-      "sharp": "^0.35.3"
-    }
+      "sharp": "^0.35.4"
+    },
+    "nanoid": "^3.3.18",
+    "deepmerge-ts": "^8.0.2"
   }
 }

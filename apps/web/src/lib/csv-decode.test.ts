@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { decodeCsvBuffer } from "@/lib/csv-decode";
+import { decodeCsvBuffer, decodeWindows1252 } from "@/lib/csv-decode";
 
 describe("decodeCsvBuffer", () => {
   it("decodes valid UTF-8 as UTF-8 and keeps the BOM for the worker's utf-8-sig read", () => {
@@ -42,5 +42,20 @@ describe("decodeCsvBuffer", () => {
     const { text, encoding } = decodeCsvBuffer(Buffer.from("a,b\n1,2\n"));
     expect(encoding).toBe("utf-8");
     expect(text).toBe("a,b\n1,2\n");
+  });
+});
+
+describe("decodeWindows1252", () => {
+  it("maps the 0x80-0x9F range to the cp1252 characters, not C1 controls", () => {
+    // € ‚ ƒ „ … † ‡ ˆ ‰ Š ‹ Œ Ž ‘ ’ “ ” • – — ˜ ™ š › œ ž Ÿ
+    const bytes = new Uint8Array([
+      0x80, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8e,
+      0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9e, 0x9f,
+    ]);
+    expect(decodeWindows1252(bytes)).toBe("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ");
+  });
+
+  it("passes ASCII and Latin-1 bytes through unchanged", () => {
+    expect(decodeWindows1252(new Uint8Array([0x41, 0x7e, 0xa9, 0xf1, 0xff]))).toBe("A~©ñÿ");
   });
 });

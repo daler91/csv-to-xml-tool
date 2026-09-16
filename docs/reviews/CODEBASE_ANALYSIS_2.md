@@ -292,7 +292,10 @@ test for *column names*, not for *coverage of the cleaners actually applied*.
 
 ## Tier 3 — Correctness & robustness
 
-### 3.1 The validation reports crash on non-ASCII text under a non-UTF-8 locale — `[OPEN]`
+### 3.1 The validation reports crash on non-ASCII text under a non-UTF-8 locale — `[FIXED]`
+
+> Fixed: both writers pass an explicit encoding (`utf-8-sig` for the CSV so Excel reads it as UTF-8, `utf-8` plus a `<meta charset>` for the HTML) and catch `UnicodeError` alongside `OSError`. `tests/test_validation_report.py::TestReportEncoding` runs the writers in a subprocess under an ASCII locale.
+
 
 `validation_report.py:188` and `:334` open the CSV and HTML reports with no `encoding=`. Python
 then uses the locale encoding — `cp1252` on the Windows machines that `run.bat`/`setup.bat` exist to
@@ -306,7 +309,10 @@ double-click user sees a traceback and the console closes; in `src.main` it is c
 `except Exception` and the process exits 1 with "An unexpected error occurred" after writing a good
 XML file. The XML writers are fine (they pass `encoding='utf-8'` explicitly).
 
-### 3.2 Training-client issues and XSD error details cite columns the user's file does not have — `[OPEN]`
+### 3.2 Training-client issues and XSD error details cite columns the user's file does not have — `[FIXED]`
+
+> Fixed: `TrainingClientConfig.reverse_column_mapping()` is applied in two places — `ValidationTracker.field_aliases` (set by `TrainingClientConverter.__init__`) renames every issue's `field_name` back to the user's header, and `xsd_error_mapping._TRAINING_CLIENT_ELEMENT_FIELDS` is derived from the counseling table through the same reverse map. The ZIP warning is recorded once per record (`_first_time`).
+
 
 `TrainingClientConverter` renames `State → Mailing State/Province`, `Zip code → Mailing Zip/Postal
 Code`, `Phone → Contact: Phone`, `Company → Account Name`, `Disabilities → Disability`, etc., before
@@ -322,7 +328,10 @@ the reverse map needed; `analyze_training_client_quality` already applies it for
 Also visible in that run: the ZIP warning is recorded **twice** per row (once each for
 `AddressPart1` and `AddressPart3`), because `_build_address` dedupes only the fabrication warning.
 
-### 3.3 The mapping page reports the shipped samples as incomplete — `[OPEN]`
+### 3.3 The mapping page reports the shipped samples as incomplete — `[FIXED]`
+
+> Fixed: `preview_service._match_columns` treats any accepted alias as a match for `training` and reports it in `column_status.aliases` (shown by the mapping page); `TRAINING_CLIENT_EXPECTED` now lists only the columns the converter reads. Both shipped samples are regression fixtures in `tests/test_preview_service.py`.
+
 
 `get_expected_columns('training')` returns the *first* alias of each `TrainingConfig` entry
 (`preview_service.py:273-279`), so for `training-sample.csv` — whose headers are `city`, `State`,
@@ -333,7 +342,10 @@ lists columns (`Class Teacher`, `Disabilities`, `Related Record ID`, `Street`, `
 `Zip code`, `Unique Campaign Members`) that the sample deliberately omits. The first thing a new user
 sees after uploading the sample the landing page linked is a warning that it is wrong.
 
-### 3.4 Smaller items — `[OPEN]`
+### 3.4 Smaller items — `[FIXED]`
+
+> Fixed: `/preview` binds the job id; the cleaning-diff failure is logged with its traceback; the dead `Street2` call is gone; the web Dockerfile runs `npm ci --ignore-scripts`.
+
 
 - `routes/preview.py` never calls `set_job_id`, so preview logs carry `[-]` and cannot be
   correlated with the job (every other route binds it).

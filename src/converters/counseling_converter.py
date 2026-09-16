@@ -34,6 +34,10 @@ class CounselingConverter(BaseConverter):
         # fields their own form intentionally defaults (see TrainingClientConverter).
         self.fabrication_warn_fields = set(COUNSELING_FABRICATION_DEFAULTS)
         self._fabrication_warned = set()
+        # Per-row dedupe for warnings raised from code that runs more than once
+        # per record (the address is built for Part 1 and Part 3), keyed by
+        # (record_id, field). Cleared with _fabrication_warned at each row.
+        self._warned_once = set()
 
     def _preprocess_row(self, row):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
@@ -82,6 +86,14 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to choose the PartnerSessionNumber value.
         Defaults to the Activity ID."""
         return row.get('Activity ID', '')
+
+    def _first_time(self, record_id, field):
+        """True the first time (record_id, field) is seen in the current row."""
+        key = (record_id, field)
+        if key in self._warned_once:
+            return False
+        self._warned_once.add(key)
+        return True
 
     def _warn_fabricated_default(self, record_id, field, default_value, element_label):
         """Record a FABRICATED_DEFAULT warning when a blank/missing cell is replaced
@@ -139,6 +151,7 @@ class CounselingConverter(BaseConverter):
             self.validator.set_current_event_id(row.get('Activity ID', ''))
             # Reset per row so duplicate Contact IDs still warn independently.
             self._fabrication_warned.clear()
+            self._warned_once.clear()
 
             if not data_validation.validate_counseling_record(row, row_index, self.validator):
                 self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
@@ -662,13 +675,14 @@ class CounselingConverter(BaseConverter):
         # enumeration and a \d{5} pattern respectively -- so a blank cell must
         # omit the element, not emit an empty one (which fails validation).
         emit_optional(address, 'Street1', row.get('Mailing Street', ''))
-        emit_optional(address, 'Street2', '')
         emit_optional(address, 'City', row.get('Mailing City', ''))
         emit_optional(address, 'State', data_cleaning.standardize_state_name(row.get('Mailing State/Province', '')))
         zip_full = str(row.get('Mailing Zip/Postal Code', '')).strip()
         zip_5digit_match = re.match(r'^\d{5}', zip_full)
         zip_5digit = zip_5digit_match.group(0) if zip_5digit_match else ''
-        if not zip_5digit and zip_full:
+        if not zip_5digit and zip_full and self._first_time(record_id, 'Mailing Zip/Postal Code'):
+            # Once per record, not once per address part: the same cell is read
+            # for AddressPart1 and AddressPart3, and the report listed it twice.
             self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_FORMAT, "Mailing Zip/Postal Code", f"Could not parse 5-digit ZIP from '{zip_full}'.")
         emit_optional(address, 'ZipCode', zip_5digit)
         # Zip4Code requires exactly 4 digits per XSD - only emit if we have it

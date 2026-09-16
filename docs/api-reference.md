@@ -153,6 +153,13 @@ column status (matched / missing / extra plus fuzzy rename suggestions) and the
 data-quality summary. Flips the job to `previewed` unless it is already terminal
 or in flight.
 
+For the `training` converter a column counts as matched when the file carries
+**any** of its accepted spellings (`city` for `City`, `Zip code` for
+`Zip/Postal Code`); `column_status.aliases` maps each such canonical column to
+the header that satisfied it. `training-client` expects only the columns its
+converter reads, so export-only columns (`Member Status`, `Related Record ID`, …)
+are neither expected nor reported missing.
+
 `410` if the file has been purged; `413` if it exceeds the cap.
 
 ### `POST /api/jobs/:jobId/cancel`

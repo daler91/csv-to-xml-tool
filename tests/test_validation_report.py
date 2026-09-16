@@ -166,7 +166,8 @@ class TestValidationTracker(unittest.TestCase):
 
         import csv as csv_mod
         csv_path = self.tracker.save_issues_to_csv(output_dir=self.test_dir)
-        with open(csv_path, newline='') as f:
+        # utf-8-sig: the export carries a BOM so Excel reads it as UTF-8.
+        with open(csv_path, newline='', encoding='utf-8-sig') as f:
             reader = csv_mod.DictReader(f)
             self.assertEqual(
                 reader.fieldnames,
@@ -233,7 +234,7 @@ class TestReportEscaping(unittest.TestCase):
             "+SUM(A1)", "-2+3", event_id="@evil",
         )
         path = self.tracker.save_issues_to_csv(self.tmp)
-        rows = list(csv.DictReader(open(path, encoding="utf-8")))
+        rows = list(csv.DictReader(open(path, encoding="utf-8-sig")))
         self.assertEqual(len(rows), 1)
         for field in ("record_id", "field_name", "message", "event_id"):
             self.assertTrue(
@@ -244,7 +245,7 @@ class TestReportEscaping(unittest.TestCase):
     def test_csv_export_leaves_ordinary_values_alone(self):
         self.tracker.add_issue("C-001", "warning", "invalid_value", "Race", "Missing.")
         path = self.tracker.save_issues_to_csv(self.tmp)
-        row = next(iter(csv.DictReader(open(path, encoding="utf-8"))))
+        row = next(iter(csv.DictReader(open(path, encoding="utf-8-sig"))))
         self.assertEqual(row["record_id"], "C-001")
         self.assertEqual(row["field_name"], "Race")
         self.assertEqual(row["message"], "Missing.")
@@ -252,3 +253,60 @@ class TestReportEscaping(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestReportEncoding(unittest.TestCase):
+    """The report writers must not depend on the locale's default encoding.
+
+    Issue messages quote raw spreadsheet content, and on the Windows machines
+    run.bat exists for the default is cp1252. Opening the reports without an
+    explicit encoding raised UnicodeEncodeError on the first character outside
+    that codepage -- after a successful conversion, and as a ValueError the
+    OSError handler did not catch. Exercised in a subprocess with an ASCII
+    locale, which is the strictest case.
+    """
+
+    MESSAGE = "Export country 'C\u00f4te d\u2019Ivoire' was omitted."
+
+    def _run_in_ascii_locale(self, snippet):
+        import os
+        import subprocess
+        import sys
+        env = {**os.environ, "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0",
+               "LC_ALL": "C", "LANG": "C", "PYTHONIOENCODING": "utf-8"}
+        # ascii(), not repr(): the child runs under an ASCII locale, so the
+        # command line itself must not carry the non-ASCII characters.
+        code = (
+            "import sys; sys.path.insert(0, %r)\n"
+            "from src.validation_report import ValidationTracker\n"
+            "t = ValidationTracker(); t.add_issue('r1', 'warning', 'invalid_value', 'Export Countries', %s)\n"
+            % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ascii(self.MESSAGE))
+        ) + snippet
+        return subprocess.run([sys.executable, "-c", code], env=env,
+                              capture_output=True, text=True, timeout=60)
+
+    def test_csv_report_survives_non_ascii_under_ascii_locale(self):
+        tmp = tempfile.mkdtemp()
+        result = self._run_in_ascii_locale(
+            "import os; os.environ['SBA_OUTPUT_BASE'] = %r; print(t.save_issues_to_csv(%r))" % (tmp, tmp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = result.stdout.strip()
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual(rows[0]["message"], self.MESSAGE)
+
+    def test_html_report_survives_non_ascii_under_ascii_locale(self):
+        tmp = tempfile.mkdtemp()
+        result = self._run_in_ascii_locale(
+            "import os; os.environ['SBA_OUTPUT_BASE'] = %r; print(t.generate_html_report(%r))" % (tmp, tmp))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        content = open(result.stdout.strip(), encoding="utf-8").read()
+        self.assertIn('<meta charset="utf-8">', content)
+        self.assertIn("C\u00f4te d\u2019Ivoire", content)
+
+    def test_add_issue_applies_field_aliases(self):
+        tracker = ValidationTracker()
+        tracker.field_aliases = {"Mailing Zip/Postal Code": "Zip code"}
+        tracker.add_issue("r1", "warning", "invalid_format", "Mailing Zip/Postal Code", "bad zip")
+        tracker.add_issue("r1", "warning", "invalid_format", "Email", "bad email")
+        self.assertEqual([i["field_name"] for i in tracker.issues], ["Zip code", "Email"])

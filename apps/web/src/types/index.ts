@@ -32,6 +32,12 @@ export interface PreviewResponse {
       suggested_match: string;
       score: number;
     }>;
+    /**
+     * Canonical expected column -> the differently-spelled CSV header that
+     * satisfied it via the converter's alias list (training only). Absent on
+     * older workers.
+     */
+    aliases?: Record<string, string>;
     field_requirements: Record<string, "required" | "optional" | "conditional">;
     field_descriptions?: Record<string, FieldDescription>;
   };

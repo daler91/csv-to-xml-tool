@@ -31,6 +31,16 @@ class TrainingClientConverter(CounselingConverter):
         # would be a storm about columns the form never had. Only keep warnings
         # for fabrication-risk fields this converter's own input provides.
         self.fabrication_warn_fields -= set(self.training_client_config.DEFAULTS)
+        # _preprocess_row renames the CSV columns to counseling names before the
+        # shared counseling code records issues, so those issues named columns
+        # the user's file does not have ("Mailing Zip/Postal Code" for their
+        # "Zip code"). Reverse the rename at the tracker so every issue -- the
+        # converter's own and the worker's file-level ones -- shows the user's
+        # column. Only real renames are mapped; pass-through columns keep their
+        # name either way.
+        validator.field_aliases.update(
+            self.training_client_config.reverse_column_mapping()
+        )
 
     def _preprocess_row(self, row):
         """Remap training client CSV columns to counseling-format columns."""

@@ -50,6 +50,13 @@ class ValidationTracker:
         self.successful_records = 0
         self.current_record_id = None
         self.current_event_id = None
+        # Optional rename applied to every issue's field_name at add time. The
+        # training-client converter renames its CSV columns to counseling names
+        # before the shared counseling code runs, so without this its issues
+        # named columns ("Mailing Zip/Postal Code") that the user's file does
+        # not contain ("Zip code"). Keyed by the name the converter uses,
+        # valued by the name the user sees.
+        self.field_aliases: dict[str, str] = {}
 
     def set_current_record_id(self, record_id: str) -> None:
         self.current_record_id = record_id
@@ -85,7 +92,7 @@ class ValidationTracker:
             'event_id': resolved_event_id,
             'severity': severity,
             'category': category,
-            'field_name': field_name,
+            'field_name': self.field_aliases.get(field_name, field_name),
             'message': message,
             'timestamp': datetime.now().isoformat()
         }
@@ -183,14 +190,21 @@ class ValidationTracker:
         # Define CSV columns
         fieldnames = ['record_id', 'event_id', 'severity', 'category', 'field_name', 'message', 'timestamp']
 
-        # Write issues to CSV
+        # Write issues to CSV. utf-8-sig, not the locale default: the messages
+        # quote raw spreadsheet content (names with diacritics, the curly
+        # apostrophe in the country table's own "Cote d’Ivoire"), and on the
+        # Windows machines run.bat serves the default is cp1252, which raised
+        # UnicodeEncodeError on the first such character -- a ValueError, not
+        # the OSError caught below, so it escaped as a traceback after a
+        # successful conversion. The BOM is what makes Excel read the file as
+        # UTF-8 instead of showing mojibake.
         try:
-            with open(csv_file, 'w', newline='') as f:
+            with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames, restval='')
                 writer.writeheader()
                 for issue in self.issues:
                     writer.writerow({k: _csv_safe(v) for k, v in issue.items()})
-        except OSError as e:
+        except (OSError, UnicodeError) as e:
             raise OSError(f"Failed to write validation CSV report to {csv_file}: {e}") from e
 
         return csv_file
@@ -201,6 +215,7 @@ class ValidationTracker:
         return f"""<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <title>CSV to XML Conversion Validation Report</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; }}
@@ -329,11 +344,13 @@ class ValidationTracker:
 </html>
 """
         
-        # Write HTML content to file
+        # Write HTML content to file. Explicit utf-8 (see save_issues_to_csv
+        # for why the locale default is not safe); the <meta charset> in the
+        # header is what tells the browser the same thing.
         try:
-            with open(html_file, 'w') as f:
+            with open(html_file, 'w', encoding='utf-8') as f:
                 f.write(html_content)
-        except OSError as e:
+        except (OSError, UnicodeError) as e:
             raise OSError(f"Failed to write HTML report to {html_file}: {e}") from e
 
         return html_file

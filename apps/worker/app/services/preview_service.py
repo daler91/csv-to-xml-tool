@@ -183,11 +183,6 @@ TRAINING_CLIENT_FIELD_METADATA: dict[str, dict[str, str]] = {
         "description": "Topic area of the training (Business Start-up, Marketing, etc.). "
         "Recorded as the counseling sought and provided for each attendee.",
     },
-    "Class/Event Type": {
-        "description": "Delivery format of the training (In-Person, Online, Hybrid). "
-        "Not carried into the Form 641 XML — training-client sessions are always "
-        "recorded with session type 'Training'.",
-    },
     "Start Date": {
         "description": "Date the training session started. Accepts common formats; normalized to YYYY-MM-DD.",
     },
@@ -248,16 +243,59 @@ COUNSELING_EXPECTED = CounselingConfig.expected_columns()
 # time by get_expected_columns() below (returning the human header names, not the
 # internal snake_case keys).
 
-# Training client expected columns (the CSV columns before remapping)
+# Training client expected columns (the CSV columns before remapping): the
+# columns TrainingClientConverter actually reads -- its own COLUMN_MAPPING
+# sources plus the counseling-named pass-throughs -- and nothing else. It used
+# to list every header of the Salesforce campaign-member export ("Member
+# Status", "Related Record ID", ...), which the converter never reads, so the
+# mapping page reported eight "missing" columns for the shipped sample and
+# offered to map data the conversion would have ignored.
 TRAINING_CLIENT_EXPECTED = [
-    _COL_CLASS_EVENT_ID, "Member Type", _COL_FIRST_NAME, _COL_LAST_NAME,
-    "Member Status", "Company", "Phone", "Email",
-    "Unique Campaign Members", "Currently in Business?",
-    "Ethnicity", "Race", "Disabilities", "Gender", "Military Status",
-    "Related Record ID", "Training Topic", "Class/Event Type",
-    "Funding Source", "Member ID", "Class Teacher", _COL_CONTACT_ID,
-    "Street", "city", "State", "Zip code", "Start Date", "Class/Event Name",
+    _COL_CLASS_EVENT_ID, _COL_CONTACT_ID, "Member ID",
+    _COL_FIRST_NAME, _COL_LAST_NAME, "Company", "Phone", "Email",
+    "Street", "city", "State", "Zip code",
+    "Currently in Business?", "Ethnicity", "Race", "Disabilities", "Gender",
+    "Military Status", "Training Topic", "Funding Source", "Class Teacher",
+    "Start Date",
 ]
+
+
+def _training_alias_groups() -> list[list[str]]:
+    """Each training column's accepted spellings, canonical (first) alias first."""
+    groups = []
+    for alts in TrainingConfig.COLUMN_MAPPING.values():
+        groups.append(list(alts) if isinstance(alts, list) else [alts])
+    return groups
+
+
+def _match_columns(headers: list[str], converter_type: str) -> tuple[list[str], list[str], list[str], dict[str, str]]:
+    """(matched, missing, extra, aliases) for a header set.
+
+    ``matched``/``missing`` name the canonical expected columns; ``aliases``
+    maps a canonical column to the differently-spelled header that satisfied
+    it. The training converter resolves each column through an alias list
+    (``city`` for ``City``, ``Zip code`` for ``Zip/Postal Code``), so a header
+    that is any accepted spelling counts as matched and is not "extra" --
+    reporting it as both missing and extra, and suggesting a rename, told
+    users the shipped sample was wrong when the converter read it fine.
+    """
+    actual_set = set(headers)
+    expected = get_expected_columns(converter_type)
+    groups = _training_alias_groups() if converter_type == "training" else [[c] for c in expected]
+
+    matched, missing, aliases, consumed = [], [], {}, set()
+    for group in groups:
+        canonical = group[0]
+        present = next((alias for alias in group if alias in actual_set), None)
+        if present is None:
+            missing.append(canonical)
+            continue
+        matched.append(canonical)
+        consumed.add(present)
+        if present != canonical:
+            aliases[canonical] = present
+    extra = sorted(actual_set - consumed - set(expected))
+    return sorted(matched), sorted(missing), extra, aliases
 
 
 def get_expected_columns(converter_type: str) -> list[str]:
@@ -301,12 +339,7 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
     rows = all_rows[:max_rows]
 
     expected = get_expected_columns(converter_type)
-    actual_set = set(headers)
-    expected_set = set(expected)
-
-    matched = sorted(actual_set & expected_set)
-    missing = sorted(expected_set - actual_set)
-    extra = sorted(actual_set - expected_set)
+    matched, missing, extra, aliases = _match_columns(headers, converter_type)
 
     # Fuzzy match suggestions for missing columns
     suggestions = []
@@ -352,6 +385,9 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
             "missing": missing,
             "extra": extra,
             "suggestions": suggestions,
+            # Canonical column -> the alias header that matched it (training
+            # only), so the UI can show which CSV column is actually feeding it.
+            "aliases": aliases,
             "field_requirements": field_requirements,
             "field_descriptions": field_descriptions,
         },

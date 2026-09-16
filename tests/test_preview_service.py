@@ -217,3 +217,71 @@ def test_training_client_member_id_is_conditional():
 
     assert status["field_requirements"].get("Member ID") == "conditional"
     assert status["field_requirements"].get("Class/Event ID") == "required"
+
+
+# --- Alias-aware column matching (second-pass analysis 3.3) ---
+# The training converter reads each column through an alias list, so a header
+# that is any accepted spelling must count as matched, not as missing + extra
+# with a rename suggestion. The shipped samples are the regression fixtures:
+# the mapping page used to report four missing columns for training-sample.csv
+# and eight for training-client-sample.csv.
+
+import os
+
+_SAMPLES = os.path.join(os.path.dirname(__file__), "..", "apps", "web", "public", "samples")
+
+
+def _sample(name):
+    with open(os.path.join(_SAMPLES, name), encoding="utf-8-sig") as f:
+        return f.read()
+
+
+def test_training_aliases_count_as_matched():
+    status = read_csv_preview(_sample("training-sample.csv"), "training")["column_status"]
+
+    for canonical in ("City", "State/Province", "Zip/Postal Code"):
+        assert canonical in status["matched"], status
+        assert canonical not in status["missing"]
+    assert status["aliases"] == {
+        "City": "city", "State/Province": "State", "Zip/Postal Code": "Zip code",
+    }
+    # The alias headers are consumed by the match, so they are not "extra"
+    # and nothing suggests renaming them.
+    for alias in ("city", "State", "Zip code"):
+        assert alias not in status["extra"]
+    assert all(s["csv_column"] not in ("city", "State", "Zip code") for s in status["suggestions"])
+    # Cosponsor genuinely is absent from the sample, and stays reported.
+    assert status["missing"] == ["Cosponsor"]
+
+
+def test_training_canonical_header_needs_no_alias_entry():
+    csv = "Class/Event ID,City,State/Province,Zip/Postal Code\nE-1,Ames,IA,50010\n"
+    status = read_csv_preview(csv, "training")["column_status"]
+    assert "City" in status["matched"]
+    assert status["aliases"] == {}
+
+
+def test_training_client_expected_is_what_the_converter_reads():
+    from src.config import TrainingClientConfig
+    from app.services.preview_service import TRAINING_CLIENT_EXPECTED
+
+    # Every source column of the rename table is expected...
+    for source in TrainingClientConfig.COLUMN_MAPPING:
+        assert source in TRAINING_CLIENT_EXPECTED, source
+    # ...and export-only columns the converter never reads are not.
+    for ignored in ("Member Type", "Member Status", "Unique Campaign Members",
+                    "Related Record ID", "Class/Event Name", "Class/Event Type"):
+        assert ignored not in TRAINING_CLIENT_EXPECTED, ignored
+
+    status = read_csv_preview(_sample("training-client-sample.csv"), "training-client")["column_status"]
+    # Only optional address/teacher/disability columns are absent from the sample.
+    assert status["missing"] == sorted(
+        ["Class Teacher", "Disabilities", "Street", "State", "Zip code", "city"])
+    assert all(status["field_requirements"][c] == "optional" for c in status["missing"])
+
+
+def test_counseling_matching_is_unchanged_by_alias_logic():
+    status = read_csv_preview(_sample("counseling-sample.csv"), "counseling")["column_status"]
+    assert "Contact ID" in status["matched"]
+    assert status["aliases"] == {}
+    assert status["extra"] == []

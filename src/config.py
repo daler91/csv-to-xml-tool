@@ -688,6 +688,20 @@ class TrainingClientConfig:
         'Currently in Business?': 'Currently In Business?',
     }
 
+    @classmethod
+    def reverse_column_mapping(cls) -> dict[str, str]:
+        """Counseling column name -> the training-client CSV header it came from.
+
+        Used to report issues and XSD errors in the user's own column names
+        after _preprocess_row has renamed them. Only entries whose names
+        actually differ are included.
+        """
+        return {
+            counseling: training_client
+            for training_client, counseling in cls.COLUMN_MAPPING.items()
+            if counseling != training_client
+        }
+
     # TrainingSession values: each CSV row is one attendee, so one person is
     # trained per record, and hours trained are a fixed per-session value.
     EMPLOYEES_TRAINED = '1'

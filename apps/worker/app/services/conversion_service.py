@@ -1,6 +1,7 @@
 """Wraps existing CSV-to-XML converters for use by the FastAPI service."""
 
 import csv
+import logging
 import os
 import sys
 import tempfile
@@ -34,6 +35,10 @@ from .column_requirements import (
 # Type alias mirroring BaseConverter.ProgressCallback so the worker
 # service doesn't need to import from src/converters/.
 ProgressCallback = Callable[[int, int], None]
+
+# `_log`, not `logger`: run_conversion binds a local `logger` (the
+# ConversionLogger handed to the converter) further down.
+_log = logging.getLogger(__name__)
 
 # Module-level by design: tests monkeypatch this attribute (see core/paths.py
 # for why the default is computed rather than hardcoded).
@@ -129,10 +134,14 @@ def run_conversion(
 
     _checkpoint()
 
-    # Generate cleaning diff before conversion
+    # Generate cleaning diff before conversion. Best-effort -- the diff is a
+    # review aid, not part of the filing -- but a failure must be visible in
+    # the logs, since the results page otherwise just shows "no cleaning
+    # changes" for a file that had plenty.
     try:
         diffs = generate_cleaning_diff(actual_csv_path, converter_type)
     except Exception:
+        _log.warning("Cleaning diff failed; results will show no cleaning changes", exc_info=True)
         diffs = []
 
     _checkpoint()

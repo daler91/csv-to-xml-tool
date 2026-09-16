@@ -179,6 +179,10 @@ export default function MappingPage() {
 
   const { matched, missing, suggestions, field_requirements, field_descriptions } =
     preview.column_status;
+  // A training column matched through an alias ("city" for "City") is fed by a
+  // header whose name differs from the field's; show that header, not the
+  // canonical name, so the row reflects the file the user actually uploaded.
+  const aliases = preview.column_status.aliases ?? {};
   const allFields = [...matched, ...missing];
 
   // Build lookup: expected field name -> { csv_column, score }
@@ -440,7 +444,7 @@ export default function MappingPage() {
               const isMatched = matched.includes(field);
               const currentCsvCol = Object.entries(mapping).find(
                 ([, v]) => v === field
-              )?.[0] || (isMatched ? field : "");
+              )?.[0] || (isMatched ? aliases[field] ?? field : "");
               const suggestion = suggestionByField[field];
               const isApplied = suggestion && currentCsvCol === suggestion.csv_column;
               const req = field_requirements?.[field];

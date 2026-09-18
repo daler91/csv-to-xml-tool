@@ -70,7 +70,9 @@ asserts they convert to schema-valid XML.
 - **Cleaning and standardization** — dates to `YYYY-MM-DD`, phone numbers to
   digits, money with `Decimal`, states and countries mapped onto schema
   enumerations (`IA` → `Iowa`), semicolon-delimited Salesforce multi-value fields
-  split, long text truncated at the schema's limits.
+  split, counselor notes truncated at the schema's limit (other length
+  facets are not enforced yet — see
+  [`reviews/CODEBASE_ANALYSIS_2.md` §1.1](./docs/reviews/CODEBASE_ANALYSIS_2.md)).
 - **Conditional logic** — `BranchOfService` only when military status indicates
   service, and so on.
 - **Errors traced back to your CSV** — instead of *"Line 20: Element 'ZipCode'…"*

@@ -522,9 +522,16 @@ Every counseling fixture in the repository — `test_integration_xsd.py`, `test_
 carries **16 of the 74** counseling columns and three rows; it exercises none of the address, phone,
 Part 3, certification or referral paths. It is a smoke test, not a compliance test. Pair it with 5.1.
 
-### 5.3 Documentation claims that the code does not meet — `[OPEN]`
+### 5.3 Documentation claims that the code does not meet — `[FIXED]` (by documentation)
 
-| Claim | Where | Reality |
+> Fixed: the README now says only counselor notes are truncated and points at 1.1;
+> `converters.md` names what the cleaning diff does *not* cover (2.6, 2.8) and lists the
+> unrecorded fabricated values (2.1–2.3, 2.7) in a second table under "Fabricated defaults";
+> the first register's 2.3 note no longer claims the Dockerfile uses `npm install` (3.4 fixed
+> it). The underlying code items stay open under their own numbers — when one is fixed, the
+> matching row in `converters.md` should be removed.
+
+| Claim | Where | Reality (at the time) |
 |---|---|---|
 | "long text truncated at the schema's limits" | `README.md:73` | Only `CounselorNotes` (1.1) |
 | "Every change is recorded, so the results page can show a before/after diff" | `converters.md` | Enum mappers and dropped values are not in the diff (2.6, 2.8) |
@@ -593,8 +600,8 @@ should land with the test from 5.1 that would have caught it.
 
 ### Phase 5 — Tests and docs (Tier 5)
 
-13. The three tests in 5.1. Then correct the README and `converters.md` claims in 5.3 — or better,
-    make them true.
+13. The three tests in 5.1. The 5.3 claims are corrected; the better fix — making them true —
+    is the Tier 1/Tier 2 work above.
 
 ---
 

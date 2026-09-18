@@ -106,8 +106,14 @@ rule automatically.
 
 ## The cleaning rules
 
-Applied by `src/data_cleaning.py` to every converter. Every change is recorded,
-so the results page can show a before/after diff for each value.
+Applied by `src/data_cleaning.py` to every converter. The results page shows a
+before/after diff for the date, phone, gender, numeric/money, percentage, state
+and country cleaners. Two kinds of change are **not** in the diff today: the
+enumeration mappers (ethnicity, disability, military status, export countries,
+counselor-notes scrubbing) and any value a cleaner drops entirely (an
+unparseable phone number, a bad date, an unknown country) — a dropped value is
+omitted from the XML with no diff row and no issue. Tracked as
+[`reviews/CODEBASE_ANALYSIS_2.md` §2.6 and §2.8](./reviews/CODEBASE_ANALYSIS_2.md).
 
 | Rule | Behaviour |
 |---|---|
@@ -141,8 +147,10 @@ dropped to satisfy the schema.
 ## Fabricated defaults
 
 When a column is absent, the counseling converter fills some fields with a
-non-empty value. That value ships in a federal filing, so each one is recorded as
-a `FABRICATED_DEFAULT` issue naming the column and the value emitted.
+non-empty value. That value ships in a federal filing. For the nine columns in
+`COUNSELING_FABRICATION_DEFAULTS` each substitution is recorded as a
+`FABRICATED_DEFAULT` issue naming the column and the value emitted, and the
+mapping page warns when the column is missing:
 
 | Missing column | Value emitted |
 |---|---|
@@ -160,6 +168,29 @@ A missing column and a real zero are indistinguishable in the XML — the report
 the only place the difference is visible. This is why the worker **warns** at
 conversion time when a fabrication-risk column is absent, and why the mapping
 page flags them in the UI.
+
+### Fabricated values that are *not* yet recorded
+
+The following values are also emitted without coming from your CSV, but today
+they produce **no** `FABRICATED_DEFAULT` issue and no mapping-page warning. They
+are tracked as open items in
+[`reviews/CODEBASE_ANALYSIS_2.md` Tier 2](./reviews/CODEBASE_ANALYSIS_2.md);
+until they are fixed, check these by hand before filing.
+
+| Converter | Field | Trigger | Value emitted |
+|---|---|---|---|
+| Counseling | `CounselingHours/Contact` | `Duration (hours)` blank or `0` on a session type that requires contact hours | `0.5` |
+| Counseling | Part 3 `TotalNumberOfEmployees` | column blank or missing | `0` |
+| Counseling | Part 3 `CurrentlyExporting` | always — `Are you currently exporting?(old)` is only read for Part 2 | `No` |
+| Counseling | `ExportGrossRevenuesOrSales` (Part 2 and Part 3) | always | `0` |
+| Training | `TrainingTopic/Code` | `Training Topic` blank (an *unrecognized* topic does warn) | `Technology` |
+| Training | `ProgramFormat` | `Class/Event Type` blank or unrecognized | `In-person` |
+| Training client | `HoursTrained` / `EmployeesTrained` | every record | `1.5` / `1` |
+| Training client | `SessionType`, `Language`, `Services Provided` | every record (columns the short form does not collect) | `Training`, `English`, `Business Start-up/Preplanning` |
+
+The training-client converter deliberately suppresses per-row warnings for the
+columns it injects (`training_client_converter.py`), and has no file-level
+summary equivalent to the training converter's `_warn_constant_defaults()`.
 
 ## ⚠ This is a single-organization tool
 

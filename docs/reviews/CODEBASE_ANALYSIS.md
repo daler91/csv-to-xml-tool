@@ -317,8 +317,9 @@ CI never builds either image, which is why this went unnoticed.
   script's own header comment; the runtime image contains neither `prisma/schema.prisma` nor the
   Prisma CLI.
 - Both images run as **root**, with no `HEALTHCHECK` instruction, no `.dockerignore`, and
-  `npm install` rather than `npm ci`. _(Still `npm install --ignore-scripts` at `482d235` —
-  `CODEBASE_ANALYSIS_2.md` §3.4.)_
+  `npm install` rather than `npm ci`. _(The `npm ci` half was still open at `482d235` and is
+  now fixed — `apps/web/Dockerfile` runs `npm ci --ignore-scripts`; `CODEBASE_ANALYSIS_2.md`
+  §3.4.)_
 - Redis has no persistence volume, so a restart drops every queued job until the 1-hour reaper.
 - `/health` returns HTTP 200 even when degraded, so the platform healthcheck only proves the
   process is up.

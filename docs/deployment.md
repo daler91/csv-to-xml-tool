@@ -127,8 +127,13 @@ volume mounted at runtime keeps its own ownership. That covers a Railway volume
 (always root-owned, see [above](#volume-ownership-on-railway)) and a volume
 first written while this image still ran as root, before `6fad498`.
 
+Because the entrypoint runs as root, it is installed as a root-owned
+`/usr/local/bin/web-entrypoint.sh`, not run from `/app/scripts`: everything
+under `/app` belongs to `node`, and a compromised app could otherwise rewrite
+the script and have root run it at the next container start.
+
 ```dockerfile
-ENTRYPOINT ["/bin/sh", "/app/scripts/entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/web-entrypoint.sh"]
 CMD ["sh", "-c", "node scripts/migrate.js && node server.js"]
 ```
 

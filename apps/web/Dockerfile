@@ -38,8 +38,13 @@ COPY --from=builder /app/scripts ./scripts
 ENV DATA_DIR=/data
 RUN mkdir -p /data && chown -R node:node /app /data
 
+# The entrypoint runs as root, so it must not live under /app, which `node` owns:
+# a compromised app could rewrite it and have root run the result at the next
+# container start. COPY leaves this copy root-owned.
+COPY apps/web/scripts/entrypoint.sh /usr/local/bin/web-entrypoint.sh
+
 EXPOSE 3000
-ENTRYPOINT ["/bin/sh", "/app/scripts/entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/web-entrypoint.sh"]
 # `&&`, not `;`: a failed migration must stop the container from serving. Paired
 # with the non-zero exit code in scripts/migrate.js -- either alone leaves the
 # app booting against a half-migrated database.

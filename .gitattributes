@@ -1,0 +1,4 @@
+# Shell scripts run inside Linux images (apps/web/scripts/entrypoint.sh). A CRLF
+# checkout -- Git for Windows with core.autocrlf -- would make /bin/sh choke on
+# the carriage returns, and `docker compose up` builds from the working tree.
+*.sh text eol=lf

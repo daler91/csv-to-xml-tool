@@ -81,14 +81,24 @@ Worker: `WORKER_AUTH_TOKEN` (identical), `ALLOWED_ORIGINS`, `ENVIRONMENT=product
 
 ### Volume ownership on Railway
 
-The web image drops to the unprivileged `node` user and `chown`s `/data` at
-build time. That covers Docker named volumes, which inherit the image
-directory's ownership on first mount, but **a Railway volume is mounted
-root-owned** and the build-time `chown` does not apply to it. If uploads fail
-with `EACCES` (the UI shows "Upload failed"), either set `RAILWAY_RUN_UID=0` on
-the web service so the process runs as root — Railway's documented workaround —
-or fix the ownership once from a shell on the volume. Verify with an upload
-after the first deploy; this cannot be checked from the repository.
+**A Railway volume is mounted root-owned**, and that is not configurable. The web
+app runs as the unprivileged `node` user, so the image's
+[entrypoint](#web-appswebdockerfile) re-owns `DATA_DIR` to `node` on every start,
+before dropping privileges. No Railway setting is needed. `RAILWAY_RUN_UID=0`,
+Railway's usual workaround, is harmless if already set: the entrypoint still
+drops to `node`.
+
+An image built before that entrypoint cannot write to the volume. Every upload
+fails with `EACCES`, the browser shows only *"Something went wrong on our side.
+Please try again in a minute."*, and the web log shows:
+
+```
+Upload error: Error: EACCES: permission denied, mkdir '/data/uploads'
+```
+
+Redeploying a current image fixes it. A non-zero `RAILWAY_RUN_UID` prevents the
+re-own; the entrypoint then logs `entrypoint: /data is not writable by uid …` at
+boot.
 
 Redis must be **7.0 or newer**: the rate limiter arms its window with
 `EXPIRE … NX`, which older servers reject (the limiter then fails open, so
@@ -100,15 +110,25 @@ Full reference: [configuration.md](./configuration.md).
 
 ## Images
 
-Both run as **unprivileged users** and both create and `chown` `/data` so a
-freshly mounted volume is writable.
+Both apps run as **unprivileged users**, and both images create and `chown`
+`/data` so a fresh Docker named volume, which inherits that ownership on first
+mount, is writable.
 
 ### Web (`apps/web/Dockerfile`)
 
 Three stages: deps → builder (`prisma generate`, `next build`) → runtime from the
-Next.js standalone output. Runs as `node`.
+Next.js standalone output. The app runs as `node`.
+
+The runtime stage deliberately has no `USER`. `scripts/entrypoint.sh` starts as
+root, re-owns whatever under `DATA_DIR` is not already `node`'s, and then
+`su-exec`s to `node`. No root process stays behind, and `migrate.js` and
+`server.js` never run as root. The build-time `chown` alone was not enough: a
+volume mounted at runtime keeps its own ownership. That covers a Railway volume
+(always root-owned, see [above](#volume-ownership-on-railway)) and a volume
+first written while this image still ran as root, before `6fad498`.
 
 ```dockerfile
+ENTRYPOINT ["/bin/sh", "/app/scripts/entrypoint.sh"]
 CMD ["sh", "-c", "node scripts/migrate.js && node server.js"]
 ```
 
@@ -175,8 +195,9 @@ boot migration on the unique index.
 - [ ] `ALLOWED_ORIGINS` names only your web origin
 - [ ] The worker is **not** publicly reachable (private network or firewall)
 - [ ] `NEXTAUTH_URL` is the real public origin
-- [ ] `DATA_DIR` points at durable, writable storage — on Railway, confirm the
-      volume is writable by the `node` user (see [Volume ownership](#volume-ownership-on-railway))
+- [ ] `DATA_DIR` points at durable storage (on Railway, a mounted volume). The
+      entrypoint makes it writable by `node`; the log carries an
+      `entrypoint:` warning if it could not (see [Volume ownership](#volume-ownership-on-railway))
 - [ ] Redis is 7.0 or newer
 - [ ] Schema changes are mirrored in `scripts/migrate.js`
 - [ ] `RETENTION_DAYS` matches what you tell users

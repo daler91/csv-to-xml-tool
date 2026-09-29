@@ -470,7 +470,7 @@ sees the client accept a 30 MB file, the server return 413, and `upload-errors.t
 the file is "larger than 50MB". The header comment of `convert-form.tsx` explains exactly this trap
 for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES` the same way.
 
-### 4.8 Remaining items — `[FIXED]` (every row; 4.8.12 by documentation)
+### 4.8 Remaining items — `[FIXED]` (every row)
 
 | # | Finding | Location | Severity |
 |---|---|---|---|
@@ -485,7 +485,7 @@ for `RETENTION_DAYS` and passes that one as a prop. Fix: pass `MAX_UPLOAD_BYTES`
 | 4.8.9 | **`[FIXED]`** `lib/client-ip.ts` requires an IPv4/IPv6 address (`net.isIP`, ≤45 chars) and is shared by signup and login; `TECHNICAL_DEBT.md` #15 is corrected. The email-keyed lockout is unchanged and documented. Previously the login IP key was an unvalidated header string of any length; `getClientIdentifier` does not validate the IP as `TECHNICAL_DEBT.md` #15 claims, only splits and trims. Separately, the email-keyed login counter is checked before the user lookup, so ten junk POSTs lock a known account out for 15 minutes. | `auth.ts:42-56`, `signup/route.ts:7-18` | LOW, verified |
 | 4.8.10 | **`[FIXED]`** Signup: malformed JSON → 400, non-string name → 400, email shape/length checked, P2002 → 409. Previously malformed JSON → 500 not 400; non-string `name` → Prisma error → 500; no email format/length check; `findUnique`→`create` race surfaces P2002 as 500 instead of 409. | `signup/route.ts:47-76` | LOW, verified |
 | 4.8.11 | **`[FIXED]`** `conversion_started` was audited on every successful claim. `runJob` now takes the attempt number from the consumer and writes `conversion_retried` (with `metadata.attempt`) for later attempts; the audit page labels it. | `job-runner.ts` | LOW, verified |
-| 4.8.12 | **`[FIXED]`** (documented; not verifiable here) `deployment.md` now has a *Volume ownership on Railway* section and a checklist item naming `RAILWAY_RUN_UID=0`. `Dockerfile:27-29` relies on Docker named-volume ownership inheritance for `/data`, which does not apply to Railway volumes (mounted root-owned). If `RAILWAY_RUN_UID=0` is not set, every upload fails with EACCES. Not verifiable here; confirm against the live service. | `apps/web/Dockerfile` | LOW, plausible |
+| 4.8.12 | **`[FIXED]`** `scripts/entrypoint.sh` starts as root, re-owns `DATA_DIR` to `node` and `su-exec`s to it, so the image works on a root-owned volume with no platform setting. The first fix was documentation only. On 2026-09-29 a 302 KB upload failed in production with "Something went wrong on our side", the message a 5xx from `/api/upload` produces. The production image running on a root-owned volume reproduces exactly that, as `EACCES: permission denied, mkdir '/data/uploads'`. Previously `Dockerfile:27-29` relied on Docker named-volume ownership inheritance for `/data`, which applies neither to Railway volumes (mounted root-owned) nor to a volume first written while the image still ran as root. Without `RAILWAY_RUN_UID=0`, every upload failed with EACCES. | `apps/web/Dockerfile`, `apps/web/scripts/entrypoint.sh` | HIGH, verified (was rated LOW, plausible) |
 | 4.8.13 | **`[FIXED]`** The three timeouts now live in `lib/durability-timeouts.ts` and `assertTimeoutOrdering()` runs at consumer startup, refusing to start on a misordered override. | `lib/durability-timeouts.ts` | LOW |
 
 **Web test gaps:** _(as found)_ no `worker-client.test.ts`; no test for `mapping-templates/[templateId]`;

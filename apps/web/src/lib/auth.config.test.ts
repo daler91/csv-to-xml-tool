@@ -1,7 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
+
+// middleware.ts calls NextAuth at import time; stub the factory so importing it
+// for its matcher doesn't try to build a real auth handler.
+vi.mock("next-auth", () => ({ default: () => ({ auth: vi.fn() }) }));
+
 import { authConfig } from "@/lib/auth.config";
+import { config as middlewareConfig } from "../../middleware";
 
 const APP_ROOT = resolve(__dirname, "../..");
 const SRC = resolve(APP_ROOT, "src");
@@ -78,6 +85,28 @@ describe("middleware stays edge-safe", () => {
       [...NODE_ONLY].sort()
     );
   });
+});
+
+describe("middleware matcher", () => {
+  const matches = (url: string) =>
+    unstable_doesMiddlewareMatch({ config: middlewareConfig, url });
+
+  // Next buffers the body of any request middleware runs on and truncates it
+  // at 10 MB, so on these routes every file between 10 MB and the upload cap
+  // failed to parse and came back as a 5xx.
+  it.each(["/api/upload", "/api/validate-xml", "/api/fix-xml"])(
+    "does not run on the file-upload route %s",
+    (url) => {
+      expect(matches(url)).toBe(false);
+    }
+  );
+
+  it.each(["/dashboard", "/convert", "/convert/job-1/preview", "/api/jobs/job-1"])(
+    "still refreshes the session on %s",
+    (url) => {
+      expect(matches(url)).toBe(true);
+    }
+  );
 });
 
 describe("authConfig", () => {

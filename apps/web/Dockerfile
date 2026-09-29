@@ -17,6 +17,8 @@ RUN npm run generate
 RUN npm run build
 
 FROM node:20-alpine
+# su-exec is how scripts/entrypoint.sh drops from root to `node`.
+RUN apk add --no-cache su-exec
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/public ./public
@@ -26,14 +28,23 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/scripts ./scripts
 
-# Run as the unprivileged user the node images already provide. DATA_DIR holds
-# uploads and generated XML, so it has to be writable by that user -- a fresh
-# named volume inherits ownership from the image directory on first mount.
+# The app runs as the unprivileged user the node images already provide, and
+# DATA_DIR holds uploads and generated XML, so it has to be writable by that
+# user. This chown covers a fresh Docker named volume, which inherits the image
+# directory's ownership on first mount -- but not a volume mounted root-owned at
+# runtime, which is what Railway always does. So there is deliberately no `USER`
+# here: the container starts as root, and the entrypoint re-owns DATA_DIR and
+# then drops to `node` before the CMD runs.
 ENV DATA_DIR=/data
 RUN mkdir -p /data && chown -R node:node /app /data
-USER node
+
+# The entrypoint runs as root, so it must not live under /app, which `node` owns:
+# a compromised app could rewrite it and have root run the result at the next
+# container start. COPY leaves this copy root-owned.
+COPY apps/web/scripts/entrypoint.sh /usr/local/bin/web-entrypoint.sh
 
 EXPOSE 3000
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/web-entrypoint.sh"]
 # `&&`, not `;`: a failed migration must stop the container from serving. Paired
 # with the non-zero exit code in scripts/migrate.js -- either alone leaves the
 # app booting against a half-migrated database.

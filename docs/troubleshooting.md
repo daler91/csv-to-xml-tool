@@ -26,6 +26,25 @@ delimited)**. An `.xlsx` renamed to `.csv` will upload and then fail to parse.
 
 Ten uploads per minute per user. Wait a minute.
 
+### "Something went wrong on our side" when uploading
+
+The upload route answered 5xx. It only saves the file and creates the job row,
+without reading the CSV, so the cause is on the server rather than in the file,
+and retrying rarely helps. The web log has an `Upload error:` line naming it:
+
+- **`EACCES: permission denied, mkdir '/data/uploads'`**: the app cannot write
+  to `DATA_DIR`. Any image built before the ownership-fixing entrypoint does this
+  on a Railway volume (mounted root-owned) unless `RAILWAY_RUN_UID=0` is set.
+  Redeploy a current image; see
+  [deployment.md](./deployment.md#volume-ownership-on-railway).
+- **`Failed to parse body as FormData`** on a file over 10 MB: the build predates
+  the fix that took the upload routes out of `middleware.ts`, whose body buffer
+  truncated anything larger. Redeploy.
+- **A Prisma error**: the database is unreachable, or `P2022` if a schema change
+  was not mirrored into `migrate.js` (see
+  [below](#prisma-p2022-column-does-not-exist)).
+- **`ENOSPC`**: the volume is full.
+
 ### "Your session expired"
 
 Sign in again. Sessions do expire; the tab does not notice until the next

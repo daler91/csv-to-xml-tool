@@ -37,8 +37,14 @@ Uploaded CSVs and generated XML are removed from disk after `RETENTION_DAYS`
 - Login is throttled per email **and** per IP.
 - Emails are trimmed and lowercased on write and on lookup, so `User@x.com` and
   `user@x.com` cannot become two accounts.
-- `middleware.ts` gates the authenticated pages and API routes; handlers
-  additionally call `getRequiredUser()`.
+- Access control lives in the handlers. Every authenticated API route calls
+  `getRequiredUser()` and answers 401 without a session, and the two
+  server-rendered pages that read the database (dashboard, results) check the
+  session and redirect to `/login`. The other `/convert`, `/validate` and
+  `/audit` pages render no user data until those API routes return it.
+  `middleware.ts` enforces nothing: it has no `authorized` callback, so on the
+  routes it matches it only refreshes the session cookie. It is kept off the
+  file-upload routes, where Next's body buffering truncated uploads at 10 MB.
 - **Every user-owned resource** is read with `findFirst({ where: { id, userId } })`
   and mutated with a `userId`-scoped `updateMany`. A job id belonging to another
   user returns 404, not 403 — it does not confirm the id exists.

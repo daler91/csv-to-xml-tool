@@ -183,7 +183,7 @@ finishes its current phase first.
 
 | Boundary | Control |
 |---|---|
-| Browser → web | Auth.js credentials session; `middleware.ts` gates `/dashboard`, `/convert`, `/validate`, `/audit` and the authenticated API routes |
+| Browser → web | Auth.js credentials session, enforced in the handlers: every authenticated API route calls `getRequiredUser()` (401), and the dashboard and results pages check the session server-side. `middleware.ts` only refreshes the session cookie |
 | Web → worker | Shared bearer token (`WORKER_AUTH_TOKEN`), fail-closed: unset token means the worker refuses functional requests |
 | Any user → any resource | Every owned resource is read with `findFirst({ where: { id, userId } })` and mutated with a `userId`-scoped `updateMany` |
 | Download path | `realpath` + `DATA_DIR` prefix check with a separator suffix (`lib/paths.ts`), defeating symlink and `/data-evil` escapes |

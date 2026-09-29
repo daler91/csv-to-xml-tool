@@ -15,10 +15,16 @@ Base: the app's own origin. All routes are under `/api`.
 
 ### Authentication
 
-Auth.js credentials sessions. `middleware.ts` gates `/api/upload`, `/api/jobs/*`,
-`/api/audit`, `/api/mapping-templates/*`, `/api/validate-xml` and `/api/fix-xml`,
-and the handlers additionally call `getRequiredUser()`. An expired or missing
-session returns **401** with `{"error": "Unauthorized"}`.
+Auth.js credentials sessions. Every authenticated handler calls
+`getRequiredUser()` itself; an expired or missing session returns **401** with
+`{"error": "Unauthorized"}`.
+
+`middleware.ts` does no access control; it has no `authorized` callback. On
+`/api/jobs/*`, `/api/audit` and `/api/mapping-templates/*` it only refreshes the
+session cookie. It deliberately does not run on `/api/upload`,
+`/api/validate-xml` or `/api/fix-xml`. Next buffers the body of every request
+middleware runs on and truncates it at 10 MB, so a file between 10 MB and the
+upload cap arrived cut short and failed with a 5xx.
 
 Every user-owned resource is fetched with `findFirst({ where: { id, userId } })`
 and mutated with a `userId`-scoped `updateMany`, so another user's job id returns

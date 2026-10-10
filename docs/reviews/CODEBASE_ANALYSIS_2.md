@@ -126,7 +126,10 @@ Street1: 80, City: 80, PartnerClientNumber: 20, PartnerSessionNumber: 20` — th
 just not wired to anything, and there is no `TRUNCATED_VALUE` issue emitted anywhere in the codebase
 despite the category existing.
 
-### 1.2 `LocationCode` present-but-blank emits `<LocationCode/>` — `[OPEN]`
+### 1.2 `LocationCode` present-but-blank emits `<LocationCode/>` — `[FIXED]`
+
+> **Fixed** (third pass): read with `or`, so a blank cell takes the default; a non-numeric one is
+> reported against its row by `src/schema_rules.py`.
 
 `counseling_converter.py:253`: `row.get('LocationCode', DEFAULT_LOCATION_CODE)`. A CSV that carries
 the column with an empty cell yields an empty element; `LocationCode` is `xs:integer` with
@@ -134,7 +137,12 @@ the column with an empty cell yields an empty element; `LocationCode` is `xs:int
 the same file fixes (with a comment explaining it) at `:302` for `SurveyAgreement` and `:418` for
 `ConductingBusinessOnline`. A non-numeric cell fails the same way.
 
-### 1.3 Yes/No fields are case-sensitive, in two different wrong ways — `[OPEN]`
+### 1.3 Yes/No fields are case-sensitive, in two different wrong ways — `[FIXED]`
+
+> **Fixed** (third pass): all seven call sites below go through
+> `CounselingConverter._yes_no`, built on `is_affirmative`/`is_negative`; an unrecognised answer
+> takes the default *with* an `INVALID_VALUE` warning. `test_yes_no_answers_are_read_in_any_case`
+> covers every column with `yes`/`Y`/`TRUE`/`1`/`no`/`n`/`False`.
 
 Nine elements take a Yes/No answer. Their handling:
 

@@ -581,6 +581,54 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         self.assertEqual(address.find('City').text, 'Des Moines')
         self.assertEqual(address.find('ZipCode').text, '50312')
 
+    # Every Yes/No-typed element and the CSV column it is read from. The second
+    # pass (1.3) found three that emitted the raw cell ("yes" -> invalid) and
+    # four that compared against the literal 'Yes' ("yes" -> a silent "No").
+    YES_NO_COLUMNS = {
+        'Agree to Impact Survey': './/ClientRequest/SurveyAgreement',
+        'Conduct Business Online?': './/ClientIntake/ConductingBusinessOnline',
+        '8(a) Certified?(old)': './/ClientIntake/ClientIntake_Certified8a',
+        'Currently In Business?': './/ClientIntake/CurrentlyInBusiness',
+        'Are you currently exporting?(old)': './/ClientIntake/CurrentlyExporting',
+        'Reportable Impact': './/CounselorRecord/ReportableImpact',
+        'Verified To Be In Business': './/CounselorRecord/VerifiedToBeInBusiness',
+    }
+
+    def test_yes_no_answers_are_read_in_any_case(self):
+        for column, xpath in self.YES_NO_COLUMNS.items():
+            for raw, expected in [('yes', 'Yes'), ('Y', 'Yes'), ('TRUE', 'Yes'), ('1', 'Yes'),
+                                  ('no', 'No'), ('n', 'No'), ('False', 'No')]:
+                with self.subTest(column=column, raw=raw):
+                    self.validator = ValidationTracker()
+                    tree = self._assert_valid([_make_counseling_row(**{
+                        column: raw,
+                        # In-business answers need the in-business details.
+                        'Legal Entity of Business': 'LLC',
+                        'Nature of the Counseling Seeking?': 'Marketing/Sales',
+                    })])
+                    self.assertEqual(tree.find(xpath).text, expected)
+                    self.assertFalse(
+                        [i for i in self.validator.issues if i['field_name'] == column],
+                        f"a recognised answer should not raise an issue for {column}")
+
+    def test_unrecognised_yes_no_answer_takes_the_default_with_a_warning(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Maybe',
+            'Verified To Be In Business': 'undetermined',
+        })])
+        self.assertEqual(tree.find('.//CurrentlyInBusiness').text, 'No')
+        self.assertEqual(tree.find('.//VerifiedToBeInBusiness').text, 'Undetermined')
+        warnings = [i for i in self.validator.issues if i['field_name'] == 'Currently In Business?']
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['category'], 'invalid_value')
+        self.assertIn("'Maybe' is not Yes, No or Undetermined", warnings[0]['message'])
+
+    def test_blank_location_code_falls_back_to_the_default(self):
+        """A LocationCode column with a blank cell used to emit <LocationCode/>,
+        which the xs:integer type rejects."""
+        tree = self._assert_valid([_make_counseling_row(LocationCode='')])
+        self.assertTrue(tree.find('.//LocationCode').text.isdigit())
+
 
 if __name__ == '__main__':
     unittest.main()

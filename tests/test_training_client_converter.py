@@ -143,7 +143,7 @@ class TestTrainingClientConverter(unittest.TestCase):
         root = self._convert_and_parse([self._make_valid_row(**{'Class/Event Type': 'Online'})])
         session_type = root.find('CounselingRecord/CounselorRecord/SessionType')
         self.assertEqual(session_type.text, 'Training')
-        session_type_issues = [i for i in self.validator.issues if i['field_name'] == 'SessionType']
+        session_type_issues = [i for i in self.validator.issues if i['field_name'] in ('SessionType', 'Type of Session')]
         self.assertEqual(session_type_issues, [])
 
     def test_contact_hours_not_bumped_for_training(self):

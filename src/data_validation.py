@@ -5,14 +5,18 @@ This module contains functions for validating data before XML conversion.
 
 from __future__ import annotations
 
+import csv
+import logging
+import os
 import re
+import tempfile
 
 from datetime import datetime
 
 from typing import TYPE_CHECKING
 
 from .data_cleaning import (
-    format_date, is_ambiguous_date, is_empty, split_multi_value
+    format_date, is_affirmative, is_ambiguous_date, is_empty, split_multi_value
 )
 from .config import (
     COUNSELING_FABRICATION_DEFAULTS,
@@ -279,14 +283,14 @@ def analyze_training_client_quality(headers: list[str], csv_rows: list[dict[str,
 
     # Mirrors TrainingClientConverter._resolve_in_business: an in-business 'Yes'
     # without the conditionally-required business details (which the training
-    # form doesn't collect) is recorded as 'No' at conversion. Only the exact
-    # string 'Yes' counts — anything else already defaults to 'No'.
+    # form doesn't collect) is recorded as 'No' at conversion. Read the way
+    # CounselingConverter._yes_no reads it: yes/y/true/1 in any case.
     contact_col = CounselingConfig.REQUIRED_FIELDS[0]
     in_business_downgraded = 0
     for row in mapped_rows:
         if is_empty(row.get(contact_col)):
             continue  # row is skipped whole at conversion; never reaches the downgrade
-        if (row.get('Currently In Business?') or '').strip() != 'Yes':
+        if not is_affirmative(row.get('Currently In Business?')):
             continue
         has_legal_entity = bool(
             split_multi_value(row.get('Legal Entity of Business', ''))
@@ -312,6 +316,95 @@ def analyze_training_client_quality(headers: list[str], csv_rows: list[dict[str,
     return checks
 
 
+# Issue categories the converters record about individual *values* -- the
+# schema guard's truncations, omissions and replacements, and the converters'
+# own unrecognised-value warnings. None of them overlaps a check above.
+_VALUE_ISSUE_CATEGORIES = {
+    VC.TRUNCATED_VALUE: ("'{column}' values longer than SBA allows",
+                         "These are shortened in the federal XML."),
+    VC.INVALID_VALUE: ("'{column}' values SBA does not accept",
+                       "These are left out of, or defaulted in, the federal XML."),
+    VC.DOWNGRADED_VALUE: ("'{column}' values that are dropped",
+                          "These are dropped from the federal XML to satisfy the schema."),
+    VC.STANDARDIZED_VALUE: ("'{column}' values with control characters",
+                            "Characters XML cannot carry are replaced with a space."),
+}
+_REQUIRED_INVALID_DETAIL = (
+    "This field is required, so the file will fail SBA validation until these "
+    "values are corrected in the CSV."
+)
+
+
+def _conversion_value_checks(headers: list[str], csv_rows: list[dict[str, str]],
+                             converter_type: str) -> list[dict]:
+    """What the converter itself would report about the values in this file.
+
+    The schema's facets (lengths, enumerations, patterns, ranges) are applied
+    to the *built* XML, after each converter's own mapping -- "IA" becomes
+    "Iowa", "Caucasian" becomes "White" -- so the only faithful way to
+    predict them is to run the real converter. It runs over a temporary copy
+    of the rows into a throwaway tracker, and its value issues are counted
+    per column, one per record.
+    """
+    # Imported here: the converters import this module.
+    from .converters.counseling_converter import CounselingConverter
+    from .converters.training_converter import TrainingConverter
+    from .converters.training_client_converter import TrainingClientConverter
+    from .validation_report import ValidationTracker
+
+    converter_cls = {
+        "counseling": CounselingConverter,
+        "training": TrainingConverter,
+        "training-client": TrainingClientConverter,
+    }.get(converter_type)
+    if converter_cls is None or not csv_rows:
+        return []
+
+    tracker = ValidationTracker()
+    quiet = logging.getLogger("data_quality.simulated_conversion")
+    quiet.addHandler(logging.NullHandler())
+    quiet.propagate = False
+    with tempfile.TemporaryDirectory() as scratch:
+        csv_path = os.path.join(scratch, "preview.csv")
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(csv_rows)
+        try:
+            converter_cls(quiet, tracker).convert(csv_path, os.path.join(scratch, "preview.xml"))
+        except ValueError:
+            # EmptyCSVError and friends: nothing converts, which the
+            # missing-ID checks above already report.
+            return []
+
+    # Only columns the user's file has: an issue about an internal value (the
+    # training-client form's injected defaults, an in-business downgrade the
+    # dedicated check above already reports) is nothing they can fix.
+    header_set = set(headers)
+    grouped: dict[tuple[str, str], dict] = {}
+    for issue in tracker.issues:
+        if (issue["category"] not in _VALUE_ISSUE_CATEGORIES or issue["record_id"] == "file"
+                or issue["field_name"] not in header_set):
+            continue
+        entry = grouped.setdefault((issue["category"], issue["field_name"]), {
+            "records": set(), "severity": "warning", "example": issue["message"]})
+        entry["records"].add(issue["record_id"])
+        if issue["severity"] == "error":
+            entry["severity"] = "error"
+            entry["example"] = issue["message"]
+
+    checks = []
+    for (category, column), entry in grouped.items():
+        label, detail = _VALUE_ISSUE_CATEGORIES[category]
+        if entry["severity"] == "error":
+            detail = _REQUIRED_INVALID_DETAIL
+        checks.append(_quality_check(
+            f"{category}_{_column_slug(column)}", label.format(column=column),
+            len(entry["records"]), entry["severity"],
+            f"{detail} For example: {entry['example']}", column))
+    return checks
+
+
 def analyze_data_quality(headers: list[str], csv_rows: list[dict[str, str]],
                          converter_type: str) -> dict:
     """Build the /preview ``data_quality`` payload for a parsed CSV.
@@ -328,4 +421,5 @@ def analyze_data_quality(headers: list[str], csv_rows: list[dict[str, str]],
         checks = analyze_training_client_quality(headers, csv_rows)
     else:
         checks = []
+    checks += _conversion_value_checks(headers, csv_rows, converter_type)
     return {"total_rows": len(csv_rows), "checks": checks}

@@ -163,20 +163,17 @@ client who answered `yes` to "Currently In Business?" is filed as **not** in bus
 in-business-only sections (`LegalEntity`, `CounselingSeeking`) are skipped, and nothing in the report
 says so. `is_affirmative`/`is_negative` exist in `data_cleaning.py` and are used three lines away.
 
-### 1.4 Enumerated elements with no mapping and no pre-check — `[PARTIAL]`
+### 1.4 Enumerated elements with no mapping and no pre-check — `[FIXED]`
 
-> **Partly fixed** by `src/schema_rules.py` (third pass): every enumeration, pattern and numeric
-> facet is read from the XSD; values are matched case-insensitively (`llc` → `LLC`, `english` →
-> `English`), and an unmatched value is omitted with an `INVALID_VALUE` warning where the element is
-> optional (`State`, `Email`, `FIPS_Code`, `BusinessType`, `BranchOfService`, Part 3
-> `TotalNumberOfEmployees`), or the whole optional code list is dropped with `DOWNGRADED_VALUE`
-> (`Media`). Race and branch synonyms now resolve too (`Caucasian` → `White`, `USMC` →
-> `Marine Corps`, via `map_race_to_xsd` / `map_branch_of_service_to_xsd`). **Still open:** the
-> preview-time check in `analyze_counseling_quality`, so the mapping page shows these before
-> conversion.
-
-The first pass added mappers for `Ethnicity`, `Sex`, `Disability`, `MilitaryStatus`,
-`FundingSource` and `ExportCountries`. These enumerations still receive the raw CSV label:
+> **Fixed** (third pass). `src/schema_rules.py` reads every enumeration, pattern and numeric facet
+> from the XSD; values are matched case-insensitively (`llc` → `LLC`, `english` → `English`), and an
+> unmatched value is omitted with an `INVALID_VALUE` warning where the element is optional (`State`,
+> `Email`, `FIPS_Code`, `BusinessType`, `BranchOfService`, Part 3 `TotalNumberOfEmployees`), the
+> whole optional code list is dropped with `DOWNGRADED_VALUE` (`Media`), or — where the element is
+> required — the value is kept and reported as an error. Race and branch synonyms resolve
+> (`Caucasian` → `White`, `USMC` → `Marine Corps`). The pre-check: the `/preview` data-quality panel
+> now runs the real converter over the file and lists these per column before conversion
+> (`data_validation._conversion_value_checks`).
 
 | Element | Enum size | Verified failing input |
 |---|---|---|

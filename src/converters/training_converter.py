@@ -296,7 +296,7 @@ class TrainingConverter(BaseConverter):
             if valid_source.lower() == cleaned.lower():
                 return valid_source
         self.validator.add_issue(
-            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "FundingSource",
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Funding Source",
             f"Funding Source '{cleaned}' is not a recognized SBA funding code; omitted from the XML.",
         )
         return None

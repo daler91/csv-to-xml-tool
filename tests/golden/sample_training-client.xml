@@ -27,7 +27,7 @@
       </Race>
       <Ethnicity>Non Hispanic or Latino</Ethnicity>
       <Sex>Female</Sex>
-      <MilitaryStatus>Veteran</MilitaryStatus>
+      <MilitaryStatus>No military service</MilitaryStatus>
       <CurrentlyInBusiness>No</CurrentlyInBusiness>
       <CurrentlyExporting>No</CurrentlyExporting>
       <CompanyName>Acme LLC</CompanyName>
@@ -120,7 +120,7 @@
       </Race>
       <Ethnicity>Non Hispanic or Latino</Ethnicity>
       <Sex>Female</Sex>
-      <MilitaryStatus>Veteran</MilitaryStatus>
+      <MilitaryStatus>No military service</MilitaryStatus>
       <CurrentlyInBusiness>No</CurrentlyInBusiness>
       <CurrentlyExporting>No</CurrentlyExporting>
       <CompanyName>Nguyen Consulting</CompanyName>

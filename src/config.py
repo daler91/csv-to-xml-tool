@@ -552,6 +552,31 @@ EXPORT_COUNTRY_CODES = (
 # enumeration spelling (e.g. "united kingdom" -> "United Kingdom").
 EXPORT_COUNTRY_LOOKUP = {code.lower(): code for code in EXPORT_COUNTRY_CODES}
 
+# Race keywords, shared by the training converter's per-category counts and the
+# counseling converter's Race/Code mapping. Each keyword matches at the start
+# of a word (data_cleaning.classify_races), so 'middle east' still matches
+# "Middle Eastern" but 'asian' no longer matches inside "Caucasian".
+RACE_KEYWORDS = {
+    "asian": ['asian'],
+    "black": ['black', 'african american'],
+    "native_american": ['american indian', 'alaska native', 'native american'],
+    "pacific_islander": ['hawaiian', 'pacific islander'],
+    "white": ['white', 'caucasian'],
+    "middle_eastern": ['middle east'],
+    "north_african": ['north africa'],
+}
+
+# The counseling XSD's Race/Code value for each RACE_KEYWORDS category.
+RACE_XSD_CODES = {
+    "asian": "Asian",
+    "black": "Black or African American",
+    "native_american": "Native American/Alaska Native",
+    "pacific_islander": "Native Hawaiian/Other Pacific Islander",
+    "white": "White",
+    "middle_eastern": "Middle Eastern",
+    "north_african": "North African",
+}
+
 # =============================================================================
 # TRAINING REPORT CONFIGURATION (MANAGEMENT TRAINING)
 # =============================================================================
@@ -644,15 +669,7 @@ class TrainingConfig:
             "reserve_guard": ['reserve', 'guard'],
             "spouse": ['spouse']
         },
-        "race": {
-            "asian": ['asian'],
-            "black": ['black', 'african american'],
-            "native_american": ['american indian', 'alaska native', 'native american'],
-            "pacific_islander": ['hawaiian', 'pacific islander'],
-            "white": ['white', 'caucasian'],
-            "middle_eastern": ['middle east'],
-            "north_african": ['north africa']
-        },
+        "race": RACE_KEYWORDS,
         "ethnicity": {
             "hispanic": ['hispanic', 'latino'],
             "non_hispanic_keywords": ['non-hispanic'] # This is for explicit non-hispanic values

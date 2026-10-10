@@ -623,6 +623,22 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         self.assertEqual(warnings[0]['category'], 'invalid_value')
         self.assertIn("'Maybe' is not Yes, No or Undetermined", warnings[0]['message'])
 
+    def test_race_and_branch_synonyms_resolve_to_schema_values(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Race': 'Caucasian',
+            'Veteran Status': 'Veteran',
+            'Branch Of Service': 'USMC',
+        })])
+        self.assertEqual([c.text for c in tree.findall('.//Race/Code')], ['White'])
+        self.assertEqual(tree.find('.//BranchOfService').text, 'Marine Corps')
+
+    def test_non_veteran_is_not_filed_as_a_veteran(self):
+        """'Non-veteran' used to map to Veteran -- and then raise a spurious
+        missing-BranchOfService error caused by the tool's own misreading."""
+        tree = self._assert_valid([_make_counseling_row(**{'Veteran Status': 'Non-veteran'})])
+        self.assertEqual(tree.find('.//MilitaryStatus').text, 'No military service')
+        self.assertFalse([i for i in self.validator.issues if i['field_name'] == 'BranchOfService'])
+
     def test_blank_location_code_falls_back_to_the_default(self):
         """A LocationCode column with a blank cell used to emit <LocationCode/>,
         which the xs:integer type rejects."""

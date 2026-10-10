@@ -278,7 +278,7 @@ class CounselingConverter(BaseConverter):
         race_codes = data_cleaning.split_multi_value(row.get('Race', ''))
         if race_codes:
             for code in race_codes:
-                create_element(race_element, 'Code', code)
+                create_element(race_element, 'Code', data_cleaning.map_race_to_xsd(code))
         else:
             create_element(race_element, 'Code', 'Prefer not to say')
             self.validator.add_issue(record_id, "warning", ValidationCategory.MISSING_FIELD, "Race", "Race missing, defaulted to 'Prefer not to say'.")
@@ -320,7 +320,8 @@ class CounselingConverter(BaseConverter):
         if military_status_csv and military_status_csv.lower() not in non_military_statuses:
             branch_csv = row.get('Branch Of Service', '').strip()
             if branch_csv and branch_csv.lower() not in non_military_statuses:
-                create_element(client_intake, 'BranchOfService', branch_csv)
+                create_element(client_intake, 'BranchOfService',
+                               data_cleaning.map_branch_of_service_to_xsd(branch_csv))
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "BranchOfService", f"BranchOfService required for MilitaryStatus '{military_status_csv}' but is missing/invalid.")
 

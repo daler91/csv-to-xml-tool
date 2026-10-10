@@ -212,7 +212,7 @@ class TestTrainingClientConverter(unittest.TestCase):
         root = self._convert_and_parse([self._make_valid_row(**{
             'Currently in Business?': 'Yes',
             'Legal Entity of Business': 'LLC',
-            'Training Topic': 'Marketing',
+            'Training Topic': 'Marketing/Sales',
         })])
         cib = root.find('CounselingRecord/ClientIntake/CurrentlyInBusiness')
         self.assertEqual(cib.text, 'Yes')
@@ -302,11 +302,19 @@ class TestTrainingClientConverter(unittest.TestCase):
         self.assertEqual(cp.text, 'Business Start-up/Preplanning')
 
     def test_missing_contact_id_skips_record(self):
-        """Records without Contact ID should be skipped."""
-        row = self._make_valid_row(**{'Contact ID': ''})
-        root = self._convert_and_parse([row])
+        """Records without Contact ID should be skipped; the others still convert."""
+        rows = [self._make_valid_row(**{'Contact ID': ''}), self._make_valid_row()]
+        root = self._convert_and_parse(rows)
         records = root.findall('CounselingRecord')
-        self.assertEqual(len(records), 0)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].findtext('PartnerClientNumber'), '003Pe00000Sxsp4')
+
+    def test_every_row_skipped_raises_instead_of_writing_empty_file(self):
+        """Same contract as the counseling converter it inherits from: no
+        schema-invalid empty <CounselingInformation/>."""
+        from src.converters.base_converter import EmptyCSVError
+        with self.assertRaises(EmptyCSVError):
+            self._convert_and_parse([self._make_valid_row(**{'Contact ID': ''})])
 
     def test_multiple_records_converted(self):
         """Test that multiple training client rows produce multiple records."""

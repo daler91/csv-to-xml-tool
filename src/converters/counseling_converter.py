@@ -18,16 +18,22 @@ from ..config import (
 )
 from .. import data_cleaning
 from .. import data_validation
+from ..schema_rules import SchemaGuard
 from ..xml_utils import create_element, emit_optional
 
 class CounselingConverter(BaseConverter):
     """
     Converter for Counseling (Form 641) data.
     """
+    # Which schema's facets SchemaGuard enforces, and whose CSV column names
+    # its issues use (training-client overrides this).
+    SCHEMA_TYPE = "counseling"
+
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
+        self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
         # Fabrication-risk fields (plan 1.3): when one of these is blank/missing
         # for a row and a non-empty default is emitted in its place, a
         # FABRICATED_DEFAULT warning is recorded. Subclasses narrow this set for
@@ -169,6 +175,9 @@ class CounselingConverter(BaseConverter):
                 self._build_client_request_section(counseling_record, row, record_id)
                 self._build_client_intake_section(counseling_record, row, record_id)
                 self._build_counselor_record_section(counseling_record, row, record_id)
+                # Last, on the finished record: lengths, enumerations, patterns
+                # and ranges straight from the XSD (see src/schema_rules.py).
+                self._schema_guard.enforce(counseling_record, record_id, (root.tag,))
 
                 processed_records += 1
                 self.validator.record_processed(success=True)
@@ -185,6 +194,16 @@ class CounselingConverter(BaseConverter):
 
         # File-level issues below must not inherit the last row's event id.
         self.validator.set_current_event_id(None)
+
+        if processed_records == 0:
+            # Every row was skipped: an empty <CounselingInformation/> fails the
+            # XSD (it needs at least one CounselingRecord), so fail the way the
+            # empty-CSV case above and the training converter already do
+            # rather than writing a file SBA would reject.
+            self.validator.add_issue(
+                "file", "error", ValidationCategory.MISSING_REQUIRED, "input_file",
+                f"None of the {total_rows} row(s) could be converted; see the errors above.")
+            raise EmptyCSVError("No rows could be converted.")
 
         try:
             tree = ET.ElementTree(root)

@@ -43,9 +43,9 @@ commit). **Flip the marker in the same commit as the fix.**
 | `vitest` | 173 passed, 23 files | **253 passed, 29 files** |
 | `npm run lint` | clean | clean, 97 files |
 | `next build` | succeeds | succeeds (same Turbopack tracing warning) |
-| **`npm audit --audit-level=high`** | clean | **FAILS — 2 high** |
+| **`npm audit --audit-level=high`** | clean | **FAILS — 2 high** (fixed since; see 1.1) |
 
-### 1.1 CI's npm audit gate is red on a clean install — `[OPEN]` — HIGH (process)
+### 1.1 CI's npm audit gate is red on a clean install — `[FIXED]` — HIGH (process)
 
 `npm audit` reports two high-severity advisories, both fixable with `npm audit fix`:
 
@@ -56,6 +56,10 @@ commit). **Flip the marker in the same commit as the fix.**
 `web-lint` in `.github/workflows/ci.yml` runs `npm audit --audit-level=high`, so the next push on any
 branch fails until the lockfile is refreshed. Runtime reachability was not assessed; the gate fails
 regardless.
+
+**Fixed:** the `next.sharp` override is now `^0.35.5`, and a top-level `source-map-js: ^1.2.2` override
+was added — `npm audit fix` would not lift it on its own even though `postcss` and
+`@tailwindcss/node` both declare `^1.2.1`. `npm audit --audit-level=high` reports 0 vulnerabilities.
 
 ---
 
@@ -307,7 +311,7 @@ would close the drift risk structurally. `DEMOGRAPHIC_KEYWORDS['gender'/'ethnici
 
 ## Recommended sequence
 
-1. **Unblock CI (1.1).** `npm audit fix` / bump the `sharp` override. Minutes.
+1. ~~**Unblock CI (1.1).**~~ Done.
 2. **Stop invalid files (A.2, A.7, then 2nd-pass Tier 1).** A single sanitising pass in
    `create_element` for control characters, and facet-driven length/pattern enforcement loaded from
    the XSD, close the largest classes. Add the three tests from 2nd-pass 5.1 — they would have

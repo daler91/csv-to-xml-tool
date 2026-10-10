@@ -82,6 +82,32 @@ class CounselingConverter(BaseConverter):
                 return text
         return default
 
+    def _yes_no(self, row, column, default, record_id, *, undetermined=False):
+        """Read a Yes/No (or Yes/No/Undetermined) column as the XSD spells it.
+
+        These elements used to compare the cell against the literal 'Yes', so
+        a client who answered "yes" to Currently In Business was filed as
+        *not* in business, with nothing in the report. yes/y/true/1 and
+        no/n/false/0 are accepted in any case (the same words is_affirmative
+        and is_negative already use for OnFile and Employee_Owned), and a
+        blank cell takes `default`. Anything else also takes `default`, but
+        with a warning, so "Maybe" can't quietly become a federal "No".
+        """
+        raw = (row.get(column) or '').strip()
+        if not raw:
+            return default
+        if data_cleaning.is_affirmative(raw):
+            return 'Yes'
+        if data_cleaning.is_negative(raw):
+            return 'No'
+        if undetermined and raw.casefold() == 'undetermined':
+            return 'Undetermined'
+        allowed = "Yes, No or Undetermined" if undetermined else "Yes or No"
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.INVALID_VALUE, column,
+            f"'{raw}' is not {allowed}; recorded as '{default}'.")
+        return default
+
     def _resolve_in_business(self, in_business_val, row, record_id):
         """Hook for subclasses to adjust the normalized in-business status before
         it is emitted and used to gate the in-business-only sections. Returns the
@@ -170,7 +196,11 @@ class CounselingConverter(BaseConverter):
                 create_element(counseling_record, 'PartnerClientNumber', record_id)
 
                 location = create_element(counseling_record, 'Location')
-                create_element(location, 'LocationCode', row.get('LocationCode', self.general_config.DEFAULT_LOCATION_CODE))
+                # `or`, not the .get default: a LocationCode column with a blank
+                # cell must fall back too, or it emits <LocationCode/>, which the
+                # xs:integer type rejects.
+                create_element(location, 'LocationCode',
+                               (row.get('LocationCode') or '').strip() or self.general_config.DEFAULT_LOCATION_CODE)
 
                 self._build_client_request_section(counseling_record, row, record_id)
                 self._build_client_intake_section(counseling_record, row, record_id)
@@ -229,10 +259,9 @@ class CounselingConverter(BaseConverter):
         self._build_phone(client_request, 'PhonePart1', row)
         self._build_address(client_request, 'AddressPart1', row, record_id)
         # SurveyAgreement is required and YesNoType, so it can't be omitted:
-        # a blank cell falls back to 'No'. `or` (not the .get default) so a
-        # present-but-empty cell is treated the same as a missing column.
+        # a blank cell falls back to 'No'.
         create_element(client_request, 'SurveyAgreement',
-                       (row.get('Agree to Impact Survey') or '').strip() or 'No')
+                       self._yes_no(row, 'Agree to Impact Survey', 'No', record_id))
         signature = create_element(client_request, 'ClientSignature')
         emit_optional(signature, 'Date', data_cleaning.format_date(row.get('Client Signature - Date', '')))
         # is_affirmative, not `in ['1', 1]`: a checkbox exported as "Yes"/"true"/"Y"
@@ -316,13 +345,13 @@ class CounselingConverter(BaseConverter):
 
     def _build_business_fields(self, client_intake, row, record_id):
         """Build business status, ownership, employees, and income fields. Returns in_business_val."""
-        in_business_raw = row.get('Currently In Business?', '').strip()
-        in_business_val = in_business_raw if in_business_raw in ('Yes', 'No', 'Undetermined') else self.general_config.DEFAULT_BUSINESS_STATUS
+        in_business_val = self._yes_no(row, 'Currently In Business?', self.general_config.DEFAULT_BUSINESS_STATUS,
+                                       record_id, undetermined=True)
         in_business_val = self._resolve_in_business(in_business_val, row, record_id)
         create_element(client_intake, 'CurrentlyInBusiness', in_business_val)
 
-        exporting_raw = row.get('Are you currently exporting?(old)', '').strip()
-        exporting_val = exporting_raw if exporting_raw in ('Yes', 'No') else self.general_config.DEFAULT_BUSINESS_STATUS
+        exporting_val = self._yes_no(row, 'Are you currently exporting?(old)',
+                                     self.general_config.DEFAULT_BUSINESS_STATUS, record_id)
         create_element(client_intake, 'CurrentlyExporting', exporting_val)
 
         create_element(client_intake, 'CompanyName', row.get('Account Name', ''))
@@ -345,14 +374,15 @@ class CounselingConverter(BaseConverter):
             )
         create_element(bo_element, 'Female', female_ownership_val)
 
-        # Both of these are YesNoType (strictly Yes/No), so a present-but-blank
-        # cell has to fall back to the default the same way a missing column
-        # does -- `.get(key, default)` alone would leave '' and fail the enum.
-        conducting_online = (row.get('Conduct Business Online?') or '').strip() or self.general_config.DEFAULT_BUSINESS_STATUS
+        # Both of these are YesNoType (strictly Yes/No), so a blank cell falls
+        # back to the default -- and says so.
+        conducting_online = self._yes_no(row, 'Conduct Business Online?',
+                                         self.general_config.DEFAULT_BUSINESS_STATUS, record_id)
         if data_cleaning.is_empty(row.get('Conduct Business Online?')) and conducting_online:
             self._warn_fabricated_default(record_id, 'Conduct Business Online?', conducting_online, 'Conducting Business Online')
         create_element(client_intake, 'ConductingBusinessOnline', conducting_online)
-        certified_8a = (row.get('8(a) Certified?(old)') or '').strip() or self.general_config.DEFAULT_BUSINESS_STATUS
+        certified_8a = self._yes_no(row, '8(a) Certified?(old)',
+                                    self.general_config.DEFAULT_BUSINESS_STATUS, record_id)
         if data_cleaning.is_empty(row.get('8(a) Certified?(old)')) and certified_8a:
             self._warn_fabricated_default(record_id, '8(a) Certified?(old)', certified_8a, '8(a) Certified')
         create_element(client_intake, 'ClientIntake_Certified8a', certified_8a)
@@ -521,14 +551,12 @@ class CounselingConverter(BaseConverter):
         )
         return ""
 
-    def _build_business_verification(self, counselor_record, row):
+    def _build_business_verification(self, counselor_record, row, record_id):
         """Build business verification and reportable impact fields. Returns session-relevant values."""
-        verified_in_business = row.get('Verified To Be In Business', 'Undetermined').strip()
-        if verified_in_business not in ('Yes', 'No', 'Undetermined'):
-            verified_in_business = 'Undetermined'
-
-        reportable_raw = row.get('Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS).strip()
-        reportable_impact = reportable_raw if reportable_raw in ('Yes', 'No') else 'No'
+        verified_in_business = self._yes_no(row, 'Verified To Be In Business', 'Undetermined',
+                                            record_id, undetermined=True)
+        reportable_impact = self._yes_no(row, 'Reportable Impact', self.general_config.DEFAULT_BUSINESS_STATUS,
+                                         record_id)
 
         if reportable_impact == 'Yes' and verified_in_business != 'Yes':
             verified_in_business = 'Yes'
@@ -666,7 +694,7 @@ class CounselingConverter(BaseConverter):
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = create_element(parent, 'CounselorRecord')
         self._build_counselor_identity(counselor_record, row, record_id)
-        self._build_business_verification(counselor_record, row)
+        self._build_business_verification(counselor_record, row, record_id)
         self._build_financial_data(counselor_record, row, record_id)
 
         self._build_coded_section(counselor_record, 'Certifications',

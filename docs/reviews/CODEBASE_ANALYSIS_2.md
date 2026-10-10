@@ -170,9 +170,10 @@ says so. `is_affirmative`/`is_negative` exist in `data_cleaning.py` and are used
 > `English`), and an unmatched value is omitted with an `INVALID_VALUE` warning where the element is
 > optional (`State`, `Email`, `FIPS_Code`, `BusinessType`, `BranchOfService`, Part 3
 > `TotalNumberOfEmployees`), or the whole optional code list is dropped with `DOWNGRADED_VALUE`
-> (`Media`). **Still open:** synonyms (`Caucasian`, `USMC` are dropped or reported rather than
-> mapped — `Race` is required, so it remains an error) and the preview-time check in
-> `analyze_counseling_quality`.
+> (`Media`). Race and branch synonyms now resolve too (`Caucasian` → `White`, `USMC` →
+> `Marine Corps`, via `map_race_to_xsd` / `map_branch_of_service_to_xsd`). **Still open:** the
+> preview-time check in `analyze_counseling_quality`, so the mapping page shows these before
+> conversion.
 
 The first pass added mappers for `Ethnicity`, `Sex`, `Disability`, `MilitaryStatus`,
 `FundingSource` and `ExportCountries`. These enumerations still receive the raw CSV label:
@@ -197,7 +198,10 @@ the fact. Since the enumerations are already parsed from the XSD by the drift-gu
 omit with a warning otherwise" — the pattern `_build_export_countries` already implements — would
 close all of them at once.
 
-### 1.5 Training: `Caucasian` is counted as Asian *and* White *and* underserved — `[OPEN]`
+### 1.5 Training: `Caucasian` is counted as Asian *and* White *and* underserved — `[FIXED]`
+
+> **Fixed** (third pass): `classify_races` matches each keyword at the start of a word, so
+> `asian` no longer matches inside `Caucasian` while `middle east` still matches `Middle Eastern`.
 
 `classify_races` (`data_cleaning.py:416-432`) is a substring test, and `'asian' in 'caucasian'` is true.
 Verified: two `Caucasian` attendees produce
@@ -213,7 +217,12 @@ member of an underserved group. The keyword table lists `caucasian` under `white
 minorities because `any(c != 'white' for c in person_races)` sees `asian`. The fix is a word-boundary
 match, or checking the longer keywords first.
 
-### 1.6 `Non-veteran` maps to `Veteran` — `[OPEN]`
+### 1.6 `Non-veteran` maps to `Veteran` — `[FIXED]`
+
+> **Fixed** (third pass): a negated status (`Non-veteran`, `Not Veteran`, `Not a veteran`) maps to
+> `No military service` in `map_military_status_to_xsd` and counts as nothing in
+> `classify_military`. The shipped `training-client-sample.csv` had two `Not Veteran` attendees
+> filed as `Veteran`; its golden output was regenerated.
 
 `map_military_status_to_xsd` (`data_cleaning.py:507`) walks `_MILITARY_STATUS_XSD_RULES` and the
 last rule is `("veteran", "Veteran")`, with no negation check. Verified: `Non-veteran` and

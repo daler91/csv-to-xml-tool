@@ -288,6 +288,26 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(demographics['race']['asian'], 1)
         self.assertEqual(demographics['minorities'], 2)  # both attendees non-white
 
+    def test_caucasian_is_white_only_not_asian_or_underserved(self):
+        """'asian' is a substring of 'caucasian': a bare substring test reported
+        every white attendee exported as "Caucasian" to SBA as Asian and as a
+        member of an underserved group."""
+        converter = TrainingConverter(self.logger, self.validator)
+        demographics = converter._calculate_demographics(_rows(**{
+            'Race': ['Caucasian', 'Caucasian'],
+            'Ethnicity': ['Non-Hispanic', 'Non-Hispanic'],
+        }))
+        self.assertEqual(demographics['race']['white'], 2)
+        self.assertEqual(demographics['race']['asian'], 0)
+        self.assertEqual(demographics['minorities'], 0)
+
+    def test_negated_veteran_status_is_not_counted_as_veteran(self):
+        converter = TrainingConverter(self.logger, self.validator)
+        demographics = converter._calculate_demographics(_rows(**{
+            'Military Status': ['Non-veteran', 'Not Veteran', 'Not a veteran', 'Veteran'],
+        }))
+        self.assertEqual(demographics['veterans'], 1)
+
     def test_demographics_service_disabled_counts_as_veteran(self):
         """A service-disabled veteran is counted in BOTH Veterans and ServiceDisabledVeterans."""
         converter = TrainingConverter(self.logger, self.validator)

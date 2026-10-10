@@ -353,6 +353,41 @@ class TestDemographicClassifiers(unittest.TestCase):
         self.assertEqual(classify_races('Prefer not to say', km), set())
         self.assertEqual(classify_races('', km), set())
 
+    def test_classify_races_matches_keywords_at_word_starts(self):
+        from src.config import RACE_KEYWORDS
+        from src.data_cleaning import classify_races
+        self.assertEqual(classify_races('Caucasian', RACE_KEYWORDS), {'white'})
+        # Prefix keywords still match: 'middle east' -> "Middle Eastern".
+        self.assertEqual(classify_races('Middle Eastern', RACE_KEYWORDS), {'middle_eastern'})
+        self.assertEqual(classify_races('Asian Indian', RACE_KEYWORDS), {'asian'})
+
+    def test_map_race_to_xsd(self):
+        from src.data_cleaning import map_race_to_xsd
+        self.assertEqual(map_race_to_xsd('Caucasian'), 'White')
+        self.assertEqual(map_race_to_xsd('black'), 'Black or African American')
+        self.assertEqual(map_race_to_xsd('Prefer not to say'), 'Prefer not to say')
+        # Ambiguous or unknown labels are left for the schema guard to report.
+        self.assertEqual(map_race_to_xsd('Middle Eastern or North African'),
+                         'Middle Eastern or North African')
+        self.assertEqual(map_race_to_xsd('Martian'), 'Martian')
+
+    def test_map_branch_of_service_to_xsd(self):
+        from src.data_cleaning import map_branch_of_service_to_xsd
+        for raw, expected in [('USMC', 'Marine Corps'), ('Marines', 'Marine Corps'),
+                              ('U.S. Army', 'Army'), ('US Navy', 'Navy'), ('usaf', 'Air Force'),
+                              ('Coast Guard', 'Coast Guard'), ('USSF', 'Space Force')]:
+            self.assertEqual(map_branch_of_service_to_xsd(raw), expected, raw)
+        self.assertEqual(map_branch_of_service_to_xsd('Foreign Legion'), 'Foreign Legion')
+
+    def test_negated_veteran_status(self):
+        from src.data_cleaning import classify_military, map_military_status_to_xsd
+        km = {'veteran': ['veteran'], 'service_disabled_veteran': ['service disabled']}
+        for raw in ('Non-veteran', 'non veteran', 'Not Veteran', 'Not a veteran', 'Never a veteran'):
+            self.assertEqual(map_military_status_to_xsd(raw), 'No military service', raw)
+            self.assertEqual(classify_military(raw, km), set(), raw)
+        self.assertEqual(map_military_status_to_xsd('Veteran'), 'Veteran')
+        self.assertEqual(map_military_status_to_xsd('Service Disabled Veteran'), 'Service Disabled Veteran')
+
     def test_classify_military_overlap(self):
         from src.data_cleaning import classify_military
         km = {

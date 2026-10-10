@@ -14,6 +14,8 @@ from .config import (
     CounselingConfig,
     DATE_INPUT_FORMATS as DEFAULT_DATE_FORMATS,
     MULTI_VALUE_DELIMITER,
+    RACE_KEYWORDS,
+    RACE_XSD_CODES,
 )
 
 _logger = logging.getLogger(__name__)
@@ -427,9 +429,26 @@ def classify_races(value: str | None, keyword_map: dict) -> set:
         if "prefer not" in token_lower:
             continue
         for category, keywords in keyword_map.items():
-            if any(kw in token_lower for kw in keywords):
+            if any(_starts_word(kw, token_lower) for kw in keywords):
                 categories.add(category)
     return categories
+
+
+def _starts_word(keyword: str, text: str) -> bool:
+    """True when `keyword` occurs in `text` starting at a word boundary.
+
+    A bare substring test counted every "Caucasian" attendee as Asian (and so
+    as underserved) because 'asian' is inside it. Anchoring only the start
+    keeps prefix keywords working: 'middle east' still matches "Middle
+    Eastern".
+    """
+    return re.search(r"\b" + re.escape(keyword), text) is not None
+
+
+# "Non-veteran", "Not a veteran", "non veteran": a negated veteran status. The
+# word boundary after the hyphen in "non-veteran" means a keyword match alone
+# reads it as a veteran.
+_NEGATED_VETERAN = re.compile(r"\b(?:non|not|never)\b[\s-]*(?:an?\s+)?(?:military\s+)?veteran")
 
 
 def classify_military(value: str | None, keyword_map: dict) -> set:
@@ -442,11 +461,12 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
     if is_empty(value):
         return set()
     v = str(value).strip().lower()
-    if "prefer not" in v or "no military" in v or v in {"none", "n/a", "na"}:
+    if ("prefer not" in v or "no military" in v or v in {"none", "n/a", "na"}
+            or _NEGATED_VETERAN.search(v)):
         return set()
     categories = set()
     for category, keywords in keyword_map.items():
-        if any(kw in v for kw in keywords):
+        if any(_starts_word(kw, v) for kw in keywords):
             categories.add(category)
     return categories
 
@@ -514,6 +534,8 @@ def map_military_status_to_xsd(value: str | None) -> str:
     if is_empty(value):
         return ""
     v = str(value).strip().lower()
+    if _NEGATED_VETERAN.search(v):
+        return "No military service"
     for needle, mapped in _MILITARY_STATUS_XSD_RULES:
         if needle in v:
             return mapped
@@ -522,6 +544,53 @@ def map_military_status_to_xsd(value: str | None) -> str:
     if is_affirmative(value):
         return "Veteran"
     return ""
+
+
+def map_race_to_xsd(value: str | None) -> str:
+    """Map one race label onto the counseling XSD's Race/Code spelling.
+
+    Synonyms resolve through RACE_KEYWORDS ("Caucasian" -> "White", "Asian
+    Indian" -> "Asian"). A label that matches no category, or more than one
+    ("Middle Eastern or North African"), is returned unchanged: Race is
+    required, so the schema guard reports it rather than this guessing.
+    """
+    if is_empty(value):
+        return ""
+    text = str(value).strip()
+    lowered = text.lower()
+    if "prefer not" in lowered:
+        return "Prefer not to say"
+    if "self-describe" in lowered or "self describe" in lowered:
+        return "Prefer to Self-Describe"
+    categories = classify_races(text, RACE_KEYWORDS)
+    if len(categories) == 1:
+        return RACE_XSD_CODES[categories.pop()]
+    return text
+
+
+# Abbreviations and short forms for the BranchOfService enumeration. Keys are
+# lower-cased with any leading "US"/"U.S."/"United States" removed.
+_BRANCH_OF_SERVICE_SYNONYMS = {
+    "usmc": "Marine Corps", "marines": "Marine Corps", "marine": "Marine Corps",
+    "marine corps": "Marine Corps",
+    "usaf": "Air Force", "air force": "Air Force",
+    "usn": "Navy", "navy": "Navy",
+    "army": "Army",
+    "uscg": "Coast Guard", "coast guard": "Coast Guard",
+    "ussf": "Space Force", "space force": "Space Force",
+}
+
+
+def map_branch_of_service_to_xsd(value: str | None) -> str:
+    """Map a branch label onto the XSD's BranchOfService spelling ("USMC" ->
+    "Marine Corps", "U.S. Army" -> "Army"); anything else is returned
+    unchanged for the schema guard to judge."""
+    if is_empty(value):
+        return ""
+    text = str(value).strip()
+    key = re.sub(r"[^a-z ]", "", text.lower())
+    key = re.sub(r"^(?:united states|us)\s+", "", " ".join(key.split()))
+    return _BRANCH_OF_SERVICE_SYNONYMS.get(key, text)
 
 
 def clean_numeric(value: str | int | float | None) -> str:

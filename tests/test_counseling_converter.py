@@ -185,12 +185,26 @@ class TestCounselingConverter(unittest.TestCase):
         self.assertTrue(phone.text.isdigit())
 
     def test_missing_contact_id_skips_record(self):
-        """Records without Contact ID should be skipped."""
+        """Records without Contact ID should be skipped; the others still convert."""
+        skipped = self._make_valid_row()
+        skipped['Contact ID'] = ''
+        root = self._convert_and_parse([skipped, self._make_valid_row()])
+        records = root.findall('CounselingRecord')
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].findtext('PartnerClientNumber'), 'C-001')
+
+    def test_every_row_skipped_raises_instead_of_writing_empty_file(self):
+        """An empty <CounselingInformation/> fails the XSD (it needs at least
+        one CounselingRecord), so a file whose every row is skipped must fail
+        like an empty CSV does, not write a document SBA would reject."""
+        from src.converters.base_converter import EmptyCSVError
         row = self._make_valid_row()
         row['Contact ID'] = ''
-        root = self._convert_and_parse([row])
-        records = root.findall('CounselingRecord')
-        self.assertEqual(len(records), 0)
+        with self.assertRaises(EmptyCSVError):
+            self._convert_and_parse([row])
+        self.assertTrue(any(
+            i['record_id'] == 'file' and i['severity'] == 'error'
+            for i in self.validator.issues))
 
     def test_multiple_records_converted(self):
         """Test that multiple rows produce multiple records."""

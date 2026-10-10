@@ -279,6 +279,18 @@ def _resolve_field(element: str | None, parent_tag: str | None,
     return _humanize_tag(element), None
 
 
+def element_field_map(schema_type: str) -> dict:
+    """The element -> (field label, CSV column) map for a schema type."""
+    return _ELEMENT_FIELD_MAPS.get(schema_type, {})
+
+
+def resolve_element_field(element: str | None, parent_tag: str | None,
+                          element_fields: dict) -> tuple[str | None, str | None]:
+    """Public form of the element -> CSV column lookup, for issues the
+    converters record about an element before the document is written."""
+    return _resolve_field(element, parent_tag, element_fields)
+
+
 def _restatement(message: str, element: str | None) -> str:
     """Plain restatement: the raw message minus its element/facet prefixes."""
     rest = message

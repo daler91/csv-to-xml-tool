@@ -21,6 +21,7 @@ class TrainingClientConverter(CounselingConverter):
     _preprocess_row to remap training client CSV columns and inject defaults
     for fields not collected on the shorter training client form.
     """
+    SCHEMA_TYPE = "training-client"
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)

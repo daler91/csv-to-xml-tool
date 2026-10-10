@@ -98,7 +98,12 @@ produces **schema-invalid output with no issue recorded** — the row converts "
 tracker reports zero errors, and only the post-hoc XSD validation (which the argparse CLI does not
 run, see [cli.md](../cli.md)) reveals the problem.
 
-### 1.1 Length facets are never enforced — `[OPEN]`
+### 1.1 Length facets are never enforced — `[FIXED]`
+
+> **Fixed** by `src/schema_rules.py` (third pass): every `maxLength` is read from the XSD and
+> enforced on the finished record — text is truncated with a `TRUNCATED_VALUE` warning (a middle
+> name keeps its initial), and identifiers (`PartnerClientNumber`/`PartnerSessionNumber`) are never
+> cut; an over-length one is reported as an error. Covered by `tests/test_schema_rules.py`.
 
 | Element | XSD facet | Converter | Result with over-length input |
 |---|---|---|---|
@@ -150,7 +155,16 @@ client who answered `yes` to "Currently In Business?" is filed as **not** in bus
 in-business-only sections (`LegalEntity`, `CounselingSeeking`) are skipped, and nothing in the report
 says so. `is_affirmative`/`is_negative` exist in `data_cleaning.py` and are used three lines away.
 
-### 1.4 Enumerated elements with no mapping and no pre-check — `[OPEN]`
+### 1.4 Enumerated elements with no mapping and no pre-check — `[PARTIAL]`
+
+> **Partly fixed** by `src/schema_rules.py` (third pass): every enumeration, pattern and numeric
+> facet is read from the XSD; values are matched case-insensitively (`llc` → `LLC`, `english` →
+> `English`), and an unmatched value is omitted with an `INVALID_VALUE` warning where the element is
+> optional (`State`, `Email`, `FIPS_Code`, `BusinessType`, `BranchOfService`, Part 3
+> `TotalNumberOfEmployees`), or the whole optional code list is dropped with `DOWNGRADED_VALUE`
+> (`Media`). **Still open:** synonyms (`Caucasian`, `USMC` are dropped or reported rather than
+> mapped — `Race` is required, so it remains an error) and the preview-time check in
+> `analyze_counseling_quality`.
 
 The first pass added mappers for `Ethnicity`, `Sex`, `Disability`, `MilitaryStatus`,
 `FundingSource` and `ExportCountries`. These enumerations still receive the raw CSV label:
@@ -526,7 +540,7 @@ Part 3, certification or referral paths. It is a smoke test, not a compliance te
 
 | Claim | Where | Reality |
 |---|---|---|
-| "long text truncated at the schema's limits" | `README.md:73` | Only `CounselorNotes` (1.1) |
+| ~~"long text truncated at the schema's limits"~~ | `README.md:73` | True since the third pass's `schema_rules.py` (1.1) |
 | "Every change is recorded, so the results page can show a before/after diff" | `converters.md` | Enum mappers and dropped values are not in the diff (2.6, 2.8) |
 | Fabricated-defaults table lists nine columns | `converters.md` | `Duration (hours)`, Part 3 employees, Part 3 exporting, training topic, program format, training-client constants are all fabricated too (Tier 2) |
 | `CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci` | `reviews/CODEBASE_ANALYSIS.md:315` | Dockerfile still uses `npm install` (3.4) |

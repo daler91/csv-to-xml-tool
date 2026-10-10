@@ -122,6 +122,7 @@ so the results page can show a before/after diff for each value.
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
+| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; anything still invalid omitted as `INVALID_VALUE` where the element is optional, or reported as an error where it is required |
 
 ### Issue categories
 

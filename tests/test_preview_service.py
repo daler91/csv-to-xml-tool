@@ -285,3 +285,53 @@ def test_counseling_matching_is_unchanged_by_alias_logic():
     assert "Contact ID" in status["matched"]
     assert status["aliases"] == {}
     assert status["extra"] == []
+
+
+# --- Schema-facet problems, predicted by running the real converter ---
+# The second pass (1.4) found the mapping page's data-quality panel showed
+# nothing for a file full of values SBA rejects; only post-conversion XSD
+# validation caught them.
+
+
+def test_counseling_data_quality_reports_values_the_converter_would_change():
+    csv = (
+        "Contact ID,Last Name,Middle Name,Email,Mailing State/Province,Race,Date\n"
+        "C-1,Smith,Marie,jane@localhost,Ontario,White,2025-01-15\n"
+        "C-2,Jones,Ann,amy@example.com,IA,Martian,2025-01-15\n"
+        "C-3,Brown,,bob@example.com,IA,Caucasian,2025-01-15\n"   # all fine after mapping
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "counseling"))
+
+    middle = checks["truncated_value_middle_name"]
+    assert (middle["count"], middle["severity"], middle["column"]) == (2, "warning", "Middle Name")
+    assert checks["invalid_value_email"]["count"] == 1
+    assert checks["invalid_value_mailing_state_province"]["count"] == 1
+    # Race is required: an unrecognised one is an error that fails the file.
+    race = checks["invalid_value_race"]
+    assert (race["count"], race["severity"]) == (1, "error")
+    assert "fail SBA validation" in race["detail"]
+    assert "'Martian'" in race["detail"]
+
+
+def test_data_quality_value_checks_name_only_the_users_columns():
+    # The training-client form injects internal defaults and reports its own
+    # in-business downgrade; neither may surface as a value check.
+    csv = (
+        "Class/Event ID,Contact ID,Last Name,Start Date,Currently in Business?\n"
+        "E-1,C-1,Smith,2025-01-15,Yes\n"
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "training-client"))
+    assert "in_business_downgraded" in checks
+    headers = {"Class/Event ID", "Contact ID", "Last Name", "Start Date", "Currently in Business?"}
+    for key, check in checks.items():
+        assert check["column"] in headers, (key, check["column"])
+
+
+def test_clean_file_has_no_value_checks():
+    csv = (
+        "Contact ID,Last Name,Email,Mailing State/Province,Race,Date,Type of Session\n"
+        "C-1,Smith,jane@example.com,IA,White,2025-01-15,Face to Face\n"
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "counseling"))
+    value_prefixes = ("truncated_value_", "invalid_value_", "downgraded_value_", "standardized_value_")
+    assert not [k for k in checks if k.startswith(value_prefixes)]

@@ -21,6 +21,13 @@ from .. import data_validation
 from ..schema_rules import SchemaGuard
 from ..xml_utils import create_element, emit_optional
 
+def _session_type_key(value):
+    return re.sub(r'[\s-]+', '', str(value).casefold())
+
+
+_SESSION_TYPE_LOOKUP = {_session_type_key(t): t for t in CounselingConfig.VALID_SESSION_TYPES}
+
+
 class CounselingConverter(BaseConverter):
     """
     Converter for Counseling (Form 641) data.
@@ -645,8 +652,13 @@ class CounselingConverter(BaseConverter):
     def _build_session_details(self, counselor_record, row, record_id):
         session_type_raw = row.get('Type of Session', self.config.DEFAULT_SESSION_TYPE)
         session_type = "Update Only" if session_type_raw.strip() == "Update" else session_type_raw.strip()
+        # Ignoring case, spaces and hyphens: Salesforce's "Face to Face" is the
+        # schema's "Face-to-face", and used to be filed as the default type.
+        session_type = _SESSION_TYPE_LOOKUP.get(_session_type_key(session_type), session_type)
         if session_type not in self.config.VALID_SESSION_TYPES:
-            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_VALUE, "SessionType", f"Invalid session type '{session_type_raw}', defaulted.")
+            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_VALUE, "Type of Session",
+                                     f"Invalid session type '{session_type_raw}', recorded as "
+                                     f"'{self.config.DEFAULT_SESSION_TYPE}'.")
             session_type = self.config.DEFAULT_SESSION_TYPE
         create_element(counselor_record, 'SessionType', session_type)
 

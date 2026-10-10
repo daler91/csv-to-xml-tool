@@ -265,8 +265,18 @@ class TestCounselingConverter(unittest.TestCase):
         st = root.find('CounselingRecord/CounselorRecord/SessionType')
         self.assertEqual(st.text, 'Telephone')  # default
         # Check that a warning was recorded
-        warnings = [i for i in self.validator.issues if i['severity'] == 'warning' and 'SessionType' in i['field_name']]
+        warnings = [i for i in self.validator.issues if i['severity'] == 'warning' and i['field_name'] == 'Type of Session']
         self.assertTrue(len(warnings) > 0)
+
+    def test_session_type_ignores_case_spaces_and_hyphens(self):
+        """Salesforce exports "Face to Face"; the schema spells it "Face-to-face".
+        It used to be filed as the default session type (Telephone)."""
+        for raw in ('Face to Face', 'face-to-face', 'FACE TO FACE', 'prepare only'):
+            self.validator = ValidationTracker()
+            root = self._convert_and_parse([self._make_valid_row(**{'Type of Session': raw})])
+            expected = 'Prepare Only' if raw == 'prepare only' else 'Face-to-face'
+            self.assertEqual(root.findtext('CounselingRecord/CounselorRecord/SessionType'), expected, raw)
+            self.assertFalse([i for i in self.validator.issues if i['field_name'] == 'Type of Session'])
 
     def test_special_characters_in_text(self):
         """XML special characters in CSV data should be handled safely."""

@@ -9,6 +9,7 @@ vi.mock("@/lib/job-queue", () => ({
   sweepStaleClaims: vi.fn(),
 }));
 vi.mock("@/lib/job-runner", () => ({ runJob: vi.fn() }));
+vi.mock("@/lib/retention", () => ({ purgeAllExpiredJobFiles: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     job: { updateMany: vi.fn(), findUnique: vi.fn() },
@@ -34,6 +35,7 @@ import {
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
+import { purgeAllExpiredJobFiles } from "@/lib/retention";
 import { prisma } from "@/lib/prisma";
 
 const ack = vi.mocked(ackJob);
@@ -262,6 +264,7 @@ describe("startConsumer", () => {
     // like under maxRetriesPerRequest: null. register() awaits startConsumer,
     // so startConsumer must resolve regardless.
     sweep.mockReturnValue(new Promise(() => {}));
+    vi.mocked(purgeAllExpiredJobFiles).mockReturnValue(new Promise(() => {}));
     // Park the loop on a claim that never returns (what BLMOVE against an
     // unreachable Redis looks like) so it does not spin for the rest of the run.
     claim.mockReturnValue(new Promise(() => {}));
@@ -277,6 +280,8 @@ describe("startConsumer", () => {
 
     expect(started).toBe(true);
     expect(sweep).toHaveBeenCalledTimes(1);
+    // File retention runs for every user from here, not only on page reads.
+    expect(vi.mocked(purgeAllExpiredJobFiles)).toHaveBeenCalledTimes(1);
     expect(claim).toHaveBeenCalledTimes(1);
     log.mockRestore();
   });

@@ -128,8 +128,8 @@ stream-counting half is what closes the bypass where a request sent with
 |---|---|---|
 | `RETENTION_DAYS` | `30` | Days uploaded CSVs and generated XML stay on disk |
 
-The sweep is **lazy** — it runs on dashboard and job reads, not on a timer — and
-it removes *files only*. Job rows and the audit trail are kept, `filesPurgedAt`
+The sweep runs hourly for all users from the web's job consumer, and also on a
+user's dashboard and job reads. It removes *files only*. Job rows and the audit trail are kept, `filesPurgedAt`
 is stamped, and downloads then return 410 "expired" rather than 404. Jobs that
 are `queued` or `converting` are never swept, because the runner still needs the
 input file.

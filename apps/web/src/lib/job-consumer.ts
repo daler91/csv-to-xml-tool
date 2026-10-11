@@ -7,12 +7,15 @@ import {
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
+import { purgeAllExpiredJobFiles } from "@/lib/retention";
 import { prisma } from "@/lib/prisma";
 import { assertTimeoutOrdering } from "@/lib/durability-timeouts";
 
 // Max conversion attempts before a job is dead-lettered to "error".
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS) || 3;
 const SWEEP_INTERVAL_MS = 60 * 1000;
+// File retention for every user, not only those who revisit the dashboard.
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 const CLAIM_TIMEOUT_SEC = 5;
 // Pause after an unexpected failure inside the loop so a persistently broken
 // dependency (Redis down, database gone) is retried, not hot-looped.
@@ -78,6 +81,13 @@ export async function startConsumer(): Promise<void> {
       console.error("[job-consumer] periodic sweep failed:", err)
     );
   }, SWEEP_INTERVAL_MS);
+
+  // Not awaited, like the boot sweep: retention fails open and must never
+  // hold up startup. Then hourly.
+  void purgeAllExpiredJobFiles();
+  setInterval(() => {
+    void purgeAllExpiredJobFiles();
+  }, RETENTION_INTERVAL_MS);
 
   process.on("SIGTERM", stopConsumer);
 

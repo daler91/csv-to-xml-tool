@@ -83,7 +83,10 @@ of [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md).
 ## Retention
 
 Uploads and generated XML are deleted after `RETENTION_DAYS` (30 by default).
-The sweep is lazy, like the reaper, and runs on dashboard reads.
+The sweep runs hourly for every user from the job consumer in each web process
+(up to 200 jobs a run; a backlog drains over successive hours), and also on a
+user's own dashboard and job-list reads. Concurrent sweeps are safe: each purge
+is claimed with a guarded update first.
 
 What survives: the job row, its summary and issues, and the full audit trail.
 `filesPurgedAt` is stamped, and downloads then return **410 "expired"** rather
@@ -204,8 +207,8 @@ which is trivially spoofable.
 
 ### Freeing disk
 
-Retention handles this on its own. To force it, hit the dashboard as the affected
-user — the sweep is per-user and lazy. Deleting a job removes its files
+Retention handles this on its own, hourly. To force it sooner for one user, load
+the dashboard as that user. Deleting a job removes its files
 immediately; note the row is deleted before the files, deliberately, so a racing
 start cannot pick up a job whose input is about to vanish.
 

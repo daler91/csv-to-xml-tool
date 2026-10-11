@@ -138,6 +138,11 @@ queue (`apps/web/src/lib/job-queue.ts`):
   mid-flight wins and the finished XML is discarded rather than reviving the job.
 - A claim not acked within `VISIBILITY_TIMEOUT_MS` is swept back onto the queue
   (the sweep is `LREM`-gated, so competing consumers cannot double-requeue).
+- A transient failure (network, worker 5xx) is retried after a backoff —
+  `JOB_RETRY_BASE_MS` (30 s), then four times that — so a retry outlasts a
+  worker redeploy. The waiting job sits in a Redis `delayed` set and any
+  consumer promotes it back to the queue when it is due (`ZREM`-gated, like
+  the sweep).
 - `JOB_MAX_ATTEMPTS` exhausted → the job is dead-lettered to `error` with a
   `conversion_deadlettered` audit entry.
 - `job-reaper.ts` is the backstop: anything stuck past `REAP_DEADLINE_MS` is

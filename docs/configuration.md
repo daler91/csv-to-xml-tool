@@ -84,6 +84,7 @@ CONVERSION_TIMEOUT_MS  <  VISIBILITY_TIMEOUT_MS  <  REAP_DEADLINE_MS
 | `VISIBILITY_TIMEOUT_MS` | `2400000` (40 min) | A claimed job not finished within this is treated as abandoned and re-queued by the sweep |
 | `REAP_DEADLINE_MS` | `3600000` (60 min) | Backstop: a job stuck `queued`/`converting` past this is failed |
 | `JOB_MAX_ATTEMPTS` | `3` | Conversion attempts before dead-lettering to `error` |
+| `JOB_RETRY_BASE_MS` | `30000` (30 s) | Wait before retrying a transiently failed attempt; each further retry waits 4× longer (30 s, 2 min with the defaults) |
 
 Break the ordering and you get one of two failure modes. If
 `VISIBILITY_TIMEOUT_MS < CONVERSION_TIMEOUT_MS`, a healthy long conversion is

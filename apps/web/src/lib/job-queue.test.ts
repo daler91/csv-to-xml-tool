@@ -32,6 +32,7 @@ import {
   ackJob,
   requeueJob,
   getAttempts,
+  promoteDueJobs,
   sweepStaleClaims,
 } from "@/lib/job-queue";
 
@@ -39,6 +40,7 @@ const PENDING = "csvxml:jobs:pending";
 const PROCESSING = "csvxml:jobs:processing";
 const CLAIMS = "csvxml:jobs:claims";
 const ATTEMPTS = "csvxml:jobs:attempts";
+const DELAYED = "csvxml:jobs:delayed";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -96,6 +98,41 @@ describe("requeueJob", () => {
     expect(client.zrem).toHaveBeenCalledWith(CLAIMS, "j1");
     expect(client.lpush).toHaveBeenCalledWith(PENDING, "j1");
     expect(client.hdel).not.toHaveBeenCalled(); // attempts preserved
+  });
+});
+
+describe("requeueJob with a delay", () => {
+  it("parks the job in delayed instead of pending", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+
+    await requeueJob("j1", 30_000);
+
+    expect(client.lrem).toHaveBeenCalledWith(PROCESSING, 0, "j1");
+    expect(client.zrem).toHaveBeenCalledWith(CLAIMS, "j1");
+    expect(client.zadd).toHaveBeenCalledWith(DELAYED, 31_000, "j1");
+    expect(client.lpush).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("promoteDueJobs", () => {
+  it("moves due retries to pending, only those it actually removes", async () => {
+    client.zrangebyscore.mockResolvedValue(["j1", "j2"]);
+    // j2 was promoted by a competing consumer first.
+    client.zrem.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+
+    const promoted = await promoteDueJobs(5_000);
+
+    expect(client.zrangebyscore).toHaveBeenCalledWith(DELAYED, 0, 5_000);
+    expect(promoted).toEqual(["j1"]);
+    expect(client.lpush).toHaveBeenCalledTimes(1);
+    expect(client.lpush).toHaveBeenCalledWith(PENDING, "j1");
+  });
+
+  it("does nothing when no retry is due", async () => {
+    client.zrangebyscore.mockResolvedValue([]);
+    expect(await promoteDueJobs()).toEqual([]);
+    expect(client.lpush).not.toHaveBeenCalled();
   });
 });
 

@@ -42,7 +42,8 @@ def _headers_read_by_converter() -> set[str]:
     * ``row.get('Header', ...)`` — the bulk of them, still literals.
     * ``self._first_present(row, 'A', 'B', ...)`` — kept because the helper is
       still public API and callable with bare literals.
-    * ``self._yes_no(row, 'Header', default, ...)`` — the Yes/No columns.
+    * ``self._yes_no(row, 'Header', default, ...)`` and
+      ``self._phone(row, 'Header', ...)`` — the Yes/No and phone columns.
     * ``self._mapped(row, 'key')`` — resolved through
       ``CounselingConfig.COLUMN_MAPPING``. The four Part 3 impact fields are
       reachable *only* this way, so a scan that stopped at literals would report
@@ -57,7 +58,7 @@ def _headers_read_by_converter() -> set[str]:
             first = node.args[0]
             if isinstance(first, ast.Constant) and isinstance(first.value, str):
                 headers.add(first.value)
-        elif node.func.attr == "_yes_no" and len(node.args) >= 2:
+        elif node.func.attr in ("_yes_no", "_phone") and len(node.args) >= 2:
             column = node.args[1]
             if isinstance(column, ast.Constant) and isinstance(column.value, str):
                 headers.add(column.value)

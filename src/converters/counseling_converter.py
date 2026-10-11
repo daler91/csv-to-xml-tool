@@ -271,7 +271,7 @@ class CounselingConverter(BaseConverter):
         # Email is minOccurs="0" but pattern-constrained (EmailType), so a blank
         # cell must omit the element rather than emit <Email/>.
         emit_optional(client_request, 'Email', row.get('Email', ''))
-        self._build_phone(client_request, 'PhonePart1', row)
+        self._build_phone(client_request, 'PhonePart1', row, record_id)
         self._build_address(client_request, 'AddressPart1', row, record_id)
         # SurveyAgreement is required and YesNoType, so it can't be omitted:
         # a blank cell falls back to 'No'.
@@ -568,7 +568,7 @@ class CounselingConverter(BaseConverter):
         emit_optional(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
 
         emit_optional(counselor_record, 'Email', row.get('Email', ''))
-        self._build_phone(counselor_record, 'PhonePart3', row)
+        self._build_phone(counselor_record, 'PhonePart3', row, record_id)
         self._build_address(counselor_record, 'AddressPart3', row, record_id)
 
     def _resolve_funding_source(self, funding_source, record_id):
@@ -807,9 +807,21 @@ class CounselingConverter(BaseConverter):
             self._warn_fabricated_default(record_id, 'Mailing Country', country_val, 'Mailing Country')
         create_element(country, 'Code', country_val)
 
-    def _build_phone(self, parent, element_name, row):
-        primary_phone = data_cleaning.clean_phone_number(row.get('Contact: Phone', ''))
-        secondary_phone = data_cleaning.clean_phone_number(row.get('Contact: Secondary Phone', ''))
+    def _phone(self, row, column, record_id):
+        """The cell as ten digits, or '' -- reported when a number was given
+        but couldn't be read (PhoneType is exactly ten digits). Once per
+        record, though the phone is built for Part 1 and Part 3."""
+        raw = row.get(column, '')
+        phone = data_cleaning.clean_phone_number(raw)
+        if not phone and not data_cleaning.is_empty(raw) and self._first_time(record_id, column):
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.INVALID_FORMAT, column,
+                f"'{str(raw).strip()}' is not a 10-digit phone number, so it was left out of the XML.")
+        return phone
+
+    def _build_phone(self, parent, element_name, row, record_id):
+        primary_phone = self._phone(row, 'Contact: Phone', record_id)
+        secondary_phone = self._phone(row, 'Contact: Secondary Phone', record_id)
         # Only emit phone element if at least one number is present
         if primary_phone or secondary_phone:
             phone = create_element(parent, element_name)

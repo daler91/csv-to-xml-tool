@@ -289,7 +289,9 @@ Provided=Grant writing` emits `<Code>Business Operations/Management</Code><Other
 be a legitimate SBA business rule, but overriding an explicit answer is exactly what
 `DOWNGRADED_VALUE` was introduced to record.
 
-### 2.6 Unparseable phone numbers vanish without a trace — `[OPEN]`
+### 2.6 Unparseable phone numbers vanish without a trace — `[FIXED]`
+
+> **Fixed** (third pass): a phone that can't be read as ten digits records an `INVALID_FORMAT` warning (once per record), and the cleaning diff now includes every value a cleaner drops, with an empty "after" that the results page shows as *left out of the XML*.
 
 The first pass made `clean_phone_number` return `""` for anything not normalizable to ten digits
 (correct). But `_build_phone` (`:785`) just omits the element, records nothing, and the cleaning
@@ -317,7 +319,9 @@ country, a `Prefer not to say` gender).
 - **`Address` and `Street Line 1` are accepted as aliases for City** (`config.py:591`). Verified: a
   training CSV with `Address=123 Main St` and no city column emits `<City>123 Main St</City>`.
 
-### 2.8 The cleaning diff does not cover the enum mappers — `[OPEN]`
+### 2.8 The cleaning diff does not cover the enum mappers — `[FIXED]`
+
+> **Fixed** (third pass): `COUNSELING_CLEANING_MAP` now covers `Ethnicity:`, `Disability`, `Veteran Status`, `Branch Of Service`, `Race`, `Export Countries` and `Comments`, and the training-client map its own ethnicity, disability, military and race columns. `tests/test_diff_service.py` is the first test of the diff service.
 
 `converters.md` says *"Every change is recorded, so the results page can show a before/after diff
 for each value."* `diff_service.COUNSELING_CLEANING_MAP` has no entry for `Ethnicity:`, `Disability`,
@@ -565,8 +569,8 @@ Part 3, certification or referral paths. It is a smoke test, not a compliance te
 | Claim | Where | Reality |
 |---|---|---|
 | ~~"long text truncated at the schema's limits"~~ | `README.md:73` | True since the third pass's `schema_rules.py` (1.1) |
-| "Every change is recorded, so the results page can show a before/after diff" | `converters.md` | Enum mappers and dropped values are not in the diff (2.6, 2.8) |
-| Fabricated-defaults table lists nine columns | `converters.md` | `Duration (hours)`, Part 3 employees, Part 3 exporting, training topic, program format, training-client constants are all fabricated too (Tier 2) |
+| ~~"Every change is recorded, so the results page can show a before/after diff"~~ | `converters.md` | True since the third pass (2.6, 2.8) |
+| Fabricated-defaults table lists nine columns | `converters.md` | Counseling side corrected in the third pass (2.1–2.5); training topic, program format and training-client constants follow with 2.7 |
 | `CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci` | `reviews/CODEBASE_ANALYSIS.md:315` | Dockerfile still uses `npm install` (3.4) |
 
 ### 5.4 Still open from the first pass, unchanged

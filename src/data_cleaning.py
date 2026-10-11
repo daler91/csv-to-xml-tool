@@ -602,6 +602,10 @@ def clean_numeric(value: str | int | float | None) -> str:
         return ""
     
     cleaned_str = str(value).replace(" ", "").replace("$", "").replace(",", "")
+    # Accounting format: Excel writes a negative as "(1,500)". Read as anything
+    # else it failed to parse and the converter filed a fabricated 0.
+    if len(cleaned_str) > 2 and cleaned_str.startswith("(") and cleaned_str.endswith(")"):
+        cleaned_str = "-" + cleaned_str[1:-1]
 
     # Parse with Decimal, not float (CONV-4): a float round-trip loses cents on
     # large financial values and can emit scientific notation like '1E+15', which
@@ -681,23 +685,18 @@ def truncate_counselor_notes(notes: str | None, max_length: int = CounselingConf
     
     # Try to truncate at a sentence boundary
     truncated = cleaned_notes[:max_length]
-    
-    # Look for last sentence boundary within the limit
-    sentence_boundaries = ['.', '!', '?', '\n']
-    last_boundary_pos = -1
-    
-    for boundary in sentence_boundaries:
-        pos = truncated.rfind(boundary)
-        if pos > last_boundary_pos:
-            last_boundary_pos = pos
-    
-    # If found a sentence boundary, truncate there
-    if last_boundary_pos > 0:
+
+    # A boundary only counts in the last fifth of the window. Taking the last
+    # one anywhere turned "Met with Mr. Smith ..." into "Met with Mr." --
+    # throwing away nearly a thousand characters to end on an abbreviation.
+    earliest_cut = int(max_length * 0.8)
+    last_boundary_pos = max(truncated.rfind(b) for b in ('.', '!', '?', '\n'))
+    if last_boundary_pos >= earliest_cut:
         return cleaned_notes[:last_boundary_pos + 1]
-    
+
     # Otherwise try to truncate at a word boundary
     last_space = truncated.rfind(' ')
-    if last_space > 0:
+    if last_space >= earliest_cut:
         return cleaned_notes[:last_space]
     
     # If all else fails just truncate at max_length

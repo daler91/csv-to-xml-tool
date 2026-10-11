@@ -238,7 +238,9 @@ satisfy the schema, record a `DOWNGRADED_VALUE`."* Each item below emits or drop
 issue recorded and no cleaning-diff entry**. All produce schema-valid XML, so nothing downstream
 notices.
 
-### 2.1 Contact hours are fabricated as `0.5` — `[OPEN]`
+### 2.1 Contact hours are fabricated as `0.5` — `[FIXED]`
+
+> **Fixed** (third pass): a blank or zero `Duration (hours)` that is replaced by `0.5` records a `FABRICATED_DEFAULT`, and the column is in `COUNSELING_FABRICATION_DEFAULTS`, so the mapping page warns about blanks (only for session types that require contact hours).
 
 `counseling_converter.py:723`: when the session type requires contact hours and `Duration (hours)`
 is blank or zero, `contact_val = "0.5"`. Verified: a blank duration emits `<Contact>0.5</Contact>`
@@ -246,13 +248,17 @@ with no issue. Half an hour of federally reported counseling per affected row, i
 `Duration (hours)` is not in `COUNSELING_FABRICATION_DEFAULTS`, so the mapping page does not warn
 about the column either.
 
-### 2.2 Part 3 `TotalNumberOfEmployees` is fabricated as `0` — `[OPEN]`
+### 2.2 Part 3 `TotalNumberOfEmployees` is fabricated as `0` — `[FIXED]`
+
+> **Fixed** (third pass): omitted when blank, as in Part 2. The goldens lost eleven `<TotalNumberOfEmployees>0</TotalNumberOfEmployees>` lines and nothing else.
 
 `counseling_converter.py:616`: `self._mapped(row, 'total_employees_part3', default='0')`. Part 2
 (`:434`) omits the element when blank; Part 3 emits `<TotalNumberOfEmployees>0</TotalNumberOfEmployees>`.
 Verified. A blank cell and "zero employees" are indistinguishable in the filing.
 
-### 2.3 Part 3 `CurrentlyExporting` is hardcoded to `No`, contradicting Part 2 — `[OPEN]`
+### 2.3 Part 3 `CurrentlyExporting` is hardcoded to `No`, contradicting Part 2 — `[FIXED]`
+
+> **Fixed** (third pass): Part 3 repeats Part 2's answer; a blank answer is a `FABRICATED_DEFAULT`. `ExportGrossRevenuesOrSales` has no CSV column: it is `0` only for a client who is not exporting and omitted for an exporter.
 
 `counseling_converter.py:609`: `create_element(counselor_record, 'CurrentlyExporting',
 DEFAULT_BUSINESS_STATUS)` — the CSV column `Are you currently exporting?(old)` that Part 2 reads is
@@ -263,7 +269,9 @@ likewise hardcoded to `0` in both parts (`:450,633`) even for exporters. Neither
 warning; the counseling path has no equivalent of the training converter's
 `_warn_constant_defaults`.
 
-### 2.4 `Services Provided = Other` is rewritten to `Business Operations/Management` — `[OPEN]`
+### 2.4 `Services Provided = Other` is rewritten to `Business Operations/Management` — `[FIXED]`
+
+> **Fixed** (third pass): `Other` is filed as `Other`. A blank `Services Provided` defaulted to `Business Start-up/Preplanning` is now a `FABRICATED_DEFAULT` too.
 
 `counseling_converter.py:673` replaces any `Other` code with `Business Operations/Management`
 unconditionally. `Other` **is** a member of the `CounselingProvided/Code` enumeration (the 22nd
@@ -272,7 +280,9 @@ Provided=Grant writing` emits `<Code>Business Operations/Management</Code><Other
 — a service the counselor did not say they provided, with the "Other" text attached to it. No
 `DOWNGRADED_VALUE`. The line dates from the original converter (2026-04) and no commit explains it.
 
-### 2.5 `ReportableImpact=Yes` silently overrides `VerifiedToBeInBusiness` — `[OPEN]`
+### 2.5 `ReportableImpact=Yes` silently overrides `VerifiedToBeInBusiness` — `[FIXED]`
+
+> **Fixed** (third pass): the override is kept (it is a business rule) but recorded as a `DOWNGRADED_VALUE` naming the original answer.
 
 `counseling_converter.py:600-601`. Verified: `Verified To Be In Business=No` plus
 `Reportable Impact=Yes` emits `<VerifiedToBeInBusiness>Yes</VerifiedToBeInBusiness>`. The rule may

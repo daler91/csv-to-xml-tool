@@ -296,6 +296,11 @@ COUNSELING_FABRICATION_DEFAULTS = {
     "Mailing Country": "United States",
     "Conduct Business Online?": "No",
     "8(a) Certified?(old)": "No",
+    "Are you currently exporting?(old)": "No",
+    # Only for session types that require contact hours; a zero duration is
+    # replaced the same way as a blank one.
+    "Duration (hours)": "0.5",
+    "Services Provided": BUSINESS_STARTUP_PREPLANNING,
 }
 
 # Valid ExportCountries/Code values, in XSD order. Mirrors the enumeration of

@@ -646,5 +646,89 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         self.assertTrue(tree.find('.//LocationCode').text.isdigit())
 
 
+
+@unittest.skipUnless(os.path.exists(COUNSELING_XSD), f"Counseling XSD not found at {COUNSELING_XSD}")
+class TestAuditTrail(unittest.TestCase):
+    """Second-pass Tier 2: every value the converter invents, overrides or
+    drops leaves an issue behind (CONTRIBUTING rule 4)."""
+
+    # The regression class's helpers, without inheriting (and re-running) its tests.
+    setUp = TestSchemaComplianceRegressions.setUp
+    _convert = TestSchemaComplianceRegressions._convert
+    _assert_valid = TestSchemaComplianceRegressions._assert_valid
+
+    def _issues(self, field, category=None):
+        return [i for i in self.validator.issues
+                if i['field_name'] == field and (category is None or i['category'] == category)]
+
+    def test_every_listed_fabrication_is_reported(self):
+        """Audit completeness: blank every column the converter defaults, and
+        each one must leave a FABRICATED_DEFAULT naming that column."""
+        from src.config import COUNSELING_FABRICATION_DEFAULTS
+        self._assert_valid([_make_counseling_row(**{
+            col: '' for col in COUNSELING_FABRICATION_DEFAULTS}, **{'Type of Session': 'Telephone'})])
+        reported = {i['field_name'] for i in self.validator.issues if i['category'] == 'fabricated_default'}
+        self.assertEqual(set(COUNSELING_FABRICATION_DEFAULTS) - reported, set())
+
+    def test_blank_duration_is_reported_only_where_contact_hours_are_required(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Duration (hours)': '', 'Type of Session': 'Telephone'})])
+        self.assertEqual(tree.find('.//CounselingHours/Contact').text, '0.5')
+        self.assertEqual(len(self._issues('Duration (hours)', 'fabricated_default')), 1)
+
+        self.validator = ValidationTracker()
+        self._assert_valid([_make_counseling_row(**{'Duration (hours)': '', 'Type of Session': 'Prepare Only'})])
+        self.assertEqual(self._issues('Duration (hours)'), [])
+
+    def test_zero_duration_says_what_the_cell_held(self):
+        self._assert_valid([_make_counseling_row(**{'Duration (hours)': '0', 'Type of Session': 'Telephone'})])
+        message = self._issues('Duration (hours)', 'fabricated_default')[0]['message']
+        self.assertIn("'0' could not be used", message)
+
+    def test_blank_part3_employees_is_omitted_not_zero(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Total Number of Employees': ''})])
+        self.assertIsNone(tree.find('.//CounselorRecord/TotalNumberOfEmployees'))
+
+    def test_part3_exporting_matches_part2_and_export_revenue_is_not_invented(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Are you currently exporting?(old)': 'Yes'})])
+        self.assertEqual(tree.find('.//ClientIntake/CurrentlyExporting').text, 'Yes')
+        self.assertEqual(tree.find('.//CounselorRecord/CurrentlyExporting').text, 'Yes')
+        # No CSV column holds export revenue: unknown for an exporter, so omitted.
+        self.assertEqual(tree.findall('.//ExportGrossRevenuesOrSales'), [])
+
+        self.validator = ValidationTracker()
+        tree = self._assert_valid([_make_counseling_row(**{'Are you currently exporting?(old)': 'No'})])
+        self.assertEqual([e.text for e in tree.findall('.//ExportGrossRevenuesOrSales')], ['0', '0'])
+
+    def test_other_service_is_filed_as_other(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Services Provided': 'Other', 'Other Counseling Provided': 'Grant writing'})])
+        provided = tree.find('.//CounselingProvided')
+        self.assertEqual(provided.find('Code').text, 'Other')
+        self.assertEqual(provided.find('Other').text, 'Grant writing')
+
+    def test_reportable_impact_override_is_recorded(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Verified To Be In Business': 'No', 'Reportable Impact': 'Yes'})])
+        self.assertEqual(tree.find('.//VerifiedToBeInBusiness').text, 'Yes')
+        issue = self._issues('Verified To Be In Business', 'downgraded_value')
+        self.assertEqual(len(issue), 1)
+        self.assertIn("instead of 'No'", issue[0]['message'])
+
+    def test_accounting_negative_is_read_and_unreadable_money_is_named(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Profits/Losses': '(1,500)', 'Gross Revenues/Sales': 'n/a'})])
+        self.assertEqual(tree.find('.//ClientAnnualIncomePart2/ProfitLoss').text, '-1500')
+        self.assertEqual(self._issues('Profits/Losses'), [])
+        message = self._issues('Gross Revenues/Sales', 'fabricated_default')[0]['message']
+        self.assertIn("'n/a' could not be used", message)
+
+    def test_long_notes_keep_their_text_and_report_the_cut(self):
+        notes = "Met with Mr. Smith " + ("word " * 400)
+        tree = self._assert_valid([_make_counseling_row(Comments=notes)])
+        kept = tree.find('.//CounselorNotes').text
+        self.assertGreater(len(kept), 800)
+        self.assertLessEqual(len(kept), 1000)
+        self.assertEqual(len(self._issues('Comments', 'truncated_value')), 1)
+
 if __name__ == '__main__':
     unittest.main()

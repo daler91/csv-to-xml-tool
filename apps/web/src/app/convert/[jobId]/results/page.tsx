@@ -613,6 +613,13 @@ function CleaningDiffView({
     map_gender: "gender values mapped",
     clean_percentage: "percentages cleaned",
     clean_numeric: "numeric values cleaned",
+    map_ethnicity: "ethnicity values mapped",
+    map_disability: "disability values mapped",
+    map_military_status: "military statuses mapped",
+    map_branch: "branches mapped",
+    map_race: "race values mapped",
+    map_export_country: "export countries mapped",
+    clean_notes: "counselor notes cleaned",
   };
 
   const summaryParts = types.map(
@@ -684,7 +691,11 @@ function CleaningDiffView({
                 <td className="px-3 py-2 bg-green-50 text-green-800 font-mono">
                   <span aria-hidden="true" className="mr-1 text-green-600">+</span>
                   <span className="sr-only">Cleaned value: </span>
-                  {d.cleaned}
+                  {d.cleaned === "" ? (
+                    <span className="italic font-sans text-gray-600">left out of the XML</span>
+                  ) : (
+                    d.cleaned
+                  )}
                 </td>
                 <td className="px-3 py-2 text-gray-600">{d.cleaning_type}</td>
               </tr>

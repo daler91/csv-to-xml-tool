@@ -10,7 +10,31 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src import data_cleaning
-from src.config import TrainingConfig
+from src.config import EXPORT_COUNTRY_LOOKUP, CounselingConfig, TrainingConfig
+
+
+def _map_each(mapper):
+    """Apply `mapper` to each ';'-separated value, as the converter does for
+    multi-select columns. Unchanged values return the cell as written, so a
+    Salesforce trailing ';' alone is not reported as a change; values the
+    mapper can't place ('') are dropped, as they are from the XML."""
+    def apply(value):
+        tokens = data_cleaning.split_multi_value(value)
+        mapped = [mapper(token) for token in tokens]
+        if mapped == tokens:
+            return value
+        return "; ".join(m for m in mapped if m)
+    return apply
+
+
+def _export_country(value):
+    standardized = data_cleaning.standardize_country_code(value)
+    return EXPORT_COUNTRY_LOOKUP.get(standardized.lower(), "")
+
+
+def _counselor_notes(value):
+    return data_cleaning.truncate_counselor_notes(value, CounselingConfig.MAX_FIELD_LENGTHS["CounselorNotes"])
+
 
 # (csv_column, cleaning_function, cleaning_type_label)
 COUNSELING_CLEANING_MAP = [
@@ -28,6 +52,15 @@ COUNSELING_CLEANING_MAP = [
     ("Mailing Country", data_cleaning.standardize_country_code, "standardize_country"),
     # Gender
     ("Gender", data_cleaning.map_gender_to_sex, "map_gender"),
+    # Enumerations mapped onto the schema's spelling (second pass 2.8)
+    ("Ethnicity:", data_cleaning.map_ethnicity_to_xsd, "map_ethnicity"),
+    ("Disability", data_cleaning.map_disability_to_xsd, "map_disability"),
+    ("Veteran Status", data_cleaning.map_military_status_to_xsd, "map_military_status"),
+    ("Branch Of Service", data_cleaning.map_branch_of_service_to_xsd, "map_branch"),
+    ("Race", _map_each(data_cleaning.map_race_to_xsd), "map_race"),
+    ("Export Countries", _map_each(_export_country), "map_export_country"),
+    # Notes: whitespace and Salesforce "[User]:" markers scrubbed, long notes cut
+    ("Comments", _counselor_notes, "clean_notes"),
     # Percentage
     ("Business Ownership - % Female(old)", data_cleaning.clean_percentage, "clean_percentage"),
     # Numeric
@@ -65,6 +98,10 @@ TRAINING_CLIENT_CLEANING_MAP = [
     ("Phone", data_cleaning.clean_phone_number, "clean_phone"),
     ("State", data_cleaning.standardize_state_name, "standardize_state"),
     ("Gender", data_cleaning.map_gender_to_sex, "map_gender"),
+    ("Ethnicity", data_cleaning.map_ethnicity_to_xsd, "map_ethnicity"),
+    ("Disabilities", data_cleaning.map_disability_to_xsd, "map_disability"),
+    ("Military Status", data_cleaning.map_military_status_to_xsd, "map_military_status"),
+    ("Race", _map_each(data_cleaning.map_race_to_xsd), "map_race"),
 ]
 
 
@@ -126,9 +163,12 @@ def _diff_row(
             continue
 
         original_str = str(original).strip()
-        cleaned = str(func(original_str))
+        cleaned = str(func(original_str)).strip()
 
-        if cleaned != original_str and cleaned != "":
+        # A cleaned value of "" is a value dropped from the XML -- an
+        # unreadable phone, an unrecognised gender. It used to be skipped here,
+        # so a dropped value looked exactly like an untouched one.
+        if cleaned != original_str:
             diffs.append({
                 "row": row_index,
                 "record_id": str(record_id),

@@ -540,6 +540,10 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         """Phone is [0-9]{10}; a 7-digit number must be dropped, not truncated in."""
         tree = self._assert_valid([_make_counseling_row(**{'Contact: Phone': '555-0101'})])
         self.assertEqual(tree.findall('.//PhonePart1/Primary'), [])
+        # ...and dropping it is reported, once although Part 1 and Part 3 both read it.
+        dropped = [i for i in self.validator.issues if i['field_name'] == 'Contact: Phone']
+        self.assertEqual(len(dropped), 1)
+        self.assertIn("'555-0101' is not a 10-digit phone number", dropped[0]['message'])
 
     def test_unrecognized_funding_source_is_omitted(self):
         """A partner funding label is not in the XSD's SBA funding-code enum."""

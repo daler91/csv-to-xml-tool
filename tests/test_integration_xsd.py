@@ -540,6 +540,10 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         """Phone is [0-9]{10}; a 7-digit number must be dropped, not truncated in."""
         tree = self._assert_valid([_make_counseling_row(**{'Contact: Phone': '555-0101'})])
         self.assertEqual(tree.findall('.//PhonePart1/Primary'), [])
+        # ...and dropping it is reported, once although Part 1 and Part 3 both read it.
+        dropped = [i for i in self.validator.issues if i['field_name'] == 'Contact: Phone']
+        self.assertEqual(len(dropped), 1)
+        self.assertIn("'555-0101' is not a 10-digit phone number", dropped[0]['message'])
 
     def test_unrecognized_funding_source_is_omitted(self):
         """A partner funding label is not in the XSD's SBA funding-code enum."""
@@ -581,6 +585,179 @@ class TestSchemaComplianceRegressions(unittest.TestCase):
         self.assertEqual(address.find('City').text, 'Des Moines')
         self.assertEqual(address.find('ZipCode').text, '50312')
 
+    # Every Yes/No-typed element and the CSV column it is read from. The second
+    # pass (1.3) found three that emitted the raw cell ("yes" -> invalid) and
+    # four that compared against the literal 'Yes' ("yes" -> a silent "No").
+    YES_NO_COLUMNS = {
+        'Agree to Impact Survey': './/ClientRequest/SurveyAgreement',
+        'Conduct Business Online?': './/ClientIntake/ConductingBusinessOnline',
+        '8(a) Certified?(old)': './/ClientIntake/ClientIntake_Certified8a',
+        'Currently In Business?': './/ClientIntake/CurrentlyInBusiness',
+        'Are you currently exporting?(old)': './/ClientIntake/CurrentlyExporting',
+        'Reportable Impact': './/CounselorRecord/ReportableImpact',
+        'Verified To Be In Business': './/CounselorRecord/VerifiedToBeInBusiness',
+    }
+
+    def test_yes_no_answers_are_read_in_any_case(self):
+        for column, xpath in self.YES_NO_COLUMNS.items():
+            for raw, expected in [('yes', 'Yes'), ('Y', 'Yes'), ('TRUE', 'Yes'), ('1', 'Yes'),
+                                  ('no', 'No'), ('n', 'No'), ('False', 'No')]:
+                with self.subTest(column=column, raw=raw):
+                    self.validator = ValidationTracker()
+                    tree = self._assert_valid([_make_counseling_row(**{
+                        column: raw,
+                        # In-business answers need the in-business details.
+                        'Legal Entity of Business': 'LLC',
+                        'Nature of the Counseling Seeking?': 'Marketing/Sales',
+                    })])
+                    self.assertEqual(tree.find(xpath).text, expected)
+                    self.assertFalse(
+                        [i for i in self.validator.issues if i['field_name'] == column],
+                        f"a recognised answer should not raise an issue for {column}")
+
+    def test_unrecognised_yes_no_answer_takes_the_default_with_a_warning(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Maybe',
+            'Verified To Be In Business': 'undetermined',
+        })])
+        self.assertEqual(tree.find('.//CurrentlyInBusiness').text, 'No')
+        self.assertEqual(tree.find('.//VerifiedToBeInBusiness').text, 'Undetermined')
+        warnings = [i for i in self.validator.issues if i['field_name'] == 'Currently In Business?']
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['category'], 'invalid_value')
+        self.assertIn("'Maybe' is not Yes, No or Undetermined", warnings[0]['message'])
+
+    def test_race_and_branch_synonyms_resolve_to_schema_values(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Race': 'Caucasian',
+            'Veteran Status': 'Veteran',
+            'Branch Of Service': 'USMC',
+        })])
+        self.assertEqual([c.text for c in tree.findall('.//Race/Code')], ['White'])
+        self.assertEqual(tree.find('.//BranchOfService').text, 'Marine Corps')
+
+    def test_non_veteran_is_not_filed_as_a_veteran(self):
+        """'Non-veteran' used to map to Veteran -- and then raise a spurious
+        missing-BranchOfService error caused by the tool's own misreading."""
+        tree = self._assert_valid([_make_counseling_row(**{'Veteran Status': 'Non-veteran'})])
+        self.assertEqual(tree.find('.//MilitaryStatus').text, 'No military service')
+        self.assertFalse([i for i in self.validator.issues if i['field_name'] == 'BranchOfService'])
+
+    def test_blank_location_code_falls_back_to_the_default(self):
+        """A LocationCode column with a blank cell used to emit <LocationCode/>,
+        which the xs:integer type rejects."""
+        tree = self._assert_valid([_make_counseling_row(LocationCode='')])
+        self.assertTrue(tree.find('.//LocationCode').text.isdigit())
+
+
+
+@unittest.skipUnless(os.path.exists(COUNSELING_XSD), f"Counseling XSD not found at {COUNSELING_XSD}")
+class TestAuditTrail(unittest.TestCase):
+    """Second-pass Tier 2: every value the converter invents, overrides or
+    drops leaves an issue behind (CONTRIBUTING rule 4)."""
+
+    # The regression class's helpers, without inheriting (and re-running) its tests.
+    setUp = TestSchemaComplianceRegressions.setUp
+    _convert = TestSchemaComplianceRegressions._convert
+    _assert_valid = TestSchemaComplianceRegressions._assert_valid
+
+    def _issues(self, field, category=None):
+        return [i for i in self.validator.issues
+                if i['field_name'] == field and (category is None or i['category'] == category)]
+
+    def test_every_listed_fabrication_is_reported(self):
+        """Audit completeness: blank every column the converter defaults, and
+        each one must leave a FABRICATED_DEFAULT naming that column."""
+        from src.config import COUNSELING_FABRICATION_DEFAULTS
+        self._assert_valid([_make_counseling_row(**{
+            col: '' for col in COUNSELING_FABRICATION_DEFAULTS}, **{'Type of Session': 'Telephone'})])
+        reported = {i['field_name'] for i in self.validator.issues if i['category'] == 'fabricated_default'}
+        self.assertEqual(set(COUNSELING_FABRICATION_DEFAULTS) - reported, set())
+
+    def test_blank_duration_is_reported_only_where_contact_hours_are_required(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Duration (hours)': '', 'Type of Session': 'Telephone'})])
+        self.assertEqual(tree.find('.//CounselingHours/Contact').text, '0.5')
+        self.assertEqual(len(self._issues('Duration (hours)', 'fabricated_default')), 1)
+
+        self.validator = ValidationTracker()
+        self._assert_valid([_make_counseling_row(**{'Duration (hours)': '', 'Type of Session': 'Prepare Only'})])
+        self.assertEqual(self._issues('Duration (hours)'), [])
+
+    def test_zero_duration_says_what_the_cell_held(self):
+        self._assert_valid([_make_counseling_row(**{'Duration (hours)': '0', 'Type of Session': 'Telephone'})])
+        message = self._issues('Duration (hours)', 'fabricated_default')[0]['message']
+        self.assertIn("'0' could not be used", message)
+
+    def test_blank_part3_employees_is_omitted_not_zero(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Total Number of Employees': ''})])
+        self.assertIsNone(tree.find('.//CounselorRecord/TotalNumberOfEmployees'))
+
+    def test_part3_exporting_matches_part2_and_export_revenue_is_not_invented(self):
+        tree = self._assert_valid([_make_counseling_row(**{'Are you currently exporting?(old)': 'Yes'})])
+        self.assertEqual(tree.find('.//ClientIntake/CurrentlyExporting').text, 'Yes')
+        self.assertEqual(tree.find('.//CounselorRecord/CurrentlyExporting').text, 'Yes')
+        # No CSV column holds export revenue: unknown for an exporter, so omitted.
+        self.assertEqual(tree.findall('.//ExportGrossRevenuesOrSales'), [])
+
+        self.validator = ValidationTracker()
+        tree = self._assert_valid([_make_counseling_row(**{'Are you currently exporting?(old)': 'No'})])
+        self.assertEqual([e.text for e in tree.findall('.//ExportGrossRevenuesOrSales')], ['0', '0'])
+
+    def test_other_service_is_filed_as_other(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Services Provided': 'Other', 'Other Counseling Provided': 'Grant writing'})])
+        provided = tree.find('.//CounselingProvided')
+        self.assertEqual(provided.find('Code').text, 'Other')
+        self.assertEqual(provided.find('Other').text, 'Grant writing')
+
+    def test_reportable_impact_override_is_recorded(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Verified To Be In Business': 'No', 'Reportable Impact': 'Yes'})])
+        self.assertEqual(tree.find('.//VerifiedToBeInBusiness').text, 'Yes')
+        issue = self._issues('Verified To Be In Business', 'downgraded_value')
+        self.assertEqual(len(issue), 1)
+        self.assertIn("instead of 'No'", issue[0]['message'])
+
+    def test_accounting_negative_is_read_and_unreadable_money_is_named(self):
+        tree = self._assert_valid([_make_counseling_row(**{
+            'Profits/Losses': '(1,500)', 'Gross Revenues/Sales': 'n/a'})])
+        self.assertEqual(tree.find('.//ClientAnnualIncomePart2/ProfitLoss').text, '-1500')
+        self.assertEqual(self._issues('Profits/Losses'), [])
+        message = self._issues('Gross Revenues/Sales', 'fabricated_default')[0]['message']
+        self.assertIn("'n/a' could not be used", message)
+
+    def test_dropping_a_conditionally_required_section_is_an_error(self):
+        """An invalid, non-blank value passes the converter's "required for
+        in-business clients" check; when the schema guard then drops it, the
+        broken requirement must be an error, not just the drop's warning."""
+        self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Yes',
+            'Legal Entity of Business': 'Martian',
+            'Nature of the Counseling Seeking?': 'Martian',
+            'Veteran Status': 'Veteran',
+            'Branch Of Service': 'Starfleet',
+        })])
+        for column in ('Nature of the Counseling Seeking?', 'Legal Entity of Business', 'Branch Of Service'):
+            errors = self._issues(column, 'missing_required_field')
+            self.assertEqual(len(errors), 1, column)
+            self.assertEqual(errors[0]['severity'], 'error')
+
+    def test_a_valid_conditional_section_raises_nothing(self):
+        self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Yes',
+            'Legal Entity of Business': 'LLC',
+            'Nature of the Counseling Seeking?': 'Marketing/Sales',
+        })])
+        self.assertEqual(self._issues('Legal Entity of Business'), [])
+        self.assertEqual(self._issues('Nature of the Counseling Seeking?'), [])
+
+    def test_long_notes_keep_their_text_and_report_the_cut(self):
+        notes = "Met with Mr. Smith " + ("word " * 400)
+        tree = self._assert_valid([_make_counseling_row(Comments=notes)])
+        kept = tree.find('.//CounselorNotes').text
+        self.assertGreater(len(kept), 800)
+        self.assertLessEqual(len(kept), 1000)
+        self.assertEqual(len(self._issues('Comments', 'truncated_value')), 1)
 
 if __name__ == '__main__':
     unittest.main()

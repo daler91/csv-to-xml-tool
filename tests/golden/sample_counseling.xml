@@ -64,7 +64,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>
@@ -78,7 +77,7 @@
       <CounselingProvided>
         <Code>Business Start-up/Preplanning</Code>
       </CounselingProvided>
-      <SessionType>Telephone</SessionType>
+      <SessionType>Face-to-face</SessionType>
       <Language>
         <Code>English</Code>
       </Language>
@@ -152,7 +151,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>
@@ -243,7 +241,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>

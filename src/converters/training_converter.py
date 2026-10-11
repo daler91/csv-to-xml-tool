@@ -11,6 +11,7 @@ from collections import defaultdict
 from .base_converter import BaseConverter, EmptyCSVError
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
+from ..schema_rules import SchemaGuard
 from ..xml_utils import create_element
 
 class TrainingConverter(BaseConverter):
@@ -21,6 +22,7 @@ class TrainingConverter(BaseConverter):
         super().__init__(logger, validator)
         self.config = TrainingConfig()
         self.general_config = GeneralConfig()
+        self._schema_guard = SchemaGuard("training", validator, logger)
 
     def _get_column_value(self, record, key, default=''):
         """
@@ -196,8 +198,7 @@ class TrainingConverter(BaseConverter):
         create_element(partners_element, 'Code', self.config.DEFAULT_TRAINING_PARTNER_CODE)
 
         format_val = self._get_column_value(first_record, "event_type")
-        program_format_text = data_cleaning.map_value(format_val, self.config.PROGRAM_FORMAT_MAPPINGS, self.config.DEFAULT_PROGRAM_FORMAT, False)
-        create_element(record, 'ProgramFormatType', program_format_text)
+        create_element(record, 'ProgramFormatType', self._resolve_program_format(format_val, event_id))
 
         create_element(record, 'DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES)
         language_element = create_element(record, 'Language')
@@ -206,6 +207,10 @@ class TrainingConverter(BaseConverter):
         cosponsor_name = self._get_column_value(first_record, "cosponsor")
         if cosponsor_name and cosponsor_name.lower() != 'n/a':
             create_element(record, 'CosponsorsName', cosponsor_name)
+
+        # Last, on the finished record: lengths, enumerations, patterns and
+        # ranges straight from the XSD (see src/schema_rules.py).
+        self._schema_guard.enforce(record, str(event_id), (root.tag,))
 
     def convert(self, input_path: str, output_path: str):
         self.logger.info(f"Starting conversion of training data: {input_path}")
@@ -290,7 +295,7 @@ class TrainingConverter(BaseConverter):
             if valid_source.lower() == cleaned.lower():
                 return valid_source
         self.validator.add_issue(
-            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "FundingSource",
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Funding Source",
             f"Funding Source '{cleaned}' is not a recognized SBA funding code; omitted from the XML.",
         )
         return None
@@ -300,11 +305,13 @@ class TrainingConverter(BaseConverter):
 
         A value already in the SBA controlled vocabulary is returned verbatim (so a
         populated "Training Topic" column is authoritative); otherwise a known synonym
-        is translated; an empty value falls back to the default silently; an
-        unrecognized value falls back to the default and is flagged for review.
+        is translated. An empty or unrecognized value falls back to the default,
+        and both are recorded -- the blank case is the common one.
         """
         cleaned = str(topic_val).strip() if topic_val else ''
         if not cleaned:
+            self._warn_fabricated_default(event_id, 'Training Topic', self.config.DEFAULT_TRAINING_TOPIC,
+                                          'TrainingTopic/Code')
             return self.config.DEFAULT_TRAINING_TOPIC
         for valid_topic in self.config.VALID_TRAINING_TOPICS:
             if valid_topic.lower() == cleaned.lower():
@@ -313,10 +320,28 @@ class TrainingConverter(BaseConverter):
         if mapped:
             return mapped
         self.validator.add_issue(
-            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "TrainingTopic",
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Training Topic",
             f"Unrecognized Training Topic '{cleaned}'; defaulted to '{self.config.DEFAULT_TRAINING_TOPIC}'.",
         )
         return self.config.DEFAULT_TRAINING_TOPIC
+
+    def _resolve_program_format(self, format_val, event_id):
+        """Map Class/Event Type onto ProgramFormatType. A blank or unrecognized
+        value falls back to the default -- recorded, like the training topic,
+        rather than turning "Workshop" into "In-person" silently."""
+        default = self.config.DEFAULT_PROGRAM_FORMAT
+        cleaned = str(format_val).strip() if format_val else ''
+        if not cleaned:
+            self._warn_fabricated_default(event_id, 'Class/Event Type', default, 'ProgramFormatType')
+            return default
+        mapped = data_cleaning.map_value(cleaned, self.config.PROGRAM_FORMAT_MAPPINGS, None, False)
+        if mapped:
+            return mapped
+        self.validator.add_issue(
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Class/Event Type",
+            f"Unrecognized Class/Event Type '{cleaned}'; recorded as '{default}'.",
+        )
+        return default
 
     @staticmethod
     def _count_sex(rows, gender_col):

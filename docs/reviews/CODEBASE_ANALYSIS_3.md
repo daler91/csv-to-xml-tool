@@ -89,7 +89,10 @@ worker; the federal-filing correctness backlog has not moved.
 
 ## Tier A — Output correctness (core)
 
-### A.1 `CounselorNotes` truncation can destroy the note, unaudited — `[OPEN]` — HIGH
+### A.1 `CounselorNotes` truncation can destroy the note, unaudited — `[FIXED]` — HIGH
+
+> **Fixed:** a sentence or word boundary only counts in the last fifth of the 1,000-character
+> window, and the cut is recorded as `TRUNCATED_VALUE` on `Comments`.
 
 `src/data_cleaning.py:613-627`. `truncate_counselor_notes` cuts at the *last* `.`/`!`/`?`/newline
 anywhere in the first 1000 chars, however early. No `TRUNCATED_VALUE` issue is recorded.
@@ -98,7 +101,10 @@ Repro: Comments = `"Met with Mr. Smith "` + 1,700 chars without a period →
 `<CounselorNotes>Met with Mr.</CounselorNotes>`. Fix: only accept a boundary in the last ~20% of
 the window, otherwise fall back to the word boundary; record the truncation.
 
-### A.2 Control characters produce a non-well-formed file — `[OPEN]` — HIGH
+### A.2 Control characters produce a non-well-formed file — `[FIXED]` — HIGH
+
+> **Fixed:** `src/schema_rules.SchemaGuard` replaces every character XML 1.0 cannot carry with a
+> space, on every element, and records a `STANDARDIZED_VALUE` warning.
 
 `src/xml_utils.py` (`create_element`) writes cell text verbatim. XML 1.0 forbids `\x00–\x08`,
 `\x0b`, `\x0c`, `\x0e–\x1f`. Only `Comments` is safe (via `clean_whitespace`).
@@ -119,7 +125,13 @@ in `create_element` and record a `DOWNGRADED_VALUE` issue.
   3's error reads "Row 2 (Contact CCC)". The contact id is right, so it is recoverable — but the
   row number is what users look at.
 
-### A.4 Numbers: no range checks; accounting negatives become a fabricated zero — `[OPEN]` — MEDIUM
+### A.4 Numbers: no range checks; accounting negatives become a fabricated zero — `[FIXED]` — MEDIUM
+
+> **Range checks fixed** by `src/schema_rules.py`: a value outside the XSD's min/max is omitted with
+> an `INVALID_VALUE` warning when the element is optional, or reported as an error when required.
+> **Accounting negatives fixed** too: `clean_numeric` reads `(1,500)` as `-1500`, and a cell that
+> still can't be read is reported as "'n/a' could not be used and was replaced with '0'" rather than
+> "Blank value defaulted".
 
 `src/data_cleaning.py:527-551`; `counseling_converter.py:348,359,636-641`.
 
@@ -141,7 +153,10 @@ issue. Salesforce report builders produce duplicate column labels easily. Fix: d
 `DEMOGRAPHIC_KEYWORDS['gender']` lists the abbreviations but is dead config. Counseling `Gender=F` →
 `Sex` omitted, no issue. Training rows `F`, `M` → no Female/Male counts.
 
-### A.7 All rows skipped → schema-invalid empty file — `[OPEN]` — MEDIUM
+### A.7 All rows skipped → schema-invalid empty file — `[FIXED]` — MEDIUM
+
+> **Fixed:** the counseling (and so training-client) converter now raises `EmptyCSVError` with a
+> file-level error when no row converted, and writes nothing.
 
 `counseling_converter.py:131-135` writes `<CounselingInformation />` when every row was skipped,
 which fails the XSD (`minOccurs=1`). `training_converter.py:75-82` already raises `EmptyCSVError`

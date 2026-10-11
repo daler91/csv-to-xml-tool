@@ -122,6 +122,7 @@ so the results page can show a before/after diff for each value.
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
+| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; anything still invalid omitted as `INVALID_VALUE` where the element is optional, or reported as an error where it is required |
 
 ### Issue categories
 
@@ -155,6 +156,29 @@ a `FABRICATED_DEFAULT` issue naming the column and the value emitted.
 | `Mailing Country` | `United States` |
 | `Conduct Business Online?` | `No` |
 | `8(a) Certified?(old)` | `No` |
+| `Are you currently exporting?(old)` | `No` (in both Part 2 and Part 3) |
+| `Duration (hours)` | `0.5` contact hours — only for session types that require contact hours; a `0` is replaced the same way |
+| `Services Provided` | `Business Start-up/Preplanning` |
+
+A cell that is present but unusable (`n/a`, a `0` duration) is replaced the same
+way, and the issue quotes what the cell held. Accounting-format negatives such as
+`(1,500)` are read as `-1500`, not replaced.
+
+What is **not** fabricated: a blank Part 3 `Total Number of Employees` is omitted,
+as in Part 2, rather than filed as `0`; `ExportGrossRevenuesOrSales` (no CSV column
+holds it) is `0` only for a client who is not exporting and omitted for an
+exporter; `Services Provided = Other` is filed as `Other`. When `Reportable Impact`
+is `Yes`, `Verified To Be In Business` is recorded as `Yes` whatever the CSV says,
+and that override is recorded as a `DOWNGRADED_VALUE`. Counselor notes over 1,000
+characters are cut at a sentence or word boundary near the limit and recorded as
+`TRUNCATED_VALUE`.
+
+The training converter records a `FABRICATED_DEFAULT` for a blank `Training Topic`
+(→ `Technology`) or `Class/Event Type` (→ `In-person`), and an `INVALID_VALUE` for an
+event type it doesn't recognize. Values configured rather than read — the location
+code, sessions, hours, partner, fees and language for training; hours trained,
+employees trained, session type and every other default the shorter training-client
+form has no column for — are listed once per file in a `configured_defaults` warning.
 
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at

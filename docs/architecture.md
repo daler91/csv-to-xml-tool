@@ -65,7 +65,7 @@ Redis or Postgres.
 
 ## The conversion pipeline
 
-Inside `src/`, a conversion is always the same six steps:
+Inside `src/`, a conversion is always the same seven steps:
 
 1. **Read** — `csv.DictReader` with `utf-8-sig`, so an Excel BOM does not turn
    the first header into `﻿Contact ID`. All three converters use stdlib
@@ -85,11 +85,18 @@ Inside `src/`, a conversion is always the same six steps:
    errors that dominate hand-built SBA XML. `src/xml_utils.emit_optional` is the
    rule that a blank cell produces *no element*, never an empty one — an empty
    `<ZipCode/>` fails the `\d{5}` pattern, while omitting it is valid.
-6. **Validate the document** — `src/xml_validator.py` runs lxml against the
+6. **Enforce the schema's facets** — `src/schema_rules.py` reads each
+   element's length, enumeration, pattern and range facets from the bundled
+   XSD and applies them to the finished record: control characters are
+   replaced, enumeration values are matched case-insensitively, over-length
+   text is truncated (never identifiers), and a value that still fails is
+   omitted where the schema allows or reported as an error where it doesn't —
+   each with an issue against the row.
+7. **Validate the document** — `src/xml_validator.py` runs lxml against the
    bundled XSD with `resolve_entities=False`, and `src/xsd_error_mapping.py`
    translates each schema error back to a CSV row and column name.
 
-Step 6 is the part worth protecting. An unmapped lxml error reads
+Step 7 is the part worth protecting. An unmapped lxml error reads
 `Line 20: Element 'ZipCode': '' is not a valid value`. Mapped, it reads
 *"Row 1 (Contact 003XX000004TMM1): 'Mailing Zip/Postal Code' is required but
 blank."* That traceability is the tool's most valuable output.

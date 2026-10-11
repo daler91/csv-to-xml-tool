@@ -98,7 +98,12 @@ produces **schema-invalid output with no issue recorded** — the row converts "
 tracker reports zero errors, and only the post-hoc XSD validation (which the argparse CLI does not
 run, see [cli.md](../cli.md)) reveals the problem.
 
-### 1.1 Length facets are never enforced — `[OPEN]`
+### 1.1 Length facets are never enforced — `[FIXED]`
+
+> **Fixed** by `src/schema_rules.py` (third pass): every `maxLength` is read from the XSD and
+> enforced on the finished record — text is truncated with a `TRUNCATED_VALUE` warning (a middle
+> name keeps its initial), and identifiers (`PartnerClientNumber`/`PartnerSessionNumber`) are never
+> cut; an over-length one is reported as an error. Covered by `tests/test_schema_rules.py`.
 
 | Element | XSD facet | Converter | Result with over-length input |
 |---|---|---|---|
@@ -121,7 +126,10 @@ Street1: 80, City: 80, PartnerClientNumber: 20, PartnerSessionNumber: 20` — th
 just not wired to anything, and there is no `TRUNCATED_VALUE` issue emitted anywhere in the codebase
 despite the category existing.
 
-### 1.2 `LocationCode` present-but-blank emits `<LocationCode/>` — `[OPEN]`
+### 1.2 `LocationCode` present-but-blank emits `<LocationCode/>` — `[FIXED]`
+
+> **Fixed** (third pass): read with `or`, so a blank cell takes the default; a non-numeric one is
+> reported against its row by `src/schema_rules.py`.
 
 `counseling_converter.py:253`: `row.get('LocationCode', DEFAULT_LOCATION_CODE)`. A CSV that carries
 the column with an empty cell yields an empty element; `LocationCode` is `xs:integer` with
@@ -129,7 +137,12 @@ the column with an empty cell yields an empty element; `LocationCode` is `xs:int
 the same file fixes (with a comment explaining it) at `:302` for `SurveyAgreement` and `:418` for
 `ConductingBusinessOnline`. A non-numeric cell fails the same way.
 
-### 1.3 Yes/No fields are case-sensitive, in two different wrong ways — `[OPEN]`
+### 1.3 Yes/No fields are case-sensitive, in two different wrong ways — `[FIXED]`
+
+> **Fixed** (third pass): all seven call sites below go through
+> `CounselingConverter._yes_no`, built on `is_affirmative`/`is_negative`; an unrecognised answer
+> takes the default *with* an `INVALID_VALUE` warning. `test_yes_no_answers_are_read_in_any_case`
+> covers every column with `yes`/`Y`/`TRUE`/`1`/`no`/`n`/`False`.
 
 Nine elements take a Yes/No answer. Their handling:
 
@@ -150,10 +163,17 @@ client who answered `yes` to "Currently In Business?" is filed as **not** in bus
 in-business-only sections (`LegalEntity`, `CounselingSeeking`) are skipped, and nothing in the report
 says so. `is_affirmative`/`is_negative` exist in `data_cleaning.py` and are used three lines away.
 
-### 1.4 Enumerated elements with no mapping and no pre-check — `[OPEN]`
+### 1.4 Enumerated elements with no mapping and no pre-check — `[FIXED]`
 
-The first pass added mappers for `Ethnicity`, `Sex`, `Disability`, `MilitaryStatus`,
-`FundingSource` and `ExportCountries`. These enumerations still receive the raw CSV label:
+> **Fixed** (third pass). `src/schema_rules.py` reads every enumeration, pattern and numeric facet
+> from the XSD; values are matched case-insensitively (`llc` → `LLC`, `english` → `English`), and an
+> unmatched value is omitted with an `INVALID_VALUE` warning where the element is optional (`State`,
+> `Email`, `FIPS_Code`, `BusinessType`, `BranchOfService`, Part 3 `TotalNumberOfEmployees`), the
+> whole optional code list is dropped with `DOWNGRADED_VALUE` (`Media`), or — where the element is
+> required — the value is kept and reported as an error. Race and branch synonyms resolve
+> (`Caucasian` → `White`, `USMC` → `Marine Corps`). The pre-check: the `/preview` data-quality panel
+> now runs the real converter over the file and lists these per column before conversion
+> (`data_validation._conversion_value_checks`).
 
 | Element | Enum size | Verified failing input |
 |---|---|---|
@@ -175,7 +195,10 @@ the fact. Since the enumerations are already parsed from the XSD by the drift-gu
 omit with a warning otherwise" — the pattern `_build_export_countries` already implements — would
 close all of them at once.
 
-### 1.5 Training: `Caucasian` is counted as Asian *and* White *and* underserved — `[OPEN]`
+### 1.5 Training: `Caucasian` is counted as Asian *and* White *and* underserved — `[FIXED]`
+
+> **Fixed** (third pass): `classify_races` matches each keyword at the start of a word, so
+> `asian` no longer matches inside `Caucasian` while `middle east` still matches `Middle Eastern`.
 
 `classify_races` (`data_cleaning.py:416-432`) is a substring test, and `'asian' in 'caucasian'` is true.
 Verified: two `Caucasian` attendees produce
@@ -191,7 +214,12 @@ member of an underserved group. The keyword table lists `caucasian` under `white
 minorities because `any(c != 'white' for c in person_races)` sees `asian`. The fix is a word-boundary
 match, or checking the longer keywords first.
 
-### 1.6 `Non-veteran` maps to `Veteran` — `[OPEN]`
+### 1.6 `Non-veteran` maps to `Veteran` — `[FIXED]`
+
+> **Fixed** (third pass): a negated status (`Non-veteran`, `Not Veteran`, `Not a veteran`) maps to
+> `No military service` in `map_military_status_to_xsd` and counts as nothing in
+> `classify_military`. The shipped `training-client-sample.csv` had two `Not Veteran` attendees
+> filed as `Veteran`; its golden output was regenerated.
 
 `map_military_status_to_xsd` (`data_cleaning.py:507`) walks `_MILITARY_STATUS_XSD_RULES` and the
 last rule is `("veteran", "Veteran")`, with no negation check. Verified: `Non-veteran` and
@@ -210,7 +238,9 @@ satisfy the schema, record a `DOWNGRADED_VALUE`."* Each item below emits or drop
 issue recorded and no cleaning-diff entry**. All produce schema-valid XML, so nothing downstream
 notices.
 
-### 2.1 Contact hours are fabricated as `0.5` — `[OPEN]`
+### 2.1 Contact hours are fabricated as `0.5` — `[FIXED]`
+
+> **Fixed** (third pass): a blank or zero `Duration (hours)` that is replaced by `0.5` records a `FABRICATED_DEFAULT`, and the column is in `COUNSELING_FABRICATION_DEFAULTS`, so the mapping page warns about blanks (only for session types that require contact hours).
 
 `counseling_converter.py:723`: when the session type requires contact hours and `Duration (hours)`
 is blank or zero, `contact_val = "0.5"`. Verified: a blank duration emits `<Contact>0.5</Contact>`
@@ -218,13 +248,17 @@ with no issue. Half an hour of federally reported counseling per affected row, i
 `Duration (hours)` is not in `COUNSELING_FABRICATION_DEFAULTS`, so the mapping page does not warn
 about the column either.
 
-### 2.2 Part 3 `TotalNumberOfEmployees` is fabricated as `0` — `[OPEN]`
+### 2.2 Part 3 `TotalNumberOfEmployees` is fabricated as `0` — `[FIXED]`
+
+> **Fixed** (third pass): omitted when blank, as in Part 2. The goldens lost eleven `<TotalNumberOfEmployees>0</TotalNumberOfEmployees>` lines and nothing else.
 
 `counseling_converter.py:616`: `self._mapped(row, 'total_employees_part3', default='0')`. Part 2
 (`:434`) omits the element when blank; Part 3 emits `<TotalNumberOfEmployees>0</TotalNumberOfEmployees>`.
 Verified. A blank cell and "zero employees" are indistinguishable in the filing.
 
-### 2.3 Part 3 `CurrentlyExporting` is hardcoded to `No`, contradicting Part 2 — `[OPEN]`
+### 2.3 Part 3 `CurrentlyExporting` is hardcoded to `No`, contradicting Part 2 — `[FIXED]`
+
+> **Fixed** (third pass): Part 3 repeats Part 2's answer; a blank answer is a `FABRICATED_DEFAULT`. `ExportGrossRevenuesOrSales` has no CSV column: it is `0` only for a client who is not exporting and omitted for an exporter.
 
 `counseling_converter.py:609`: `create_element(counselor_record, 'CurrentlyExporting',
 DEFAULT_BUSINESS_STATUS)` — the CSV column `Are you currently exporting?(old)` that Part 2 reads is
@@ -235,7 +269,9 @@ likewise hardcoded to `0` in both parts (`:450,633`) even for exporters. Neither
 warning; the counseling path has no equivalent of the training converter's
 `_warn_constant_defaults`.
 
-### 2.4 `Services Provided = Other` is rewritten to `Business Operations/Management` — `[OPEN]`
+### 2.4 `Services Provided = Other` is rewritten to `Business Operations/Management` — `[FIXED]`
+
+> **Fixed** (third pass): `Other` is filed as `Other`. A blank `Services Provided` defaulted to `Business Start-up/Preplanning` is now a `FABRICATED_DEFAULT` too.
 
 `counseling_converter.py:673` replaces any `Other` code with `Business Operations/Management`
 unconditionally. `Other` **is** a member of the `CounselingProvided/Code` enumeration (the 22nd
@@ -244,14 +280,18 @@ Provided=Grant writing` emits `<Code>Business Operations/Management</Code><Other
 — a service the counselor did not say they provided, with the "Other" text attached to it. No
 `DOWNGRADED_VALUE`. The line dates from the original converter (2026-04) and no commit explains it.
 
-### 2.5 `ReportableImpact=Yes` silently overrides `VerifiedToBeInBusiness` — `[OPEN]`
+### 2.5 `ReportableImpact=Yes` silently overrides `VerifiedToBeInBusiness` — `[FIXED]`
+
+> **Fixed** (third pass): the override is kept (it is a business rule) but recorded as a `DOWNGRADED_VALUE` naming the original answer.
 
 `counseling_converter.py:600-601`. Verified: `Verified To Be In Business=No` plus
 `Reportable Impact=Yes` emits `<VerifiedToBeInBusiness>Yes</VerifiedToBeInBusiness>`. The rule may
 be a legitimate SBA business rule, but overriding an explicit answer is exactly what
 `DOWNGRADED_VALUE` was introduced to record.
 
-### 2.6 Unparseable phone numbers vanish without a trace — `[OPEN]`
+### 2.6 Unparseable phone numbers vanish without a trace — `[FIXED]`
+
+> **Fixed** (third pass): a phone that can't be read as ten digits records an `INVALID_FORMAT` warning (once per record), and the cleaning diff now includes every value a cleaner drops, with an empty "after" that the results page shows as *left out of the XML*.
 
 The first pass made `clean_phone_number` return `""` for anything not normalizable to ten digits
 (correct). But `_build_phone` (`:785`) just omits the element, records nothing, and the cleaning
@@ -261,7 +301,13 @@ phone number is gone from the filing and every surface the tool offers says noth
 same `cleaned != ""` guard hides every other value the cleaners drop (a bad date, an unknown
 country, a `Prefer not to say` gender).
 
-### 2.7 Training-side silent defaults — `[OPEN]`
+### 2.7 Training-side silent defaults — `[FIXED]`
+
+> **Fixed** (third pass): a blank `Training Topic` or `Class/Event Type` records a
+> `FABRICATED_DEFAULT`, and an unrecognized event type an `INVALID_VALUE` (both now name the CSV
+> column). The training-client converter records one file-level `FABRICATED_DEFAULT` listing every
+> configured value it stamps into records whose column the CSV lacks. `Address` and `Street Line 1`
+> are no longer City aliases.
 
 - **Blank `Training Topic` → `Technology`, silently.** `_resolve_training_topic:307-308` returns the
   default for an empty value with no issue; its own docstring says so. An unrecognized value at least
@@ -279,7 +325,9 @@ country, a `Prefer not to say` gender).
 - **`Address` and `Street Line 1` are accepted as aliases for City** (`config.py:591`). Verified: a
   training CSV with `Address=123 Main St` and no city column emits `<City>123 Main St</City>`.
 
-### 2.8 The cleaning diff does not cover the enum mappers — `[OPEN]`
+### 2.8 The cleaning diff does not cover the enum mappers — `[FIXED]`
+
+> **Fixed** (third pass): `COUNSELING_CLEANING_MAP` now covers `Ethnicity:`, `Disability`, `Veteran Status`, `Branch Of Service`, `Race`, `Export Countries` and `Comments`, and the training-client map its own ethnicity, disability, military and race columns. `tests/test_diff_service.py` is the first test of the diff service.
 
 `converters.md` says *"Every change is recorded, so the results page can show a before/after diff
 for each value."* `diff_service.COUNSELING_CLEANING_MAP` has no entry for `Ethnicity:`, `Disability`,
@@ -522,13 +570,13 @@ Every counseling fixture in the repository — `test_integration_xsd.py`, `test_
 carries **16 of the 74** counseling columns and three rows; it exercises none of the address, phone,
 Part 3, certification or referral paths. It is a smoke test, not a compliance test. Pair it with 5.1.
 
-### 5.3 Documentation claims that the code does not meet — `[OPEN]`
+### 5.3 Documentation claims that the code does not meet — `[PARTIAL]`
 
 | Claim | Where | Reality |
 |---|---|---|
-| "long text truncated at the schema's limits" | `README.md:73` | Only `CounselorNotes` (1.1) |
-| "Every change is recorded, so the results page can show a before/after diff" | `converters.md` | Enum mappers and dropped values are not in the diff (2.6, 2.8) |
-| Fabricated-defaults table lists nine columns | `converters.md` | `Duration (hours)`, Part 3 employees, Part 3 exporting, training topic, program format, training-client constants are all fabricated too (Tier 2) |
+| ~~"long text truncated at the schema's limits"~~ | `README.md:73` | True since the third pass's `schema_rules.py` (1.1) |
+| ~~"Every change is recorded, so the results page can show a before/after diff"~~ | `converters.md` | True since the third pass (2.6, 2.8) |
+| ~~Fabricated-defaults table lists nine columns~~ | `converters.md` | Corrected in the third pass (2.1–2.5, 2.7) |
 | `CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci` | `reviews/CODEBASE_ANALYSIS.md:315` | Dockerfile still uses `npm install` (3.4) |
 
 ### 5.4 Still open from the first pass, unchanged

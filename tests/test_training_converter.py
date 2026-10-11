@@ -288,6 +288,26 @@ class TestTrainingConverter(unittest.TestCase):
         self.assertEqual(demographics['race']['asian'], 1)
         self.assertEqual(demographics['minorities'], 2)  # both attendees non-white
 
+    def test_caucasian_is_white_only_not_asian_or_underserved(self):
+        """'asian' is a substring of 'caucasian': a bare substring test reported
+        every white attendee exported as "Caucasian" to SBA as Asian and as a
+        member of an underserved group."""
+        converter = TrainingConverter(self.logger, self.validator)
+        demographics = converter._calculate_demographics(_rows(**{
+            'Race': ['Caucasian', 'Caucasian'],
+            'Ethnicity': ['Non-Hispanic', 'Non-Hispanic'],
+        }))
+        self.assertEqual(demographics['race']['white'], 2)
+        self.assertEqual(demographics['race']['asian'], 0)
+        self.assertEqual(demographics['minorities'], 0)
+
+    def test_negated_veteran_status_is_not_counted_as_veteran(self):
+        converter = TrainingConverter(self.logger, self.validator)
+        demographics = converter._calculate_demographics(_rows(**{
+            'Military Status': ['Non-veteran', 'Not Veteran', 'Not a veteran', 'Veteran'],
+        }))
+        self.assertEqual(demographics['veterans'], 1)
+
     def test_demographics_service_disabled_counts_as_veteran(self):
         """A service-disabled veteran is counted in BOTH Veterans and ServiceDisabledVeterans."""
         converter = TrainingConverter(self.logger, self.validator)
@@ -387,11 +407,37 @@ class TestTrainingConverter(unittest.TestCase):
         num = root.find('ManagementTrainingRecord/PartnerTrainingNumber')
         self.assertEqual(num.text, 'EVT-001')
 
+    def test_blank_topic_and_unknown_event_type_are_reported(self):
+        """Second pass 2.7: a blank Training Topic became 'Technology' and
+        'Workshop' became 'In-person', both silently."""
+        root = self._convert_and_parse([self._make_training_row(**{
+            'Training Topic': '', 'Class/Event Type': 'Workshop'})])
+        record = root.find('ManagementTrainingRecord')
+        self.assertEqual(record.findtext('TrainingTopic/Code'), 'Technology')
+        self.assertEqual(record.findtext('ProgramFormatType'), 'In-person')
+        by_field = {i['field_name']: i for i in self.validator.issues}
+        self.assertEqual(by_field['Training Topic']['category'], 'fabricated_default')
+        self.assertEqual(by_field['Class/Event Type']['category'], 'invalid_value')
+        self.assertIn("'Workshop'", by_field['Class/Event Type']['message'])
+
+    def test_known_event_type_synonym_is_not_reported(self):
+        root = self._convert_and_parse([self._make_training_row(**{'Class/Event Type': 'webinar'})])
+        self.assertEqual(root.findtext('ManagementTrainingRecord/ProgramFormatType'), 'Online')
+        self.assertFalse([i for i in self.validator.issues if i['field_name'] == 'Class/Event Type'])
+
+    def test_street_address_is_not_read_as_the_city(self):
+        """'Address' used to be an alias for City, filing '123 Main St' as the city."""
+        row = self._make_training_row()
+        row.pop('City', None)
+        row['Address'] = '123 Main St'
+        root = self._convert_and_parse([row])
+        self.assertNotEqual(root.findtext('ManagementTrainingRecord/TrainingLocation/City'), '123 Main St')
+
     def test_issue_event_id_matches_record_id(self):
         """Training issues are keyed by event id; event_id mirrors record_id so
         the Event ID column has one uniform meaning across formats."""
         self._convert_and_parse([self._make_training_row(**{'Training Topic': 'Basket Weaving'})])
-        topic_warnings = [i for i in self.validator.issues if i['field_name'] == 'TrainingTopic']
+        topic_warnings = [i for i in self.validator.issues if i['field_name'] == 'Training Topic']
         self.assertEqual(len(topic_warnings), 1)
         self.assertEqual(topic_warnings[0]['record_id'], 'EVT-001')
         self.assertEqual(topic_warnings[0]['event_id'], 'EVT-001')

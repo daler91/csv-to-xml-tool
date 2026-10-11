@@ -27,7 +27,7 @@
       </Race>
       <Ethnicity>Non Hispanic or Latino</Ethnicity>
       <Sex>Female</Sex>
-      <MilitaryStatus>Veteran</MilitaryStatus>
+      <MilitaryStatus>No military service</MilitaryStatus>
       <CurrentlyInBusiness>No</CurrentlyInBusiness>
       <CurrentlyExporting>No</CurrentlyExporting>
       <CompanyName>Acme LLC</CompanyName>
@@ -61,7 +61,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>
@@ -120,7 +119,7 @@
       </Race>
       <Ethnicity>Non Hispanic or Latino</Ethnicity>
       <Sex>Female</Sex>
-      <MilitaryStatus>Veteran</MilitaryStatus>
+      <MilitaryStatus>No military service</MilitaryStatus>
       <CurrentlyInBusiness>No</CurrentlyInBusiness>
       <CurrentlyExporting>No</CurrentlyExporting>
       <CompanyName>Nguyen Consulting</CompanyName>
@@ -154,7 +153,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>
@@ -247,7 +245,6 @@
       <VerifiedToBeInBusiness>Undetermined</VerifiedToBeInBusiness>
       <ReportableImpact>No</ReportableImpact>
       <CurrentlyExporting>No</CurrentlyExporting>
-      <TotalNumberOfEmployees>0</TotalNumberOfEmployees>
       <ClientAnnualIncomePart3>
         <GrossRevenues>0</GrossRevenues>
         <ProfitLoss>0</ProfitLoss>

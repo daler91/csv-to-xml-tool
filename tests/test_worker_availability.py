@@ -30,6 +30,7 @@ from app.services.progress import registry as progress_registry  # noqa: E402
 
 _SCHEMAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schemas")
 
+
 # A quote opened and never closed: the csv module reads the rest of the file
 # as one cell and gives up past its 131,072-character field limit.
 def _unclosed_quote_csv():
@@ -38,9 +39,12 @@ def _unclosed_quote_csv():
     from tests.test_worker_content_routes import COUNSELING_CSV
 
     header, row = COUNSELING_CSV.splitlines()[:2]
-    return (f"{header},Comments\n"
-            f'{row},"' + ("x" * 140_000) + "\n"
-            f"{row},fine\n")
+    lines = [
+        f"{header},Comments",
+        f'{row},"' + "x" * 140_000,
+        f"{row},fine",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _fix(xml_content):
@@ -88,7 +92,7 @@ class _StalledRedis:
         self.calls = 0
 
     def __getattr__(self, name):
-        def _timeout(*args, **kwargs):
+        def _timeout(*_args, **_kwargs):
             self.calls += 1
             raise TimeoutError("Timeout reading from socket")
 

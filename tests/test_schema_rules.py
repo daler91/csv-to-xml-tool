@@ -187,6 +187,20 @@ class TestSchemaGuard(unittest.TestCase):
         self.assertEqual(self._run(), [])
         self.assertEqual(employees.text, "12")
 
+    def test_leading_zero_survives_in_a_patterned_integer(self):
+        """FIPS_Code is xs:int with a \\d{5} pattern: "01001" is valid and must
+        not be rewritten to "1001", which the pattern rejects."""
+        fips = self._sub(self.record, "ClientIntake", "FIPS_Code", "01001")
+        self.assertEqual(self._run(), [])
+        self.assertEqual(fips.text, "01001")
+
+    def test_pattern_is_checked_after_the_integer_rewrite(self):
+        intake = self._sub(self.record, "ClientIntake", None)
+        self._sub(intake, "FIPS_Code", "1001.0")
+        issues = self._run()
+        self.assertIsNone(intake.find("FIPS_Code"))
+        self.assertIn("not in the format SBA requires", issues[0][3])
+
     def test_out_of_range_optional_number_is_omitted(self):
         income = self._sub(self.record, "ClientIntake", "ClientAnnualIncomePart2", None)
         self._sub(income, "GrossRevenues", "-500")

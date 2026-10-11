@@ -261,10 +261,6 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
             more = f" (and {len(rule.enumeration) - 8} more)" if len(rule.enumeration) > 8 else ""
             return text, f"is not one of the values SBA accepts: {shown}{more}"
         text = resolved
-    if rule.patterns and not any(p.fullmatch(text) for p in rule.patterns):
-        return text, "is not in the format SBA requires"
-    if rule.length is not None and len(text) != rule.length:
-        return text, f"must be exactly {_chars(rule.length)}"
     if rule.base in _DECIMAL_BASES:
         if not _DECIMAL_LEXICAL.fullmatch(text):
             return text, "is not a number"
@@ -272,7 +268,11 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
         if rule.base in _INTEGER_BASES:
             if number != number.to_integral_value():
                 return text, "must be a whole number"
-            text = str(int(number))  # "12.0" -> "12": same value, integer lexical form
+            # "12.0" -> "12": same value, integer lexical form. Only a fraction
+            # is rewritten -- a leading zero is valid integer syntax, and FIPS
+            # codes like "01001" (every Alabama county) depend on it.
+            if "." in text:
+                text = str(int(number))
         if rule.base == "positiveInteger" and number < 1:
             return text, "must be 1 or more"
         if rule.min_inclusive is not None and number < rule.min_inclusive:
@@ -284,6 +284,11 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
             datetime.date.fromisoformat(text)
         except ValueError:
             return text, "is not a valid date (YYYY-MM-DD)"
+    # Checked on the final text, after any rewrite above.
+    if rule.patterns and not any(p.fullmatch(text) for p in rule.patterns):
+        return text, "is not in the format SBA requires"
+    if rule.length is not None and len(text) != rule.length:
+        return text, f"must be exactly {_chars(rule.length)}"
     return text, None
 
 

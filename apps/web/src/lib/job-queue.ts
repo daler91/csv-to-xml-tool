@@ -72,8 +72,12 @@ export async function enqueueJob(jobId: string): Promise<void> {
  * Block up to `timeoutSec` for the next job, atomically moving it from PENDING
  * to PROCESSING; record the claim time and bump the attempt count. Returns the
  * job id, or null on timeout.
+ *
+ * Retries whose backoff has elapsed are promoted to PENDING first, so every
+ * claim sees them -- at most `timeoutSec` after they fall due.
  */
 export async function claimJob(timeoutSec: number): Promise<string | null> {
+  await promoteDueJobs();
   const redis = getQueueRedis();
   const jobId = await redis.blmove(
     PENDING,
@@ -127,14 +131,14 @@ export async function requeueJob(jobId: string, delayMs = 0): Promise<void> {
 export async function promoteDueJobs(now: number = Date.now()): Promise<string[]> {
   const redis = getQueueRedis();
   const due = await redis.zrangebyscore(DELAYED, 0, now);
-  const promoted: string[] = [];
-  for (const jobId of due) {
-    if ((await redis.zrem(DELAYED, jobId)) > 0) {
+  const results = await Promise.all(
+    due.map(async (jobId) => {
+      if ((await redis.zrem(DELAYED, jobId)) === 0) return null;
       await redis.lpush(PENDING, jobId);
-      promoted.push(jobId);
-    }
-  }
-  return promoted;
+      return jobId;
+    })
+  );
+  return results.filter((jobId): jobId is string => jobId !== null);
 }
 
 /**

@@ -5,7 +5,6 @@ vi.mock("@/lib/job-queue", () => ({
   requeueJob: vi.fn(),
   getAttempts: vi.fn(),
   claimJob: vi.fn(),
-  promoteDueJobs: vi.fn(),
   sweepStaleClaims: vi.fn(),
 }));
 vi.mock("@/lib/job-runner", () => ({ runJob: vi.fn() }));
@@ -31,7 +30,6 @@ import {
   requeueJob,
   getAttempts,
   claimJob,
-  promoteDueJobs,
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
@@ -43,7 +41,6 @@ const requeue = vi.mocked(requeueJob);
 const attempts = vi.mocked(getAttempts);
 const claim = vi.mocked(claimJob);
 const sweep = vi.mocked(sweepStaleClaims);
-const promote = vi.mocked(promoteDueJobs);
 const run = vi.mocked(runJob);
 const db = vi.mocked(prisma, true);
 
@@ -56,7 +53,6 @@ beforeEach(() => {
   db.job.updateMany.mockResolvedValue({ count: 1 } as never);
   db.job.findUnique.mockResolvedValue({ userId: "u1" } as never);
   db.auditEntry.create.mockResolvedValue({} as never);
-  promote.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -226,18 +222,6 @@ describe("runLoop", () => {
       expect.any(Error)
     );
     errorLog.mockRestore();
-  });
-
-  it("promotes due retries before every claim", async () => {
-    let calls = 0;
-    claim.mockImplementation(async () => {
-      calls += 1;
-      return null;
-    });
-
-    await runLoop(() => calls < 2);
-
-    expect(promote).toHaveBeenCalledTimes(2);
   });
 
   it("backs off and keeps going when a claim throws", async () => {

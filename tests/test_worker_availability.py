@@ -140,16 +140,18 @@ class UnreadableCsvTest(unittest.TestCase):
         failure; 422 is permanent there and its detail reaches the user."""
         req = ConvertRequest(job_id="jobQuote", csv_content=_unclosed_quote_csv(),
                              converter_type="counseling")
+        coroutine = convert_route.convert(req)
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(convert_route.convert(req))
+            asyncio.run(coroutine)
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("quotation mark", ctx.exception.detail)
 
     def test_preview_answers_422_with_the_likely_cause(self):
         req = PreviewRequest(job_id="jobQuote", csv_content=_unclosed_quote_csv(),
                              converter_type="counseling")
+        coroutine = preview_route.preview(req)
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(preview_route.preview(req))
+            asyncio.run(coroutine)
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("quotation mark", ctx.exception.detail)
 

@@ -44,6 +44,7 @@ const DELAYED = "csvxml:jobs:delayed";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  client.zrangebyscore.mockResolvedValue([]);
 });
 
 describe("enqueueJob", () => {
@@ -69,6 +70,20 @@ describe("claimJob", () => {
     );
     expect(client.zadd).toHaveBeenCalledWith(CLAIMS, expect.any(Number), "j1");
     expect(client.hincrby).toHaveBeenCalledWith(ATTEMPTS, "j1", 1);
+  });
+
+  it("promotes due retries before blocking, so this claim can take one", async () => {
+    client.zrangebyscore.mockResolvedValue(["retry1"]);
+    client.zrem.mockResolvedValueOnce(1);
+    client.blmove.mockResolvedValue("retry1");
+
+    expect(await claimJob(5)).toBe("retry1");
+
+    expect(client.zrangebyscore).toHaveBeenCalledWith(DELAYED, 0, expect.any(Number));
+    expect(client.lpush).toHaveBeenCalledWith(PENDING, "retry1");
+    expect(client.lpush.mock.invocationCallOrder[0]).toBeLessThan(
+      client.blmove.mock.invocationCallOrder[0]
+    );
   });
 
   it("returns null on timeout without recording a claim", async () => {

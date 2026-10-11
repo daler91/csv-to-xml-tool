@@ -3,7 +3,6 @@ import {
   ackJob,
   requeueJob,
   getAttempts,
-  promoteDueJobs,
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
@@ -118,9 +117,6 @@ export async function runLoop(
   while (shouldRun()) {
     let jobId: string | null = null;
     try {
-      // Retries whose backoff has elapsed go back on the queue first. Checked
-      // every iteration, so at most CLAIM_TIMEOUT_SEC late.
-      await promoteDueJobs();
       jobId = await claimJob(CLAIM_TIMEOUT_SEC);
     } catch (err) {
       // Redis hiccup — pause briefly so we don't hot-loop, then retry.

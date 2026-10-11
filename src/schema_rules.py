@@ -66,7 +66,13 @@ _IDENTIFIER_TAGS = frozenset({"PartnerClientNumber", "PartnerSessionNumber", "Pa
 
 # XML 1.0 Char production: everything below 0x20 except tab, LF and CR, plus
 # the two non-characters at the top of the BMP and lone surrogates.
-_ILLEGAL_XML_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿\ud800-\udfff]")
+_ILLEGAL_XML_CODEPOINTS = frozenset([
+    *range(0x00, 0x09), 0x0B, 0x0C, *range(0x0E, 0x20),
+    0xFFFE, 0xFFFF,
+    *range(0xD800, 0xE000),
+])
+# str.translate table mapping each of them to a space.
+_ILLEGAL_TO_SPACE = dict.fromkeys(_ILLEGAL_XML_CODEPOINTS, " ")
 
 # xs:decimal's lexical space. Python's Decimal also accepts exponents, NaN and
 # Infinity, none of which the schema allows.
@@ -208,9 +214,14 @@ def strip_illegal_xml_chars(text: str) -> str:
     A space, not nothing: the usual source is a line break pasted from Word
     (a vertical tab), and deleting it would glue "123 Main St" to "Suite 5".
     """
-    if not _ILLEGAL_XML_CHARS.search(text):
+    spaced = text.translate(_ILLEGAL_TO_SPACE)
+    if spaced == text:
         return text
-    return re.sub(r"[ \t]{2,}", " ", _ILLEGAL_XML_CHARS.sub(" ", text)).strip()
+    return re.sub(r"[ \t]{2,}", " ", spaced).strip()
+
+
+def count_illegal_xml_chars(text: str) -> int:
+    return sum(1 for ch in text if ord(ch) in _ILLEGAL_XML_CODEPOINTS)
 
 
 def _chars(n: int) -> str:
@@ -345,7 +356,7 @@ class SchemaGuard:
 
         cleaned = strip_illegal_xml_chars(element.text)
         if cleaned != element.text:
-            removed = len(_ILLEGAL_XML_CHARS.findall(element.text))
+            removed = count_illegal_xml_chars(element.text)
             self._report(
                 record_id, "warning", ValidationCategory.STANDARDIZED_VALUE, field(),
                 f"Replaced {removed} control character(s) that XML cannot carry with a space "

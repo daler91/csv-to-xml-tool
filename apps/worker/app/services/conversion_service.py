@@ -16,6 +16,20 @@ from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
 from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.base_converter import EmptyCSVError  # noqa: F401  (re-exported: routes/convert.py imports it from here)
+
+
+def unreadable_csv_detail(error: Exception) -> str:
+    """A user-facing reason for a csv.Error.
+
+    The module's own wording ("field larger than field limit (131072)") reads
+    like an internal fault; a cell that long almost always means a quote that
+    was opened and never closed, which swallows the rest of the file.
+    """
+    if "field larger than field limit" in str(error):
+        return ("A cell in the CSV is longer than 131,072 characters. This usually means "
+                "a quotation mark is opened and never closed; check the row where the "
+                "data stops looking right.")
+    return f"The CSV could not be read: {error}"
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
 from src.xml_validator import validate_against_xsd

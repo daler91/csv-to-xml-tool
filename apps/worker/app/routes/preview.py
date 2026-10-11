@@ -1,10 +1,12 @@
 import asyncio
+import csv
 import logging
 
 from fastapi import APIRouter, HTTPException
 
 from ..logging_context import set_job_id
 from ..models.schemas import PreviewRequest, PreviewResponse
+from ..services.conversion_service import unreadable_csv_detail
 from ..services.preview_service import read_csv_preview
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ router = APIRouter()
     response_model=PreviewResponse,
     responses={
         400: {"description": "Invalid request parameters"},
+        422: {"description": "The CSV cannot be parsed (e.g. an unclosed quote)"},
         500: {"description": "Internal preview error"},
     },
 )
@@ -32,6 +35,8 @@ async def preview(req: PreviewRequest):
             read_csv_preview, req.csv_content, req.converter_type
         )
         return result
+    except csv.Error as e:
+        raise HTTPException(status_code=422, detail=unreadable_csv_detail(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except HTTPException:

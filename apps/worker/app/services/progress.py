@@ -27,7 +27,7 @@ import logging
 import time
 from dataclasses import dataclass, asdict
 
-from .redis_client import TTL_SECONDS, get_client, progress_key
+from .redis_client import TTL_SECONDS, available, get_client, progress_key, trip
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,8 @@ class ProgressRegistry:
     """Redis-backed map of job_id -> ProgressSnapshot (as a hash)."""
 
     def update(self, job_id: str, processed: int, total: int) -> None:
+        if not available():
+            return  # breaker open: drop this snapshot rather than wait on Redis
         key = progress_key(job_id)
         try:
             # Refresh the TTL on every update so a long-running job never
@@ -63,12 +65,16 @@ class ProgressRegistry:
             pipe.expire(key, TTL_SECONDS)
             pipe.execute()
         except Exception:
+            trip()
             logger.warning("progress.update failed for job %s", job_id, exc_info=True)
 
     def get(self, job_id: str) -> dict | None:
+        if not available():
+            return None
         try:
             raw = get_client().hgetall(progress_key(job_id))
         except Exception:
+            trip()
             logger.warning("progress.get failed for job %s", job_id, exc_info=True)
             return None
         if not raw:

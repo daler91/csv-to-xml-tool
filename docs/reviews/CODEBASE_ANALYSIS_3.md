@@ -168,7 +168,11 @@ for the equivalent case; counseling and training-client should match.
 `EXPORT_COUNTRY_LOOKUP` already used for export countries isn't consulted. Not covered by 2nd-pass
 1.4's list.
 
-### A.9 Unreadable input fails the whole file without an issue — `[OPEN]` — LOW/MEDIUM
+### A.9 Unreadable input fails the whole file without an issue — `[PARTIAL]` — LOW/MEDIUM
+
+> **Worker half fixed:** `/convert` and `/preview` answer a `csv.Error` with a 422 whose detail names
+> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **Still open:**
+> the CLI's `UnicodeDecodeError` on cp1252 input.
 
 `counseling_converter.py:126` catches only `OSError` and `csv.Error` around the read loop:
 
@@ -258,7 +262,11 @@ the web process, which also hosts the job consumer. Fix: reject requests without
 `Content-Length` on these routes, or read `req.body` through a counting stream that aborts past the
 cap.
 
-### C.2 A stalled Redis adds ~2 s per progress write to every conversion — `[OPEN]` — MEDIUM
+### C.2 A stalled Redis adds ~2 s per progress write to every conversion — `[FIXED]` — MEDIUM
+
+> **Fixed:** a circuit breaker in `redis_client`: after one failed call, progress writes, progress
+> reads and cancel checks are skipped for 30 s (`BREAKER_SECONDS`), returning their existing
+> fail-soft values instead of each waiting out the socket timeout.
 
 `apps/worker/app/services/redis_client.py:186-187` (`socket_timeout=2`), `routes/convert.py:78,87`.
 Progress and cancel checks are synchronous Redis calls in the conversion thread; "fail-soft" catches
@@ -267,7 +275,9 @@ but never replies, 600 counseling rows took **68.5 s** (vs 0.4 s with fakeredis)
 exceeds the web's 30-minute convert timeout and the job is dead-lettered. Fix: after one timeout,
 disable Redis calls for that conversion (or for N seconds process-wide).
 
-### C.3 `/fix-xml` parses on the event loop — `[OPEN]` — MEDIUM
+### C.3 `/fix-xml` parses on the event loop — `[FIXED]` — MEDIUM
+
+> **Fixed:** the change-detection round-trips run in `asyncio.to_thread`.
 
 `apps/worker/app/routes/fix.py:99` calls `_canonical()` (`:45-58`) twice synchronously inside
 `async def`. Measured 1.6 s at 5.7 MB and 9.7 s at 28.5 MB per call — ~19 s per request, well
@@ -287,7 +297,7 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 
 | # | Where | Finding |
 |---|---|---|
-| D.1 | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
+| D.1 `[FIXED]` | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | *Fixed: both catch `DefusedXmlException`, so the file is reported as unparseable.* defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
 | D.2 | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
 | D.3 | `apps/worker/app/main.py:181-191` | On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
 | D.4 | `apps/worker/app/models/schemas.py:7` | `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |

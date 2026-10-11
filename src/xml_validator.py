@@ -6,6 +6,7 @@ This module helps validate and fix common XML structure issues.
 import os
 import xml.etree.ElementTree as UnsafeET
 import defusedxml.ElementTree as ET
+from defusedxml import DefusedXmlException
 from lxml import etree
 
 import logging
@@ -190,7 +191,10 @@ def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elem
         # Save the fixed XML
         tree.write(output_file, encoding='utf-8', xml_declaration=True)
         return True
-    except (OSError, ET.ParseError):
+    except (OSError, ET.ParseError, DefusedXmlException):
+        # DefusedXmlException: an entity or DTD declaration defusedxml refuses
+        # to process. It is a ValueError, not a ParseError, so it used to
+        # escape here -- a 500 from /fix-xml and a traceback from the CLI.
         logger.exception("Error fixing XML file")
         return False
 

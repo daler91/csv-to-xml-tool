@@ -21,6 +21,11 @@ Design choices (mirroring ``apps/web/src/lib/redis.ts``):
   does. This keeps build/import/test tooling from spawning a live connection.
 * **Short socket timeouts** so a stalled Redis fails fast instead of hanging the
   conversion thread (the progress callback fires roughly every 25 rows).
+* **A circuit breaker** on top of them. "Fast" is still the full 2 s timeout
+  against a Redis that accepts connections but never answers, and paid on every
+  progress write and cancel check: 600 rows took 68 s instead of 0.4 s, and
+  about 16k rows outran the web's 30-minute convert timeout. After a failure the
+  per-row calls are skipped for ``BREAKER_SECONDS``.
 
 Callers treat Redis as best-effort: every registry operation is wrapped so a
 Redis outage degrades the progress bar / cancellation signal rather than failing
@@ -30,6 +35,7 @@ a valid federal conversion. See the registries for the fail-soft semantics.
 from __future__ import annotations
 
 import os
+import time
 
 import redis
 
@@ -45,6 +51,21 @@ CANCEL_PREFIX = f"{PREFIX}cancel:"
 TTL_SECONDS = 2 * 60 * 60  # 2 hours
 
 _client: redis.Redis | None = None
+
+# How long per-row Redis calls are skipped after one fails.
+BREAKER_SECONDS = 30.0
+_open_until = 0.0
+
+
+def available() -> bool:
+    """False while the breaker is open: skip best-effort calls and fail soft."""
+    return time.monotonic() >= _open_until
+
+
+def trip() -> None:
+    """Record a failed call; best-effort calls are skipped for BREAKER_SECONDS."""
+    global _open_until
+    _open_until = time.monotonic() + BREAKER_SECONDS
 
 
 def get_client() -> redis.Redis:
@@ -70,8 +91,9 @@ def set_client(client: redis.Redis | None) -> None:
     Passing ``None`` forces the next ``get_client()`` to rebuild the real
     client, so tests can restore the default in teardown.
     """
-    global _client
+    global _client, _open_until
     _client = client
+    _open_until = 0.0
 
 
 def progress_key(job_id: str) -> str:

@@ -42,7 +42,9 @@ async def validate_xsd(req: ValidateXsdRequest):
     set_job_id(req.job_id)
 
     if req.schema_type not in XSD_MAP:
-        raise HTTPException(status_code=400, detail=f"Unknown schema type: {req.schema_type}")
+        # Unreachable through HTTP (schema_type is a Literal); kept for direct
+        # callers. Not echoed back: error details never repeat request input.
+        raise HTTPException(status_code=400, detail="Unknown schema type")
     if not req.xml_content.strip():
         raise HTTPException(status_code=400, detail="xml_content must not be empty")
 

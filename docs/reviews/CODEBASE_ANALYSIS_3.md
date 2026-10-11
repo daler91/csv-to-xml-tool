@@ -305,7 +305,13 @@ disable Redis calls for that conversion (or for N seconds process-wide).
 inside the 100 MB body cap. Meanwhile `/health` (3 s healthcheck timeout), progress polls and
 cancels all stall. Fix: `await asyncio.to_thread(...)`, as every other route already does.
 
-### C.4 CODEBASE_ANALYSIS 3.7 was only partly fixed — `[OPEN]` — LOW/MEDIUM
+### C.4 CODEBASE_ANALYSIS 3.7 was only partly fixed — `[FIXED]` — LOW/MEDIUM
+
+> **Fixed:** `ConcurrencyLimitMiddleware` runs at most `MAX_CONCURRENT_REQUESTS` (4) authenticated
+> heavy requests at once, queueing the rest before their body is read, and `/convert` stops at the
+> next phase checkpoint after `CONVERSION_DEADLINE_SECONDS` (504, final in the web consumer).
+> `MAX_REQUEST_BYTES` stays 100 MB: JSON escaping can make the envelope larger than a 50 MB file,
+> and memory is now bounded by the upload cap times the concurrency cap.
 
 3.7 is marked `[FIXED]`, but only the chunked-body bypass landed. `MAX_REQUEST_BYTES` is still
 100 MB (`apps/worker/app/main.py:60`), there is no conversion concurrency cap (no semaphore, no
@@ -319,11 +325,11 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 | # | Where | Finding |
 |---|---|---|
 | D.1 `[FIXED]` | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | *Fixed: both catch `DefusedXmlException`, so the file is reported as unparseable.* defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
-| D.2 | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
-| D.3 | `apps/worker/app/main.py:181-191` | On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
-| D.4 | `apps/worker/app/models/schemas.py:7` | `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |
-| D.5 | `apps/worker/app/routes/validate.py:46` | Error responses have two shapes (`detail` list from FastAPI 422, string from the worker's own 422) and echo input verbatim (`"Unknown schema type: <script>x"`). JSON-only, so not XSS, but inconsistent. |
-| D.6 | `apps/worker/Dockerfile:1,4-5` | Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
+| D.2 `[FIXED]` | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | *Fixed: cancel answers 503 when Redis did not store the flag; progress answers 503 while Redis is unavailable.* Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
+| D.3 `[FIXED]` | `apps/worker/app/main.py:181-191` | *Fixed: the route list is read from the routers; the catch-all route is replaced by a 404 handler that logs at INFO and leaves 405s alone.* On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
+| D.4 `[FIXED]` | `apps/worker/app/models/schemas.py:7` | *Fixed: `converter_type` / `schema_type` are `Literal`s on every request model.* `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |
+| D.5 `[FIXED]` | `apps/worker/app/routes/validate.py:46` | *Fixed: validation errors are a string `detail` like every other error, and no error repeats request input.* Error responses have two shapes (`detail` list from FastAPI 422, string from the worker's own 422) and echo input verbatim (`"Unknown schema type: <script>x"`). JSON-only, so not XSS, but inconsistent. |
+| D.6 `[FIXED]` | `apps/worker/Dockerfile:1,4-5` | *Fixed: base image pinned by digest; the unused `-dev` packages are gone; the healthcheck and `CMD` use `$PORT` (default 8000).* Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
 | D.7 | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
 | D.8 | web routes | Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
 | D.9 `[PARTIAL]` | core | *Fixed: two-digit years past next year are last century; event ids are trimmed; 9-digit and spaced ZIP+4 keep the +4 (other trailing text is reported); exporting employees keep a fraction where the XSD allows one and are reported where it does not; a whitespace-only Contact ID is a missing one; bracketed labels stay in notes; `City` was already mapped. Open: the combined "Middle Eastern or North African" answer, which the XSD can't represent as one category.* Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |

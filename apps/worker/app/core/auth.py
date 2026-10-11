@@ -43,3 +43,16 @@ def require_worker_token(authorization: str | None = Header(default=None)) -> No
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing worker credentials",
         )
+
+
+def has_worker_token(authorization: bytes | None) -> bool:
+    """Whether a raw ``Authorization`` header value carries the token.
+
+    For ASGI middleware that runs before the dependency above: the
+    concurrency limit only queues requests that will be served, so a client
+    without the token cannot hold a slot by sending its body slowly.
+    """
+    if not WORKER_AUTH_TOKEN or authorization is None:
+        return False
+    return secrets.compare_digest(
+        authorization, f"Bearer {WORKER_AUTH_TOKEN}".encode("latin-1", "replace"))

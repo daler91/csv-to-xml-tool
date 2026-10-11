@@ -286,6 +286,16 @@ Request bodies over `MAX_REQUEST_BYTES` (100 MB default) get **413**. The check
 looks at `Content-Length` first and then counts bytes as the body streams, so a
 chunked request without a `Content-Length` cannot slip past it.
 
+At most `MAX_CONCURRENT_REQUESTS` (default 4) authenticated `/convert`,
+`/preview`, `/validate-xsd` and `/fix-xml` requests run at once; the rest wait
+for a slot before their body is read. `/health`, progress and cancel are never
+queued.
+
+Every error body is `{"detail": "<string>"}`. A request that fails validation (a
+missing field, or a `converter_type` / `schema_type` other than `counseling`,
+`training` or `training-client`) is a **422** whose detail names the field and
+the rule, without repeating the value that was sent.
+
 In production (`ENVIRONMENT=production`), `/docs`, `/redoc`, `/openapi.json` and
 the route list in 404 bodies are all disabled.
 
@@ -337,6 +347,7 @@ rest of the file into one oversized cell) is a `422` whose detail says so.
 | 409 | Cancelled by the user mid-conversion |
 | 422 | Unprocessable CSV — required columns missing, the file is empty/headers-only, or it cannot be parsed as CSV (e.g. an unclosed quote) |
 | 500 | Internal conversion error |
+| 504 | The conversion passed `CONVERSION_DEADLINE_SECONDS` (default 30 min, checked between phases); the web treats it as final, like its own timeout |
 
 `422` is the important one: the detail string names exactly which required
 columns are missing, so the web layer can tell the user what to fix. A
@@ -350,16 +361,18 @@ set after the web has authoritatively cancelled the job.
 
 ### `POST /convert/{job_id}/cancel`
 
-Sets the cancellation flag. Always 200 with
-`{"job_id": "…", "cancelled": true}`, including for a job that already finished.
-The conversion stops at the next phase checkpoint.
+Sets the cancellation flag: 200 with `{"job_id": "…", "cancelled": true}`,
+including for a job that already finished, or **503** when Redis did not store
+the flag (so the conversion will not see it). The conversion stops at the next
+phase checkpoint.
 
 ### `GET /convert/{job_id}/progress`
 
 The current progress snapshot (`processed`, `total`, `updated_at`), or **404**
 when none is recorded — either the job has finished (the `/convert` route clears
 the snapshot in its `finally`) or it has not started yet. The web layer treats
-404 as "no live progress" and falls back to the database row.
+404 as "no live progress" and falls back to the database row. **503** means
+Redis is unavailable, so whether progress exists is unknown.
 
 ### `POST /validate-xsd`
 
@@ -386,6 +399,7 @@ Reordering only. It never invents an element to satisfy the schema.
 
 ### Unmatched paths
 
-Any other path returns 404 `{"detail": "No route matched"}`. Outside production
-the response also lists the registered routes; in production that list goes to
-the log only.
+Any other path returns 404 `{"detail": "No route matched"}`, logged at INFO.
+Outside production the response also lists the registered routes; in
+production that list goes to the startup log only. A known path with the wrong
+method is a **405**.

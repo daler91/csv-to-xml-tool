@@ -104,6 +104,8 @@ Raising `CONVERSION_TIMEOUT_MS` for large files means raising all three.
 |---|---|---|
 | `MAX_UPLOAD_BYTES` | `52428800` (50 MB) | Max accepted CSV/XML upload |
 | `MAX_REQUEST_BYTES` | `104857600` (100 MB) | Worker's cap on the whole JSON envelope |
+| `MAX_CONCURRENT_REQUESTS` | `4` | Worker: conversions/previews/validations run at once; more wait for a slot |
+| `CONVERSION_DEADLINE_SECONDS` | `1800` (30 min) | Worker's own limit on one conversion; keep it at or under the web's `CONVERSION_TIMEOUT_MS` |
 
 `MAX_UPLOAD_BYTES` is the one that bounds memory. Both services hold the file
 content in memory during a conversion, so this cap — not the request body size —
@@ -111,6 +113,17 @@ is what keeps a conversion from exhausting the container.
 
 It is enforced at upload **and re-checked server-side** before each worker call,
 so a file that grew or a job resumed against a changed file cannot slip past.
+
+`MAX_REQUEST_BYTES` is 100 MB rather than 50 because the CSV travels as a JSON
+string, and escaping its quotes and line breaks can make the envelope larger
+than the file. What bounds the worker's memory is `MAX_UPLOAD_BYTES` times
+`MAX_CONCURRENT_REQUESTS`: requests beyond the cap wait before their body is
+read.
+
+`CONVERSION_DEADLINE_SECONDS` stops a conversion the web has already given up
+on. It is checked between phases (cleaning diff, conversion, XSD validation),
+so a conversion stops at the first boundary after it; the web treats the
+resulting 504 as final rather than retrying it.
 
 `MAX_REQUEST_BYTES` is defence in depth on the worker. It checks the declared
 `Content-Length` first and then counts bytes as the body streams — the

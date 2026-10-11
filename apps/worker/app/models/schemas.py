@@ -1,10 +1,17 @@
+from typing import Literal
+
 from pydantic import BaseModel
+
+# The three conversions the worker knows. A Literal, so an unknown value is a
+# 422 from validation on every route: /preview used to accept "bogus" and
+# answer 200 with an empty column status.
+ConverterType = Literal["counseling", "training", "training-client"]
 
 
 class PreviewRequest(BaseModel):
     job_id: str  # for log correlation only; the CSV travels in csv_content
     csv_content: str  # the uploaded CSV text, sent by the web (no shared volume)
-    converter_type: str  # "counseling" | "training"
+    converter_type: ConverterType
 
 
 class PreviewResponse(BaseModel):
@@ -20,7 +27,7 @@ class PreviewResponse(BaseModel):
 class ConvertRequest(BaseModel):
     job_id: str  # for log correlation only; the CSV travels in csv_content
     csv_content: str  # the uploaded CSV text, sent by the web (no shared volume)
-    converter_type: str
+    converter_type: ConverterType
     column_mapping: dict[str, str] | None = None
 
 
@@ -39,7 +46,7 @@ class ConvertResponse(BaseModel):
 class ValidateXsdRequest(BaseModel):
     job_id: str  # for log correlation only; the XML travels in xml_content
     xml_content: str  # the XML text to validate, sent by the web (no shared volume)
-    schema_type: str  # "counseling" | "training" | "training-client"
+    schema_type: ConverterType
 
 
 class ValidateXsdResponse(BaseModel):
@@ -55,7 +62,9 @@ class ValidateXsdResponse(BaseModel):
 class FixXmlRequest(BaseModel):
     job_id: str  # for log correlation only; the XML travels in xml_content
     xml_content: str  # the XML text to auto-fix, sent by the web (no shared volume)
-    schema_type: str  # "counseling" | "training-client" (counseling-format XML only)
+    # Any known type; the route answers "training" with a 400 that says
+    # auto-fix supports counseling-format XML only.
+    schema_type: ConverterType
 
 
 class FixXmlResponse(BaseModel):

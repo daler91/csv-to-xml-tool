@@ -1,12 +1,17 @@
+import asyncio
 import json
 import logging
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .core import auth
 from .core.auth import require_worker_token
 from .core.paths import verify_schemas_dir
 from .logging_context import LOG_FORMAT, install_job_id_log_factory
@@ -32,6 +37,7 @@ async def lifespan(_app: FastAPI):
     from .routes.validate import SCHEMAS_DIR
     verify_schemas_dir(SCHEMAS_DIR)
     logger.info("XSD schemas found at %s", os.path.realpath(SCHEMAS_DIR))
+    logger.info("Registered routes: %s", "; ".join(_registered))
     yield
 
 
@@ -58,6 +64,17 @@ _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").sp
 # parsed into memory. The web layer enforces a 50MB *file* cap; this is a
 # generous backstop on the JSON envelope (CSV content is sent as a string field).
 MAX_REQUEST_BYTES = int(os.environ.get("MAX_REQUEST_BYTES", str(100 * 1024 * 1024)))
+
+
+# How many conversion/preview/validation requests run at once; the rest wait
+# for a slot before any of their body is read. Each holds its whole payload in
+# memory and runs CPU-bound in a thread, so without a cap a burst of requests
+# multiplied the per-request memory by however many arrived.
+MAX_CONCURRENT_REQUESTS = max(1, int(os.environ.get("MAX_CONCURRENT_REQUESTS", "4")))
+
+# The routes the cap applies to. /health, progress and cancel are cheap and
+# must stay responsive while every slot is busy.
+_HEAVY_PATHS = frozenset({"/convert", "/preview", "/validate-xsd", "/fix-xml"})
 
 
 class _RequestTooLarge(Exception):
@@ -152,7 +169,43 @@ class BodySizeLimitMiddleware:
             await _send_json(send, 413, {"detail": "Request body too large"})
 
 
+class ConcurrencyLimitMiddleware:
+    """Run at most MAX_CONCURRENT_REQUESTS heavy requests at a time.
+
+    Waiting happens before the endpoint reads the body, and uvicorn stops
+    reading a socket whose body nobody is consuming, so a queued request
+    costs a connection rather than its payload. Requests without the worker
+    token skip the queue, since they are refused before any work. Raw ASGI
+    for the same reason as BodySizeLimitMiddleware. A queue, not a 503: the
+    web's callers would only retry, and a conversion that waits is still
+    inside its timeout.
+    """
+
+    def __init__(self, app):
+        self.app = app
+        self._slots: asyncio.Semaphore | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") not in _HEAVY_PATHS:
+            return await self.app(scope, receive, send)
+        if not auth.has_worker_token(dict(scope.get("headers") or {}).get(b"authorization")):
+            # Answered 401 by the route's dependency without taking a slot,
+            # so an unauthenticated client can't hold one with a slow body.
+            return await self.app(scope, receive, send)
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop:
+            # Per event loop: a semaphore that has made a request wait is
+            # bound to that loop. The server runs one; tests run several.
+            self._slots, self._loop = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS), loop
+        async with self._slots:
+            await self.app(scope, receive, send)
+
+
 app.add_middleware(BodySizeLimitMiddleware)
+# Outside the size limit, so an oversized body is still only counted once a
+# slot is free -- the point is that nothing is read while waiting.
+app.add_middleware(ConcurrencyLimitMiddleware)
 
 # The worker is called server-to-server by the web backend, never from a
 # browser, so CORS can be tight: only the methods/headers we actually use.
@@ -177,26 +230,51 @@ app.include_router(convert.router, dependencies=[Depends(require_worker_token)])
 app.include_router(validate.router, dependencies=[Depends(require_worker_token)])
 app.include_router(fix.router, dependencies=[Depends(require_worker_token)])
 
-# Log all registered routes at startup
-_registered = []
-for route in app.routes:
-    if hasattr(route, "methods"):
-        _registered.append(f"{route.methods} {route.path}")
-logger.info("=== Registered Routes ===")
-for r in _registered:
-    logger.info(f"  {r}")
-logger.info("=========================")
+# The real route table, for the startup log and the development 404 body.
+# Read from the routers rather than app.routes: since FastAPI 0.141 an
+# included router appears there as one _IncludedRouter entry with no
+# `methods`, so the old loop listed only the docs routes.
+_registered = sorted(
+    f"{','.join(sorted(route.methods))} {route.path}"
+    for router in (health.router, preview.router, convert.router, validate.router, fix.router)
+    for route in router.routes
+    if getattr(route, "methods", None)
+)
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def catch_all(path: str, request: Request):
-    sanitized_path = path.replace("\n", "").replace("\r", "")[:200]
-    logger.error("CATCH-ALL: %s /%s (no route matched)", request.method, sanitized_path)
-    # The route table goes to the log, not the response. Returning it here
-    # handed the worker's entire API surface to any anonymous caller who
-    # guessed a wrong path; the same information is already logged at startup
-    # for whoever is actually debugging.
-    body = {"detail": "No route matched"}
-    if _DOCS_ENABLED:
-        body["registered_routes"] = _registered
-    return JSONResponse(status_code=404, content=body)
+@app.exception_handler(StarletteHTTPException)
+async def _http_error(request: Request, exc: StarletteHTTPException):
+    """A path no route matches gets a short 404 (with the route table outside
+    production); every other HTTP error is FastAPI's default response.
+
+    This replaces a catch-all route, which matched every method on every
+    path: a GET to /convert came back 404 instead of 405, and each scanner
+    probe was logged at ERROR.
+    """
+    if exc.status_code == 404 and "endpoint" not in request.scope:
+        sanitized_path = request.url.path.replace("\n", "").replace("\r", "")[:200]
+        logger.info("No route matched: %s %s", request.method, sanitized_path)
+        # The route table goes to the log, not the response, in production:
+        # it would hand the worker's API surface to any anonymous caller.
+        body = {"detail": "No route matched"}
+        if _DOCS_ENABLED:
+            body["registered_routes"] = _registered
+        return JSONResponse(status_code=404, content=body)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(_request: Request, exc: RequestValidationError):
+    """422 with a string detail, like every other worker error.
+
+    FastAPI's default detail is a list that includes each rejected input
+    value; the web shows a string detail to the user and could not read the
+    list, and echoing request input back is avoided everywhere else.
+    """
+    problems = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", ()) if part != "body")
+        problems.append(f"{location}: {error.get('msg', 'invalid')}" if location
+                        else str(error.get("msg", "invalid")))
+    return JSONResponse(status_code=422,
+                        content={"detail": "Invalid request: " + "; ".join(problems)})

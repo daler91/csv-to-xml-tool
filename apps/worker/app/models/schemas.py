@@ -47,7 +47,8 @@ class ValidateXsdResponse(BaseModel):
     errors: list[str]
     error_count: int
     # Feature 2.4: structured detail per errors entry (empty when is_valid);
-    # row_number is the 1-based ordinal of the record element in the XML.
+    # row_number is the 1-based ordinal of the record element in the XML (no
+    # CSV here); conversion results cite the CSV data row instead.
     error_details: list[dict]
 
 

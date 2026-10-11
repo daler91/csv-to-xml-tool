@@ -15,7 +15,10 @@ absent.
    correctly; a UTF-16 "Unicode Text" export is recognised by its BOM. The
    worker then reads the text as `utf-8-sig`, so a BOM never turns the first
    header into `﻿Contact ID`. Before the fallback existed, every accented
-   character in a cp1252 export became `�` silently.
+   character in a cp1252 export became `�` silently. The command line
+   (`run.py`, `src/main.py`) decodes the same way
+   (`src/data_cleaning.decode_csv_bytes`) and records a file-level warning when
+   it falls back to Windows-1252; it used to stop at the first accented name.
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
    column name it no longer uses.
@@ -257,4 +260,8 @@ data-quality panel means nothing was detected — not that nothing was checked.
 
 Duplicate headers are preserved rather than deduplicated when the header row is
 read, so two columns collapsing to the same normalized name can be detected
-instead of one silently shadowing the other.
+instead of one silently shadowing the other. Conversion records a file-level
+warning naming each repeated header, and each row takes the last of those
+columns that has a value: a blank second `Date` column no longer erases the
+first (`src/data_cleaning.NormalizedDictReader`, used by the converters, the
+preview and the cleaning diff alike).

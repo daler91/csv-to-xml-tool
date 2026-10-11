@@ -2,7 +2,6 @@
 Handles the conversion of Salesforce counseling data (Form 641) from CSV to XML.
 """
 
-import csv
 import xml.etree.ElementTree as ET
 import re
 
@@ -41,6 +40,8 @@ class CounselingConverter(BaseConverter):
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
         self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
+        # The record being built's column-per-element overrides (see _mapped).
+        self._record_columns = {}
         # Fabrication-risk fields (plan 1.3): when one of these is blank/missing
         # for a row and a non-empty default is emitted in its place, a
         # FABRICATED_DEFAULT warning is recorded. Subclasses narrow this set for
@@ -95,17 +96,25 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
 
-    def _mapped(self, row, mapping_key, default=''):
+    def _mapped(self, row, mapping_key, element, default=''):
         """Read a column by its CounselingConfig.COLUMN_MAPPING key.
 
         Used for the Part 3 impact fields, whose fallback chain ("(Meeting)"
         column, else the intake column) is declared once in config instead of
         being repeated at each call site. Delegates to _first_present so the
         blank-vs-absent semantics below are the same either way.
+
+        The column that supplied the value is recorded against `element`
+        ("Parent/Tag"), so an issue about it names that column: a bad
+        "(Meeting)" value used to be blamed on the intake column, whose cell
+        could hold a perfectly good number.
         """
-        return self._first_present(
-            row, *self.config.headers_for(mapping_key), default=default
-        )
+        for header in self.config.headers_for(mapping_key):
+            value = self._first_present(row, header)
+            if value:
+                self._record_columns[element] = header
+                return value
+        return default
 
     @staticmethod
     def _first_present(row, *keys, default=''):
@@ -202,17 +211,9 @@ class CounselingConverter(BaseConverter):
         """
         self.logger.info(f"Starting conversion of counseling data: {input_path}")
 
-        try:
-            with open(input_path, 'r', encoding='utf-8-sig') as csv_file:
-                reader = csv.DictReader(csv_file)
-                # CONV-2: normalize header whitespace so a stray/doubled space in a
-                # column name can't silently break row.get() lookups downstream.
-                rows = [data_cleaning.normalize_row_keys(row) for row in reader]
-                self.logger.info(f"Successfully read CSV file with {len(rows)} records")
-        except (OSError, csv.Error) as e:
-            self.logger.error(f"Failed to read CSV file: {str(e)}")
-            self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {str(e)}")
-            raise
+        # CONV-2: headers normalized so a stray/doubled space in a column name
+        # can't silently break row.get() lookups downstream.
+        _, rows = self._read_csv(input_path)
 
         if not rows:
             # CONV-6: a headers-only / empty CSV must fail, not silently produce
@@ -223,6 +224,10 @@ class CounselingConverter(BaseConverter):
         self._warn_constant_defaults(set(rows[0]))
 
         root = ET.Element('CounselingInformation')
+        # One entry per CounselingRecord, in document order: the CSV row it was
+        # built from and the columns that fed it, so an XSD error can name the
+        # row and column the user has to fix (xsd_error_mapping).
+        self.record_sources = []
         processed_records = 0
         skipped_records = 0
         total_rows = len(rows)
@@ -233,6 +238,10 @@ class CounselingConverter(BaseConverter):
 
         for row_index, row in enumerate(rows, 1):
             row = self._preprocess_row(row)
+            if 'Contact ID' in row:
+                # A whitespace-only id was written to the filing as "   ";
+                # trimmed, it fails as a missing id like a blank cell does.
+                row['Contact ID'] = str(row['Contact ID']).strip()
             record_id = row.get('Contact ID', f"Row_{row_index}")
             # Set before validate_counseling_record so pre-validation issues
             # (including missing-Contact-ID "Row_N" ones) carry the event id.
@@ -249,6 +258,8 @@ class CounselingConverter(BaseConverter):
 
             try:
                 counseling_record = create_element(root, 'CounselingRecord')
+                self._record_columns = {}
+                self.record_sources.append({"row": row_index, "columns": self._record_columns})
                 create_element(counseling_record, 'PartnerClientNumber', record_id)
 
                 location = create_element(counseling_record, 'Location')
@@ -264,7 +275,8 @@ class CounselingConverter(BaseConverter):
                 # Last, on the finished record: lengths, enumerations, patterns
                 # and ranges straight from the XSD (see src/schema_rules.py).
                 conditional = self._conditionally_required(counseling_record)
-                self._schema_guard.enforce(counseling_record, record_id, (root.tag,))
+                self._schema_guard.enforce(counseling_record, record_id, (root.tag,),
+                                           self._record_columns)
                 self._report_conditional_drops(counseling_record, conditional, record_id)
 
                 processed_records += 1
@@ -464,7 +476,10 @@ class CounselingConverter(BaseConverter):
             create_element(client_intake, 'TotalNumberOfEmployees', total_emp_intake)
         exporting_employees1 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
         if exporting_employees1 and float(exporting_employees1) > 0:
-            create_element(client_intake, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees1))))
+            # Not int(): 12.7 became 12 with no issue. Part 2 is an xs:decimal;
+            # for Part 3's whole number the schema guard rewrites 12.0 as 12
+            # and reports a fraction.
+            create_element(client_intake, 'NumberOfEmployeesInExportingBusiness', exporting_employees1)
 
         income_part2 = create_element(client_intake, 'ClientAnnualIncomePart2')
         gross_rev = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', ''))
@@ -649,23 +664,23 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
         create_element(counselor_record, 'CurrentlyExporting', self._currently_exporting)
 
-        business_start_date = data_cleaning.format_date(self._mapped(row, 'business_start_date'))
+        business_start_date = data_cleaning.format_date(self._mapped(row, 'business_start_date', 'CounselorRecord/BusinessStartDatePart3'))
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
         # Omitted when blank, as Part 2 does: a default of '0' made a blank cell
         # indistinguishable from "no employees" in the filing.
-        total_employees = data_cleaning.clean_numeric(self._mapped(row, 'total_employees_part3'))
+        total_employees = data_cleaning.clean_numeric(self._mapped(row, 'total_employees_part3', 'CounselorRecord/TotalNumberOfEmployees'))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
 
         exporting_employees2 = data_cleaning.clean_numeric(row.get('Number of Employees in Exporting Business', ''))
         if exporting_employees2 and float(exporting_employees2) > 0:
-            create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', str(int(float(exporting_employees2))))
+            create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', exporting_employees2)
 
-        gross_rev_part3 = data_cleaning.clean_numeric(self._mapped(row, 'gross_revenues_part3'))
-        profit_loss_part3 = data_cleaning.clean_numeric(self._mapped(row, 'profit_loss_part3'))
+        gross_rev_part3 = data_cleaning.clean_numeric(self._mapped(row, 'gross_revenues_part3', 'ClientAnnualIncomePart3/GrossRevenues'))
+        profit_loss_part3 = data_cleaning.clean_numeric(self._mapped(row, 'profit_loss_part3', 'ClientAnnualIncomePart3/ProfitLoss'))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
         # No fabrication warnings here for gross revenue / profit-loss: they are
         # keyed on the base columns (the "(Meeting)" variants are intentionally
@@ -831,17 +846,23 @@ class CounselingConverter(BaseConverter):
         emit_optional(address, 'City', row.get('Mailing City', ''))
         emit_optional(address, 'State', data_cleaning.standardize_state_name(row.get('Mailing State/Province', '')))
         zip_full = str(row.get('Mailing Zip/Postal Code', '')).strip()
-        zip_5digit_match = re.match(r'^\d{5}', zip_full)
-        zip_5digit = zip_5digit_match.group(0) if zip_5digit_match else ''
-        if not zip_5digit and zip_full and self._first_time(record_id, 'Mailing Zip/Postal Code'):
+        # ZIP+4 written 50309-1234, 50309 1234 or 503091234: the last form
+        # (how a spreadsheet stores it as a number) used to lose the +4.
+        zip_match = re.match(r'^(\d{5})(?:[-\s]?(\d{4}))?', zip_full)
+        zip_5digit = zip_match.group(1) if zip_match else ''
+        unread = zip_full[zip_match.end():].strip() if zip_match else ''
+        if zip_full and (not zip_5digit or unread) and self._first_time(record_id, 'Mailing Zip/Postal Code'):
             # Once per record, not once per address part: the same cell is read
             # for AddressPart1 and AddressPart3, and the report listed it twice.
-            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_FORMAT, "Mailing Zip/Postal Code", f"Could not parse 5-digit ZIP from '{zip_full}'.")
+            message = (f"Could not parse 5-digit ZIP from '{zip_full}'." if not zip_5digit
+                       else f"Only '{zip_full[:zip_match.end()]}' of '{zip_full}' is a ZIP or ZIP+4, "
+                            "so the rest was left out of the XML.")
+            self.validator.add_issue(record_id, "warning", ValidationCategory.INVALID_FORMAT,
+                                     "Mailing Zip/Postal Code", message)
         emit_optional(address, 'ZipCode', zip_5digit)
         # Zip4Code requires exactly 4 digits per XSD - only emit if we have it
-        zip4_match = re.match(r'^\d{5}-(\d{4})', zip_full)
-        if zip4_match:
-            create_element(address, 'Zip4Code', zip4_match.group(1))
+        if zip_match and zip_match.group(2):
+            create_element(address, 'Zip4Code', zip_match.group(2))
         country = create_element(address, 'Country')
         country_val = data_cleaning.standardize_country_code(row.get('Mailing Country', 'US'))
         if data_cleaning.is_empty(row.get('Mailing Country')):

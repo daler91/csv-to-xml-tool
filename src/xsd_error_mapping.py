@@ -265,10 +265,24 @@ def _humanize_tag(tag: str) -> str:
 
 
 def _resolve_field(element: str | None, parent_tag: str | None,
-                   element_fields: dict) -> tuple[str | None, str | None]:
-    """(field_label, csv_column) for an element, using the parent when known."""
+                   element_fields: dict, columns: dict | None = None,
+                   schema_type: str | None = None) -> tuple[str | None, str | None]:
+    """(field_label, csv_column) for an element, using the parent when known.
+
+    `columns` holds the record's own sources ("Parent/Tag" or "Tag" -> CSV
+    column) for elements whose column varies by row; they win over the
+    static table.
+    """
     if not element:
         return None, None
+    if columns:
+        keys = ([f"{parent_tag}/{element}"] if parent_tag else []) + [element]
+        for key in keys:
+            if key in columns:
+                column = columns[key]
+                if schema_type == "training-client":
+                    return _training_client_field(column, column)
+                return column, column
     if parent_tag:
         hit = element_fields.get(f"{parent_tag}/{element}")
         if hit:
@@ -285,10 +299,11 @@ def element_field_map(schema_type: str) -> dict:
 
 
 def resolve_element_field(element: str | None, parent_tag: str | None,
-                          element_fields: dict) -> tuple[str | None, str | None]:
+                          element_fields: dict, columns: dict | None = None,
+                          schema_type: str | None = None) -> tuple[str | None, str | None]:
     """Public form of the element -> CSV column lookup, for issues the
     converters record about an element before the document is written."""
-    return _resolve_field(element, parent_tag, element_fields)
+    return _resolve_field(element, parent_tag, element_fields, columns, schema_type)
 
 
 def _restatement(message: str, element: str | None) -> str:
@@ -319,7 +334,8 @@ def _friendly_message(row_number: int | None, record_id: str | None, id_kind: st
     return restatement
 
 
-def build_error_details(xml_source: str, errors: list[str], schema_type: str) -> list[dict]:
+def build_error_details(xml_source: str, errors: list[str], schema_type: str,
+                        record_sources: list[dict] | None = None) -> list[dict]:
     """Map validator error strings back to records and CSV columns.
 
     Args:
@@ -327,6 +343,11 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str) ->
         errors: The error strings from validate_against_xsd
                 (``"Line 20: Element 'ZipCode': ..."``).
         schema_type: "counseling" | "training" | "training-client".
+        record_sources: The converter's ``record_sources`` when the XML was
+                just built from a CSV. "Row N" is then that CSV data row --
+                without it, it is the record's position in the XML, which a
+                skipped row shifts for every record after it -- and a column
+                recorded for the element is cited instead of the default one.
 
     Returns:
         One detail dict per input error, in order. Unmappable pieces (no line,
@@ -351,13 +372,19 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str) ->
         element = element_match.group(1) if element_match else None
 
         row_number = record_id = parent_tag = None
+        columns = None
         record = _record_for_line(records, line)
         if record is not None:
             _, row_number, record_id, record_element = record
+            if record_sources and row_number <= len(record_sources):
+                source = record_sources[row_number - 1]
+                row_number = source.get("row") or row_number
+                columns = source.get("columns")
             if element:
                 parent_tag = _parent_tag_for(record_element, element, line)
 
-        field_label, csv_column = _resolve_field(element, parent_tag, element_fields)
+        field_label, csv_column = _resolve_field(element, parent_tag, element_fields,
+                                                 columns, schema_type)
         restatement = _restatement(message, element)
         details.append({
             "line": line,

@@ -10,8 +10,13 @@ logic for reading, processing, and writing data, but must conform to the
 from __future__ import annotations
 
 import abc
+import csv
+import io
 import logging
 from typing import TYPE_CHECKING, Callable, Optional
+
+from .. import data_cleaning
+from ..config import ValidationCategory
 
 if TYPE_CHECKING:
     from ..validation_report import ValidationTracker
@@ -55,6 +60,43 @@ class BaseConverter(abc.ABC):
         # the progress bar). None by default so the CLI path is
         # unchanged. See docs/reviews/UX_REVIEW.md §3.6.
         self.progress_callback: Optional[ProgressCallback] = None
+        # Filled by convert(): for each record element, in document order,
+        # {"row": the 1-based CSV data row it came from, "columns": {element
+        # ("Parent/Tag" or "Tag"): the CSV column that supplied it, where that
+        # differs by row}}. Passed to xsd_error_mapping.build_error_details so
+        # XSD errors cite the user's row, not the record's position in the XML.
+        self.record_sources: list[dict] = []
+
+    def _read_csv(self, input_path: str) -> tuple[list[str], list[dict]]:
+        """Read the input CSV as (normalized headers, rows).
+
+        Decodes the way the web upload does (data_cleaning.decode_csv_bytes),
+        so a Windows-1252 export converts from the command line too instead of
+        stopping at the first accented name, and keeps duplicate columns from
+        erasing each other (data_cleaning.NormalizedDictReader). Both are
+        recorded as file-level warnings. A file that cannot be read is
+        recorded as a FILE_ACCESS error and re-raised.
+        """
+        try:
+            with open(input_path, "rb") as csv_file:
+                text, encoding = data_cleaning.decode_csv_bytes(csv_file.read())
+            reader = data_cleaning.NormalizedDictReader(io.StringIO(text))
+            rows = list(reader)
+        except (OSError, csv.Error) as e:
+            self.logger.error(f"Failed to read CSV file: {e}")
+            self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file",
+                                     f"Failed to read CSV file: {e}")
+            raise
+        self.logger.info(f"Successfully read CSV file with {len(rows)} records")
+        if encoding == "windows-1252":
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.FILE_ACCESS, "input_file",
+                "The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
+                "delimited)\"). Check that accented names came through correctly.")
+        for name, count in reader.duplicates.items():
+            self.validator.add_issue("file", "warning", ValidationCategory.INVALID_FORMAT, name,
+                                     data_cleaning.duplicate_header_message(name, count))
+        return reader.fieldnames, rows
 
     def _report_progress(self, processed: int, total: int) -> None:
         """Report progress to the callback if one is set. No-op otherwise."""

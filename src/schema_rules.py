@@ -317,6 +317,7 @@ class SchemaGuard:
         self.schema_type = schema_type
         self.validator = validator
         self._element_fields = xsd_error_mapping.element_field_map(schema_type)
+        self._columns: dict[str, str] = {}
         path = schema_path(schema_type)
         try:
             self.rules = load_rules(path)
@@ -327,9 +328,13 @@ class SchemaGuard:
             (log or logger).warning(f"Schema facets unavailable ({path}): {exc}; value checks skipped.")
             self.rules = {}
 
-    def enforce(self, record: Element, record_id: str, parent_path: tuple[str, ...]) -> None:
+    def enforce(self, record: Element, record_id: str, parent_path: tuple[str, ...],
+                columns: dict[str, str] | None = None) -> None:
         """Check every element of `record` in place. `parent_path` is the tag
-        path of the record's parent from the document root."""
+        path of the record's parent from the document root; `columns` maps
+        "Parent/Tag" (or "Tag") to the CSV column that supplied it, where that
+        varies by row (see BaseConverter.record_sources)."""
+        self._columns = columns or {}
         self._reported: set[tuple[str, str]] = set()
         self._pending_invalid = 0
         self._visit(record, parent_path + (record.tag,), None, str(record_id))
@@ -344,7 +349,8 @@ class SchemaGuard:
 
     def _field(self, element: Element, parent: Element | None) -> str:
         label, csv_column = xsd_error_mapping.resolve_element_field(
-            element.tag, parent.tag if parent is not None else None, self._element_fields)
+            element.tag, parent.tag if parent is not None else None, self._element_fields,
+            self._columns, self.schema_type)
         return csv_column or label or element.tag
 
     def _visit(self, element: Element, path: tuple[str, ...], parent: Element | None,

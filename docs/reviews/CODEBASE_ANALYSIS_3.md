@@ -114,7 +114,12 @@ Repro: `Mailing Street="123 Main St\x0bSuite 5"` (a vertical tab — what Word l
 cannot be mapped to a row, and the converter recorded nothing. Fix: strip/replace illegal characters
 in `create_element` and record a `DOWNGRADED_VALUE` issue.
 
-### A.3 XSD errors cite the wrong column or the wrong row — `[OPEN]` — MEDIUM
+### A.3 XSD errors cite the wrong column or the wrong row — `[FIXED]` — MEDIUM
+
+> **Fixed:** converters record, per record, the CSV data row it came from and the column that
+> supplied each Part 3 fallback field (`BaseConverter.record_sources`). `build_error_details` cites
+> that row, and both it and `SchemaGuard` name the `(Meeting)` column when its value was used.
+> Standalone `/validate-xsd`, which has no CSV, still numbers records by position.
 
 - **Wrong column.** `src/xsd_error_mapping.py:79,84-85,103` maps Part 3 `TotalNumberOfEmployees`,
   `GrossRevenues`, `ProfitLoss`, `BusinessStartDatePart3` to the base column, but `_first_present`
@@ -140,14 +145,22 @@ in `create_element` and record a `DOWNGRADED_VALUE` issue.
 - `(1,500)` — how Excel formats a negative in accounting style — becomes `<ProfitLoss>0</ProfitLoss>`
   with the warning "Blank value defaulted", which is false: the cell was not blank.
 
-### A.5 Duplicate headers: the later column silently wins — `[OPEN]` — MEDIUM
+### A.5 Duplicate headers: the later column silently wins — `[FIXED]` — MEDIUM
+
+> **Fixed:** `data_cleaning.NormalizedDictReader` (converters, preview, cleaning diff) never lets a
+> blank cell overwrite an earlier same-named column, and conversion records a file-level warning
+> per repeated header. The worker's mapping step renames the header row only, so duplicates reach
+> the converter instead of being collapsed by a dict first.
 
 `src/data_cleaning.py:298-316`. The docstring says callers detect duplicates; none do. Header
 `...,Date,...,Date` with the first cell `10/05/2026` and the second blank → no `DateCounseled`, no
 issue. Salesforce report builders produce duplicate column labels easily. Fix: detect in
 `normalize_row_keys` and record a `FILE_ACCESS`/structure issue (or prefer the non-blank value).
 
-### A.6 Gender mapper ignores `F` / `M` / `Woman` — `[OPEN]` — MEDIUM
+### A.6 Gender mapper ignores `F` / `M` / `Woman` — `[FIXED]` — MEDIUM
+
+> **Fixed:** `map_gender_to_sex` matches whole words against `DEMOGRAPHIC_GENDER_KEYWORDS` as well
+> as the old substrings, for the counseling `Sex` element and the training Female/Male counts.
 
 `src/data_cleaning.py:350-366` matches only full words; `config.py:637`
 `DEMOGRAPHIC_KEYWORDS['gender']` lists the abbreviations but is dead config. Counseling `Gender=F` →
@@ -162,17 +175,21 @@ issue. Salesforce report builders produce duplicate column labels easily. Fix: d
 which fails the XSD (`minOccurs=1`). `training_converter.py:75-82` already raises `EmptyCSVError`
 for the equivalent case; counseling and training-client should match.
 
-### A.8 Unrecognised Mailing Country passes through raw — `[OPEN]` — LOW/MEDIUM
+### A.8 Unrecognised Mailing Country passes through raw — `[FIXED]` — LOW/MEDIUM
+
+> **Fixed** by the schema guard (A.2 batch): `germany` is filed as `Germany`, and a name SBA does
+> not list is left out with one warning instead of failing the file. Pinned by a test.
 
 `counseling_converter.py:693` / `data_cleaning.py:201`. `Deutschland` → enum error (twice). The
 `EXPORT_COUNTRY_LOOKUP` already used for export countries isn't consulted. Not covered by 2nd-pass
 1.4's list.
 
-### A.9 Unreadable input fails the whole file without an issue — `[PARTIAL]` — LOW/MEDIUM
+### A.9 Unreadable input fails the whole file without an issue — `[FIXED]` — LOW/MEDIUM
 
 > **Worker half fixed:** `/convert` and `/preview` answer a `csv.Error` with a 422 whose detail names
-> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **Still open:**
-> the CLI's `UnicodeDecodeError` on cp1252 input.
+> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **CLI half
+> fixed:** the converters decode input as the web upload does (UTF-8, else Windows-1252, with a
+> file-level warning), so a cp1252 export converts instead of raising `UnicodeDecodeError`.
 
 `counseling_converter.py:126` catches only `OSError` and `csv.Error` around the read loop:
 
@@ -309,7 +326,7 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 | D.6 | `apps/worker/Dockerfile:1,4-5` | Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
 | D.7 | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
 | D.8 | web routes | Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
-| D.9 | core | Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |
+| D.9 `[PARTIAL]` | core | *Fixed: two-digit years past next year are last century; event ids are trimmed; 9-digit and spaced ZIP+4 keep the +4 (other trailing text is reported); exporting employees keep a fraction where the XSD allows one and are reported where it does not; a whitespace-only Contact ID is a missing one; bracketed labels stay in notes; `City` was already mapped. Open: the combined "Middle Eastern or North African" answer, which the XSD can't represent as one category.* Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |
 
 ---
 

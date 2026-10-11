@@ -129,22 +129,23 @@ def run_conversion(
         # other CSV read path strips the BOM; this one was the lone exception).
         safe_mapping = _sanitize_column_mapping(column_mapping, converter_type)
         with open(csv_path, "r", encoding="utf-8-sig", newline="") as source:
-            reader = csv.DictReader(source)
-            fieldnames = [safe_mapping.get(name, name) for name in (reader.fieldnames or [])]
+            # Rows as lists, renaming only the header: a dict per row kept one
+            # column of each duplicated header, so the converter never saw the
+            # duplicate to report it, and a blank later "Date" erased the first.
+            reader = csv.reader(source)
+            header = next(reader, [])
+            fieldnames = [safe_mapping.get(name, name) for name in header]
             # Materialized before opening the writer so a malformed CSV fails
             # before a half-written temp file exists.
-            renamed_rows = [
-                {safe_mapping.get(key, key): value for key, value in row.items() if key is not None}
-                for row in reader
-            ]
+            data_rows = list(reader)
         tmp_mapped = tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, dir=os.path.dirname(csv_path)
         )
         tmp_mapped.close()
         with open(tmp_mapped.name, "w", encoding="utf-8", newline="") as target:
-            writer = csv.DictWriter(target, fieldnames=fieldnames, restval="", extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(renamed_rows)
+            writer = csv.writer(target)
+            writer.writerow(fieldnames)
+            writer.writerows(data_rows)
         actual_csv_path = tmp_mapped.name
 
     _checkpoint()
@@ -223,7 +224,7 @@ def run_conversion(
                 # Feature 2.4: map each raw error string back to the record
                 # (row) and CSV column it came from for the fix-it view.
                 xsd_error_details = build_error_details(
-                    xml_path, xsd_errors, converter_type
+                    xml_path, xsd_errors, converter_type, converter.record_sources
                 )
 
         _checkpoint()

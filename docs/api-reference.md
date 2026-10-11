@@ -370,7 +370,10 @@ the snapshot in its `finally`) or it has not started yet. The web layer treats
 → `is_valid`, `errors`, `error_count`, `error_details`.
 
 `error_details[].row_number` is the 1-based ordinal of the record element in the
-document, so an error can be traced to a record without counting lines.
+document, so an error can be traced to a record without counting lines. (There
+is no CSV here. In a `/convert` result, `xsd_error_details[].row_number` is the
+1-based CSV data row the record was built from — for a training event, its
+first row — so a skipped row does not shift the numbers after it.)
 
 ### `POST /fix-xml`
 

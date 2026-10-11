@@ -52,6 +52,11 @@ class CounselingConverter(BaseConverter):
         # (record_id, field). Cleared with _fabrication_warned at each row.
         self._warned_once = set()
 
+    def _warn_constant_defaults(self, headers):
+        """Hook for converters that stamp configured values into every record
+        (see TrainingClientConverter). Nothing to report for counseling, whose
+        defaults are per-row FABRICATED_DEFAULT warnings."""
+
     def _preprocess_row(self, row):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
@@ -180,6 +185,8 @@ class CounselingConverter(BaseConverter):
             # an empty <CounselingInformation/>.
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, "input_file", "CSV has headers but no data rows to convert.")
             raise EmptyCSVError("CSV has no data rows to convert.")
+
+        self._warn_constant_defaults(set(rows[0]))
 
         root = ET.Element('CounselingInformation')
         processed_records = 0

@@ -301,7 +301,13 @@ phone number is gone from the filing and every surface the tool offers says noth
 same `cleaned != ""` guard hides every other value the cleaners drop (a bad date, an unknown
 country, a `Prefer not to say` gender).
 
-### 2.7 Training-side silent defaults — `[OPEN]`
+### 2.7 Training-side silent defaults — `[FIXED]`
+
+> **Fixed** (third pass): a blank `Training Topic` or `Class/Event Type` records a
+> `FABRICATED_DEFAULT`, and an unrecognized event type an `INVALID_VALUE` (both now name the CSV
+> column). The training-client converter records one file-level `FABRICATED_DEFAULT` listing every
+> configured value it stamps into records whose column the CSV lacks. `Address` and `Street Line 1`
+> are no longer City aliases.
 
 - **Blank `Training Topic` → `Technology`, silently.** `_resolve_training_topic:307-308` returns the
   default for an empty value with no issue; its own docstring says so. An unrecognized value at least
@@ -564,13 +570,13 @@ Every counseling fixture in the repository — `test_integration_xsd.py`, `test_
 carries **16 of the 74** counseling columns and three rows; it exercises none of the address, phone,
 Part 3, certification or referral paths. It is a smoke test, not a compliance test. Pair it with 5.1.
 
-### 5.3 Documentation claims that the code does not meet — `[OPEN]`
+### 5.3 Documentation claims that the code does not meet — `[PARTIAL]`
 
 | Claim | Where | Reality |
 |---|---|---|
 | ~~"long text truncated at the schema's limits"~~ | `README.md:73` | True since the third pass's `schema_rules.py` (1.1) |
 | ~~"Every change is recorded, so the results page can show a before/after diff"~~ | `converters.md` | True since the third pass (2.6, 2.8) |
-| Fabricated-defaults table lists nine columns | `converters.md` | Counseling side corrected in the third pass (2.1–2.5); training topic, program format and training-client constants follow with 2.7 |
+| ~~Fabricated-defaults table lists nine columns~~ | `converters.md` | Corrected in the third pass (2.1–2.5, 2.7) |
 | `CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci` | `reviews/CODEBASE_ANALYSIS.md:315` | Dockerfile still uses `npm install` (3.4) |
 
 ### 5.4 Still open from the first pass, unchanged

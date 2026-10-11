@@ -618,7 +618,9 @@ class TrainingConfig:
         "event_type": "Class/Event Type",
         "cosponsor": ['Cosponsor', 'CosponsorsName', 'Partner Organization'],
         # Location fields (list of possible headers)
-        "city": ['City', 'city', 'Address', 'Street Line 1'],
+        # Not 'Address' / 'Street Line 1': a street address in <City> is wrong
+        # data, and a missing city falls back to DEFAULT_LOCATION with a warning.
+        "city": ['City', 'city'],
         "state": ['State/Province', 'State', 'state'],
         "zip": ['Zip/Postal Code', 'Zip', 'zip', 'ZipCode', 'Zip code'],
         # Demographic fields

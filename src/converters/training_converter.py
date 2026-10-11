@@ -198,8 +198,7 @@ class TrainingConverter(BaseConverter):
         create_element(partners_element, 'Code', self.config.DEFAULT_TRAINING_PARTNER_CODE)
 
         format_val = self._get_column_value(first_record, "event_type")
-        program_format_text = data_cleaning.map_value(format_val, self.config.PROGRAM_FORMAT_MAPPINGS, self.config.DEFAULT_PROGRAM_FORMAT, False)
-        create_element(record, 'ProgramFormatType', program_format_text)
+        create_element(record, 'ProgramFormatType', self._resolve_program_format(format_val, event_id))
 
         create_element(record, 'DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES)
         language_element = create_element(record, 'Language')
@@ -306,11 +305,13 @@ class TrainingConverter(BaseConverter):
 
         A value already in the SBA controlled vocabulary is returned verbatim (so a
         populated "Training Topic" column is authoritative); otherwise a known synonym
-        is translated; an empty value falls back to the default silently; an
-        unrecognized value falls back to the default and is flagged for review.
+        is translated. An empty or unrecognized value falls back to the default,
+        and both are recorded -- the blank case is the common one.
         """
         cleaned = str(topic_val).strip() if topic_val else ''
         if not cleaned:
+            self._warn_fabricated_default(event_id, 'Training Topic', self.config.DEFAULT_TRAINING_TOPIC,
+                                          'TrainingTopic/Code')
             return self.config.DEFAULT_TRAINING_TOPIC
         for valid_topic in self.config.VALID_TRAINING_TOPICS:
             if valid_topic.lower() == cleaned.lower():
@@ -319,10 +320,28 @@ class TrainingConverter(BaseConverter):
         if mapped:
             return mapped
         self.validator.add_issue(
-            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "TrainingTopic",
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Training Topic",
             f"Unrecognized Training Topic '{cleaned}'; defaulted to '{self.config.DEFAULT_TRAINING_TOPIC}'.",
         )
         return self.config.DEFAULT_TRAINING_TOPIC
+
+    def _resolve_program_format(self, format_val, event_id):
+        """Map Class/Event Type onto ProgramFormatType. A blank or unrecognized
+        value falls back to the default -- recorded, like the training topic,
+        rather than turning "Workshop" into "In-person" silently."""
+        default = self.config.DEFAULT_PROGRAM_FORMAT
+        cleaned = str(format_val).strip() if format_val else ''
+        if not cleaned:
+            self._warn_fabricated_default(event_id, 'Class/Event Type', default, 'ProgramFormatType')
+            return default
+        mapped = data_cleaning.map_value(cleaned, self.config.PROGRAM_FORMAT_MAPPINGS, None, False)
+        if mapped:
+            return mapped
+        self.validator.add_issue(
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Class/Event Type",
+            f"Unrecognized Class/Event Type '{cleaned}'; recorded as '{default}'.",
+        )
+        return default
 
     @staticmethod
     def _count_sex(rows, gender_col):

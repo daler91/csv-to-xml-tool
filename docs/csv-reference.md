@@ -163,7 +163,7 @@ present wins:
 | Training topic | `Training Topic` |
 | Event type | `Class/Event Type` |
 | Cosponsor | `Cosponsor`, `CosponsorsName`, `Partner Organization` |
-| City | `City`, `city`, `Address`, `Street Line 1` |
+| City | `City`, `city` (a street-address column is not read as the city) |
 | State | `State/Province`, `State`, `state` |
 | ZIP | `Zip/Postal Code`, `Zip`, `zip`, `ZipCode`, `Zip code` |
 | In business | `Currently in Business?`, `Currently in Business`, `In Business` |

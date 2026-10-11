@@ -10,13 +10,15 @@ row "converted successfully" with nothing in the report.
 import os
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
+
+from defusedxml import ElementTree as SafeET
 
 from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
 from src.schema_rules import SchemaGuard, load_rules, schema_path, strip_illegal_xml_chars
 from src.validation_report import ValidationTracker
+from src.xml_utils import create_element
 
 from tests.test_integration_xsd import (
     COUNSELING_XSD,
@@ -75,7 +77,7 @@ class TestLoadRules(unittest.TestCase):
         xml_path = tempfile.NamedTemporaryFile(suffix=".xml", delete=False).name
         try:
             CounselingConverter(logger, validator).convert(csv_path, xml_path)
-            root = ET.parse(xml_path).getroot()
+            root = SafeET.parse(xml_path).getroot()
         finally:
             os.unlink(csv_path)
             os.unlink(xml_path)
@@ -97,14 +99,14 @@ class TestSchemaGuard(unittest.TestCase):
     def setUp(self):
         self.validator = ValidationTracker()
         self.guard = SchemaGuard("counseling", self.validator)
-        self.record = ET.Element("CounselingRecord")
+        self.record = SafeET.fromstring("<CounselingRecord/>")
 
     def _sub(self, parent, *path_and_text):
         *path, text = path_and_text
         node = parent
         for tag in path:
             found = node.find(tag)
-            node = found if found is not None else ET.SubElement(node, tag)
+            node = found if found is not None else create_element(node, tag)
         if text is not None:
             node.text = text
         return node
@@ -152,22 +154,22 @@ class TestSchemaGuard(unittest.TestCase):
 
     def test_invalid_repeat_is_dropped_when_a_valid_one_remains(self):
         race = self._sub(self.record, "ClientIntake", "Race", None)
-        ET.SubElement(race, "Code").text = "White"
-        ET.SubElement(race, "Code").text = "Martian"
+        create_element(race, "Code", "White")
+        create_element(race, "Code", "Martian")
         issues = self._run()
         self.assertEqual([c.text for c in race.findall("Code")], ["White"])
         self.assertEqual(issues[0][:3], ("warning", "invalid_value", "Race"))
 
     def test_optional_code_list_is_dropped_whole_when_no_code_is_valid(self):
         media = self._sub(self.record, "ClientIntake", "Media", None)
-        ET.SubElement(media, "Code").text = "Facebook"
+        create_element(media, "Code", "Facebook")
         issues = self._run()
         self.assertIsNone(self.record.find("ClientIntake/Media"))
         self.assertEqual(issues[0][:3], ("warning", "downgraded_value", "What Prompted you to contact us?"))
 
     def test_invalid_required_value_is_kept_and_reported_as_error(self):
         race = self._sub(self.record, "ClientIntake", "Race", None)
-        ET.SubElement(race, "Code").text = "Martian"
+        create_element(race, "Code", "Martian")
         issues = self._run()
         self.assertEqual(race.find("Code").text, "Martian")
         self.assertEqual(issues[0][:3], ("error", "invalid_value", "Race"))
@@ -231,7 +233,7 @@ class TestFacetsEnforcedEndToEnd(unittest.TestCase):
             converter_cls(self.logger, self.validator).convert(csv_path, xml_path)
             is_valid, errors = _validate_xml_against_xsd(xml_path, xsd)
             self.assertTrue(is_valid, "XSD validation errors:\n" + "\n".join(errors[:10]))
-            return ET.parse(xml_path).getroot()
+            return SafeET.parse(xml_path).getroot()
         finally:
             os.unlink(csv_path)
             if os.path.exists(xml_path):

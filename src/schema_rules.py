@@ -30,7 +30,6 @@ import functools
 import logging
 import os
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -43,6 +42,9 @@ from . import xsd_error_mapping
 
 if TYPE_CHECKING:
     from .validation_report import ValidationTracker
+    # Annotations only: the guard walks Element trees the converters built
+    # and never parses XML with the stdlib (the XSD is read with lxml above).
+    from .xml_utils import Element
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +294,7 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
     return text, None
 
 
-def _is_code_list(element: ET.Element) -> bool:
+def _is_code_list(element: Element) -> bool:
     """True for a small optional section such as Media or LegalEntity, made
     only of Code values and an optional Other text.
 
@@ -325,7 +327,7 @@ class SchemaGuard:
             (log or logger).warning(f"Schema facets unavailable ({path}): {exc}; value checks skipped.")
             self.rules = {}
 
-    def enforce(self, record: ET.Element, record_id: str, parent_path: tuple[str, ...]) -> None:
+    def enforce(self, record: Element, record_id: str, parent_path: tuple[str, ...]) -> None:
         """Check every element of `record` in place. `parent_path` is the tag
         path of the record's parent from the document root."""
         self._reported: set[tuple[str, str]] = set()
@@ -340,12 +342,12 @@ class SchemaGuard:
         self._reported.add((field, message))
         self.validator.add_issue(record_id, severity, category, field, message)
 
-    def _field(self, element: ET.Element, parent: ET.Element | None) -> str:
+    def _field(self, element: Element, parent: Element | None) -> str:
         label, csv_column = xsd_error_mapping.resolve_element_field(
             element.tag, parent.tag if parent is not None else None, self._element_fields)
         return csv_column or label or element.tag
 
-    def _visit(self, element: ET.Element, path: tuple[str, ...], parent: ET.Element | None,
+    def _visit(self, element: Element, path: tuple[str, ...], parent: Element | None,
                record_id: str) -> None:
         rule = self.rules.get(path)
         if element.text is not None and len(element) == 0:

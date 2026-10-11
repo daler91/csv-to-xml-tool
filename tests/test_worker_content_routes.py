@@ -9,6 +9,7 @@ injected so the progress/cancel registry clears stay hermetic.
 
 import asyncio
 import os
+import unittest
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -367,22 +368,23 @@ def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     )
     result = asyncio.run(convert_route.convert(req))
 
-    assert result["xsd_valid"] is False
-    assert len(result["xsd_errors"]) >= 1
+    check = unittest.TestCase()
+    check.assertIs(result["xsd_valid"], False)
+    check.assertGreaterEqual(len(result["xsd_errors"]), 1)
     details = result["xsd_error_details"]
-    assert len(details) == len(result["xsd_errors"])
+    check.assertEqual(len(details), len(result["xsd_errors"]))
     # Race is required, so the converter keeps the unrecognised value (and
     # reports it) rather than dropping it; the XSD error traces back to the
     # second CSV row / Contact C-002 and the 'Race' source column.
     for detail in details:
-        assert detail["element"] == "Code"
-        assert detail["row_number"] == 2
-        assert detail["record_id"] == "C-002"
-        assert detail["csv_column"] == "Race"
-        assert detail["message"] in result["xsd_errors"]
-        assert detail["friendly_message"].startswith(
-            "Row 2 (Contact C-002): 'Race' (CSV column 'Race') — "
+        check.assertEqual(
+            (detail["element"], detail["row_number"], detail["record_id"], detail["csv_column"]),
+            ("Code", 2, "C-002", "Race"),
         )
+        check.assertIn(detail["message"], result["xsd_errors"])
+        check.assertTrue(detail["friendly_message"].startswith(
+            "Row 2 (Contact C-002): 'Race' (CSV column 'Race') — "
+        ))
 
 
 def test_convert_xsd_valid_returns_empty_error_details(monkeypatch):

@@ -8,6 +8,7 @@ entirely, while converters.md promised "every change is recorded".
 import csv
 import os
 import tempfile
+import unittest
 
 import pytest
 
@@ -29,45 +30,43 @@ def _diff(rows, converter_type="counseling"):
         os.unlink(path)
 
 
-def test_a_dropped_value_appears_with_an_empty_cleaned_value():
-    diffs = _diff([{"Contact ID": "C-1", "Contact: Phone": "555-0101", "Gender": "Non-binary"}])
-    assert diffs[("Contact: Phone", "555-0101")]["cleaned"] == ""
-    assert diffs[("Gender", "Non-binary")]["cleaned"] == ""
+class TestCleaningDiff(unittest.TestCase):
 
+    def test_a_dropped_value_appears_with_an_empty_cleaned_value(self):
+        diffs = _diff([{"Contact ID": "C-1", "Contact: Phone": "555-0101", "Gender": "Non-binary"}])
+        self.assertEqual(diffs[("Contact: Phone", "555-0101")]["cleaned"], "")
+        self.assertEqual(diffs[("Gender", "Non-binary")]["cleaned"], "")
 
-def test_enumeration_mappers_are_in_the_diff():
-    diffs = _diff([{
-        "Contact ID": "C-1",
-        "Ethnicity:": "Not Hispanic or Latino",
-        "Veteran Status": "No",
-        "Disability": "N",
-        "Branch Of Service": "USMC",
-        "Race": "Caucasian; Black",
-        "Export Countries": "UK; Narnia",
-    }])
-    assert diffs[("Ethnicity:", "Not Hispanic or Latino")]["cleaned"] == "Non Hispanic or Latino"
-    assert diffs[("Veteran Status", "No")]["cleaned"] == "No military service"
-    assert diffs[("Disability", "N")]["cleaned"] == "No"
-    assert diffs[("Branch Of Service", "USMC")]["cleaned"] == "Marine Corps"
-    assert diffs[("Race", "Caucasian; Black")]["cleaned"] == "White; Black or African American"
-    # Narnia is not on SBA's list: dropped from the XML, so from the "after" too.
-    assert diffs[("Export Countries", "UK; Narnia")]["cleaned"] == "United Kingdom"
+    def test_enumeration_mappers_are_in_the_diff(self):
+        diffs = _diff([{
+            "Contact ID": "C-1",
+            "Ethnicity:": "Not Hispanic or Latino",
+            "Veteran Status": "No",
+            "Disability": "N",
+            "Branch Of Service": "USMC",
+            "Race": "Caucasian; Black",
+            "Export Countries": "UK; Narnia",
+        }])
+        self.assertEqual(diffs[("Ethnicity:", "Not Hispanic or Latino")]["cleaned"], "Non Hispanic or Latino")
+        self.assertEqual(diffs[("Veteran Status", "No")]["cleaned"], "No military service")
+        self.assertEqual(diffs[("Disability", "N")]["cleaned"], "No")
+        self.assertEqual(diffs[("Branch Of Service", "USMC")]["cleaned"], "Marine Corps")
+        self.assertEqual(diffs[("Race", "Caucasian; Black")]["cleaned"], "White; Black or African American")
+        # Narnia is not on SBA's list: dropped from the XML, so from the "after" too.
+        self.assertEqual(diffs[("Export Countries", "UK; Narnia")]["cleaned"], "United Kingdom")
 
+    def test_values_the_converter_leaves_alone_are_not_reported(self):
+        # A Salesforce trailing ';' on an already-valid multi-select is not a change.
+        diffs = _diff([{"Contact ID": "C-1", "Race": "Black or African American; White;",
+                        "Ethnicity:": "Hispanic or Latino", "Veteran Status": "Veteran"}])
+        self.assertEqual([key for key in diffs if key[0] in ("Race", "Ethnicity:", "Veteran Status")], [])
 
-def test_values_the_converter_leaves_alone_are_not_reported():
-    # A Salesforce trailing ';' on an already-valid multi-select is not a change.
-    diffs = _diff([{"Contact ID": "C-1", "Race": "Black or African American; White;",
-                    "Ethnicity:": "Hispanic or Latino", "Veteran Status": "Veteran"}])
-    assert [key for key in diffs if key[0] in ("Race", "Ethnicity:", "Veteran Status")] == []
+    def test_counselor_notes_scrubbing_is_shown(self):
+        diffs = _diff([{"Contact ID": "C-1", "Comments": "[User]: Met   with client"}])
+        self.assertEqual(diffs[("Comments", "[User]: Met   with client")]["cleaned"], "Met with client")
 
-
-def test_counselor_notes_scrubbing_is_shown():
-    diffs = _diff([{"Contact ID": "C-1", "Comments": "[User]: Met   with client"}])
-    assert diffs[("Comments", "[User]: Met   with client")]["cleaned"] == "Met with client"
-
-
-def test_training_client_columns_use_the_forms_own_names():
-    diffs = _diff([{"Contact ID": "C-1", "Military Status": "Not Veteran", "Race": "Caucasian"}],
-                  "training-client")
-    assert diffs[("Military Status", "Not Veteran")]["cleaned"] == "No military service"
-    assert diffs[("Race", "Caucasian")]["cleaned"] == "White"
+    def test_training_client_columns_use_the_forms_own_names(self):
+        diffs = _diff([{"Contact ID": "C-1", "Military Status": "Not Veteran", "Race": "Caucasian"}],
+                      "training-client")
+        self.assertEqual(diffs[("Military Status", "Not Veteran")]["cleaned"], "No military service")
+        self.assertEqual(diffs[("Race", "Caucasian")]["cleaned"], "White")

@@ -1,5 +1,9 @@
 import xml.etree.ElementTree as ET
 
+# The element type the converters build, for annotations elsewhere (so a
+# module that only walks these trees needn't import xml.etree itself).
+Element = ET.Element
+
 
 def create_element(parent: ET.Element, element_name: str, element_text: str = None) -> ET.Element:
     """

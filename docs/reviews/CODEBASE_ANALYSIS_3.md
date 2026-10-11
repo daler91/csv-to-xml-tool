@@ -220,7 +220,9 @@ Variant: if Postgres blips *before* the queued→converting flip, `deadLetter` (
 `converting`) matches 0 rows; the job is acked while still `queued`, with no audit row, and is
 reaped as a timeout an hour later.
 
-### B.3 Retention only runs for users who come back — `[OPEN]` — MEDIUM (privacy)
+### B.3 Retention only runs for users who come back — `[FIXED]` — MEDIUM (privacy)
+
+> **Fixed:** `purgeAllExpiredJobFiles` runs the same claim-guarded purge for every user, at consumer start and hourly after, up to 200 jobs a run; the per-user read-path sweep stays as well.
 
 `apps/web/src/lib/retention.ts:27,40-52` runs only from `api/jobs/route.ts:16` and
 `dashboard/page.tsx:29`, for the viewing user, 25 jobs per visit. The convert form promises
@@ -228,7 +230,9 @@ files "are automatically deleted after N days" (`convert-form.tsx:224`). A user 
 PII (names, phones, addresses) and never signs in again keeps it on the volume indefinitely. Fix:
 a global sweep from the consumer's background loop (it already runs per process).
 
-### B.4 Cancel-then-delete can orphan converted XML — `[OPEN]` — LOW
+### B.4 Cancel-then-delete can orphan converted XML — `[FIXED]` — LOW
+
+> **Fixed:** when the runner's guarded `complete` write misses, it removes the XML it just wrote — unless a concurrent attempt completed the job, in which case that file is the job's output.
 
 `job-runner.ts:77-80` writes the XML before the guarded status update at `:94`. If the user cancels
 and then deletes (the 409 message tells them to) while the worker misses the cancel, the runner

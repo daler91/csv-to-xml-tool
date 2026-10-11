@@ -7,7 +7,7 @@ vi.mock("@/lib/rate-limit", () => ({
   rateLimit: vi.fn(),
   resetRateLimit: vi.fn(),
 }));
-vi.mock("bcryptjs", () => ({ compare: vi.fn() }));
+vi.mock("bcryptjs", () => ({ compare: vi.fn(), hash: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ recordAudit: vi.fn() }));
 // vi.mock factories are hoisted above ordinary declarations, so the capture
 // slot has to be hoisted with them.
@@ -28,13 +28,14 @@ vi.mock("next-auth/providers/credentials", () => ({
 import "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
-import { compare } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { recordAudit } from "@/lib/audit";
 
 const db = vi.mocked(prisma, true);
 const limiter = vi.mocked(rateLimit);
 const resetLimiter = vi.mocked(resetRateLimit);
 const bcryptCompare = vi.mocked(compare);
+const bcryptHash = vi.mocked(hash);
 const audit = vi.mocked(recordAudit);
 
 type AuthorizeFn = (
@@ -129,10 +130,13 @@ describe("credentials authorize — enumeration resistance", () => {
     // password, which told a caller the address had no account.
     db.user.findUnique.mockResolvedValue(null as never);
     bcryptCompare.mockResolvedValue(true as never);
+    bcryptHash.mockResolvedValue("decoy-hash" as never);
 
     expect(await authorize()(CREDS)).toBeNull();
 
-    expect(bcryptCompare).toHaveBeenCalledWith("hunter2", expect.stringMatching(/^\$2[aby]\$12\$/));
+    // A cost-12 decoy, so the comparison costs what a real one does.
+    expect(bcryptHash).toHaveBeenCalledWith(expect.any(String), 12);
+    expect(bcryptCompare).toHaveBeenCalledWith("hunter2", "decoy-hash");
   });
 
   it("rejects missing credentials without touching the limiter", async () => {

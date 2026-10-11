@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
+import { randomBytes } from "node:crypto";
+import { compare, hash } from "bcryptjs";
 import { prisma } from "./prisma";
 import { normalizeEmail } from "./normalize";
 import { rateLimit, resetRateLimit } from "./rate-limit";
@@ -26,11 +27,17 @@ const LOGIN_MAX_ATTEMPTS = 10;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_IP_MAX_ATTEMPTS = 50;
 
-// A bcrypt hash at the cost signup uses (12) of a random password nobody has.
-// Comparing against it when the email is unknown makes that failure take as
-// long as a wrong password; returning straight away answered about 250 ms
-// sooner, which told a caller the address had no account.
-const DUMMY_PASSWORD_HASH = "$2b$12$iHtg.KAbRw7x.keyCjz3guGISulIU0grVX1ithEy743EPHMAcETmW";
+// Compared against when the email is unknown, so that failure takes as long
+// as a wrong password: returning straight away answered about 250 ms sooner,
+// which told a caller the address had no account. A hash of random bytes at
+// signup's cost (12), made once per process on first use -- never a literal
+// in the source, where it would read as a leaked credential.
+let timingDecoy: Promise<string> | undefined;
+
+function timingDecoyHash(): Promise<string> {
+  timingDecoy ??= hash(randomBytes(32).toString("base64"), 12);
+  return timingDecoy;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -75,7 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // of them, so none of these states is distinguishable to a caller.
         const isValid = await compare(
           credentials.password as string,
-          user?.passwordHash ?? DUMMY_PASSWORD_HASH
+          user?.passwordHash ?? (await timingDecoyHash())
         );
 
         if (!user) return null;

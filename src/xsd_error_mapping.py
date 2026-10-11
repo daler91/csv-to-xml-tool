@@ -264,6 +264,20 @@ def _humanize_tag(tag: str) -> str:
     return re.sub(r"\s+", " ", spaced).strip()
 
 
+def _recorded_column(element: str, parent_tag: str | None, columns: dict | None,
+                     schema_type: str | None) -> tuple[str, str | None] | None:
+    """(field_label, csv_column) from the record's own sources, or None."""
+    if not columns:
+        return None
+    for key in ([f"{parent_tag}/{element}"] if parent_tag else []) + [element]:
+        if key in columns:
+            column = columns[key]
+            if schema_type == "training-client":
+                return _training_client_field(column, column)
+            return column, column
+    return None
+
+
 def _resolve_field(element: str | None, parent_tag: str | None,
                    element_fields: dict, columns: dict | None = None,
                    schema_type: str | None = None) -> tuple[str | None, str | None]:
@@ -275,14 +289,9 @@ def _resolve_field(element: str | None, parent_tag: str | None,
     """
     if not element:
         return None, None
-    if columns:
-        keys = ([f"{parent_tag}/{element}"] if parent_tag else []) + [element]
-        for key in keys:
-            if key in columns:
-                column = columns[key]
-                if schema_type == "training-client":
-                    return _training_client_field(column, column)
-                return column, column
+    override = _recorded_column(element, parent_tag, columns, schema_type)
+    if override:
+        return override
     if parent_tag:
         hit = element_fields.get(f"{parent_tag}/{element}")
         if hit:
@@ -334,6 +343,23 @@ def _friendly_message(row_number: int | None, record_id: str | None, id_kind: st
     return restatement
 
 
+def _locate(record, record_sources: list[dict] | None, element: str | None,
+            line: int | None) -> tuple:
+    """(row_number, record_id, parent_tag, columns) for the record an error
+    falls in; all None when it falls in none. The row is the CSV row from
+    `record_sources` when given, else the record's position in the XML."""
+    if record is None:
+        return None, None, None, None
+    _, row_number, record_id, record_element = record
+    columns = None
+    if record_sources and row_number <= len(record_sources):
+        source = record_sources[row_number - 1]
+        row_number = source.get("row") or row_number
+        columns = source.get("columns")
+    parent_tag = _parent_tag_for(record_element, element, line) if element else None
+    return row_number, record_id, parent_tag, columns
+
+
 def build_error_details(xml_source: str, errors: list[str], schema_type: str,
                         record_sources: list[dict] | None = None) -> list[dict]:
     """Map validator error strings back to records and CSV columns.
@@ -371,18 +397,8 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str,
         element_match = _ELEMENT_RE.match(message)
         element = element_match.group(1) if element_match else None
 
-        row_number = record_id = parent_tag = None
-        columns = None
-        record = _record_for_line(records, line)
-        if record is not None:
-            _, row_number, record_id, record_element = record
-            if record_sources and row_number <= len(record_sources):
-                source = record_sources[row_number - 1]
-                row_number = source.get("row") or row_number
-                columns = source.get("columns")
-            if element:
-                parent_tag = _parent_tag_for(record_element, element, line)
-
+        row_number, record_id, parent_tag, columns = _locate(
+            _record_for_line(records, line), record_sources, element, line)
         field_label, csv_column = _resolve_field(element, parent_tag, element_fields,
                                                  columns, schema_type)
         restatement = _restatement(message, element)

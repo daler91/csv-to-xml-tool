@@ -238,11 +238,12 @@ class CounselingConverter(BaseConverter):
 
         for row_index, row in enumerate(rows, 1):
             row = self._preprocess_row(row)
-            if 'Contact ID' in row:
+            contact_id = row.get('Contact ID')
+            if contact_id is not None:
                 # A whitespace-only id was written to the filing as "   ";
                 # trimmed, it fails as a missing id like a blank cell does.
-                row['Contact ID'] = str(row['Contact ID']).strip()
-            record_id = row.get('Contact ID', f"Row_{row_index}")
+                row['Contact ID'] = contact_id = str(contact_id).strip()
+            record_id = contact_id if contact_id is not None else f"Row_{row_index}"
             # Set before validate_counseling_record so pre-validation issues
             # (including missing-Contact-ID "Row_N" ones) carry the event id.
             self.validator.set_current_event_id(row.get('Activity ID', ''))

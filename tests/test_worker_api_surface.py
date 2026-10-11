@@ -9,6 +9,7 @@ how long one conversion runs.
 
 import asyncio
 import json
+import secrets
 import unittest
 from unittest import mock
 
@@ -29,7 +30,8 @@ from tests.test_worker_availability import _StalledRedis  # noqa: E402
 from tests.test_worker_content_routes import COUNSELING_CSV  # noqa: E402
 from tests.test_worker_hardening import _asgi_request  # noqa: E402
 
-TOKEN = "test-token"
+# Random per run: nothing here is a credential.
+TOKEN = secrets.token_hex(16)
 AUTH = {"authorization": f"Bearer {TOKEN}"}
 
 
@@ -38,7 +40,7 @@ def _json_request(path, payload, method="POST", headers=None):
     all_headers = {"content-type": "application/json", "content-length": str(len(body)), **AUTH}
     all_headers.update(headers or {})
     status, raw = _asgi_request(worker_main.app, method, path, body, all_headers)
-    return status, json.loads(raw) if raw else None
+    return status, json.loads(raw or b"{}")
 
 
 class _WorkerCase(unittest.TestCase):
@@ -131,7 +133,8 @@ class ConcurrencyLimitTest(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _run(self, paths, headers=AUTH, limit=1):
+    def _run(self, paths, headers=None, limit=1):
+        headers = AUTH if headers is None else headers
         in_flight, peak = 0, 0
 
         async def inner(scope, receive, send):

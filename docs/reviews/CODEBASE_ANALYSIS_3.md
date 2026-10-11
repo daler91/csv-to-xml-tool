@@ -182,7 +182,9 @@ for the equivalent case; counseling and training-client should match.
 
 ## Tier B — Job pipeline integrity (web)
 
-### B.1 `PATCH` can pull a queued or converting job back to `mapping` — `[OPEN]` — MEDIUM
+### B.1 `PATCH` can pull a queued or converting job back to `mapping` — `[FIXED]` — MEDIUM
+
+> **Fixed:** PATCH refuses `queued` and `converting` jobs with a 409 telling the user to cancel first, and the guarded `updateMany` excludes them too, so a job started between the read and the write is not pulled back.
 
 `apps/web/src/app/api/jobs/[jobId]/route.ts:81,140-166`. The 2nd-pass fix (4.2) restricted the
 writable status to `mapping`, but the guarded `updateMany` only excludes *terminal* statuses. From
@@ -199,7 +201,9 @@ Trace: start a conversion, press Back to the mapping page, Save.
 Fix: add `queued` and `converting` to the excluded set for PATCH (and return 409), plus a test
 seeded in each state.
 
-### B.2 The retry budget lasts about 4 seconds — `[OPEN]` — MEDIUM
+### B.2 The retry budget lasts about 4 seconds — `[FIXED]` — MEDIUM
+
+> **Fixed:** a transient failure waits in a Redis `delayed` set for 30 s, then 2 min (`JOB_RETRY_BASE_MS` × 4ⁿ), and consumers promote due retries before each claim. `deadLetter` matches `queued` as well as `converting`, so the Postgres-blip variant is failed with an audit row instead of acked silently.
 
 `apps/web/src/lib/job-consumer.ts:150-175`. On a transient failure the consumer sleeps a fixed
 2 s and requeues; `BLMOVE` reclaims immediately. Three attempts finish in ~4 s (measured: 4006 ms,
@@ -238,7 +242,9 @@ process and a 30-minute attempt budget, a backlog over 60 minutes gets jobs reap
 
 ## Tier C — Resource limits & availability
 
-### C.1 Chunked uploads bypass the size cap before buffering — `[OPEN]` — MEDIUM
+### C.1 Chunked uploads bypass the size cap before buffering — `[FIXED]` — MEDIUM
+
+> **Fixed:** `readCappedFormData` reads the body as a stream and stops with a 413 once it passes the cap, whether or not a Content-Length was sent; `/api/upload`, `/api/validate-xml` and `/api/fix-xml` all use it.
 
 `apps/web/src/lib/xml-tool-route.ts:123-132` (`declaredBodyTooLarge`), used by `/api/upload`,
 `/api/validate-xml`, `/api/fix-xml`. The check reads only `Content-Length`; with

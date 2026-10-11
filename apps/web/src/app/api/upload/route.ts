@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
-import { declaredBodyTooLarge, isUploadedFile } from "@/lib/xml-tool-route";
+import { isUploadedFile, readCappedFormData } from "@/lib/xml-tool-route";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -21,11 +21,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Reject an oversized body by its declared length before buffering it.
-    const tooLarge = declaredBodyTooLarge(req);
-    if (tooLarge) return tooLarge;
-
-    const formData = await req.formData();
+    // Bounded by the upload cap while it is read, declared length or not.
+    const formData = await readCappedFormData(req);
+    if (formData instanceof NextResponse) return formData;
     const file = formData.get("file");
     const converterType = formData.get("converterType");
     const previousJobIdRaw = formData.get("previousJobId");

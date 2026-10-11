@@ -165,6 +165,33 @@ describe("POST /api/upload — input hardening", () => {
     expect(db.job.create).not.toHaveBeenCalled();
   });
 
+  it("stops reading a body with no Content-Length once it passes the cap (413)", async () => {
+    // A chunked upload declares no length, so the declared-size check alone
+    // let it through and req.formData() buffered all of it. 64 KiB chunks,
+    // up to 100 MiB, against a cap of 1000 bytes + 64 KiB of framing.
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 1600) controller.close();
+        else controller.enqueue(new Uint8Array(64 * 1024));
+      },
+    });
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body,
+      headers: { "content-type": "multipart/form-data; boundary=x" },
+      duplex: "half",
+    } as RequestInit);
+    expect(req.headers.get("content-length")).toBeNull();
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+    expect(db.job.create).not.toHaveBeenCalled();
+  });
+
   it("returns 400, not 500, when the file part is plain text", async () => {
     const form = new FormData();
     form.append("file", "not a file");

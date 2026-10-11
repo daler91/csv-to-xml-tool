@@ -182,9 +182,11 @@ export async function handleFailure(jobId: string, err: unknown): Promise<void> 
   // Permanent input errors (400 / 422 from required-column validation) and
   // conversion timeouts aren't worth retrying — a 30-min timeout is unlikely
   // transient, and retrying it could blow past the reaper deadline. Dead-letter
-  // immediately. Everything else (network, worker 5xx) is treated as transient.
+  // immediately. That includes the worker's own deadline (504), the same
+  // timeout seen from the other side. Everything else (network, other worker
+  // 5xx) is treated as transient.
   const isTimeout = /timed out/i.test(message);
-  const permanent = status === 400 || status === 422 || isTimeout;
+  const permanent = status === 400 || status === 422 || status === 504 || isTimeout;
 
   const attempt = await getAttempts(jobId);
   if (!permanent && attempt < MAX_ATTEMPTS) {

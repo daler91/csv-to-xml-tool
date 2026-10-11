@@ -39,7 +39,7 @@ window it opens. Responses that are limited return **429** with
 
 | Bucket | Limit | Key |
 |---|---|---|
-| `signup` | 5 / 60s | client IP (first entry of `x-forwarded-for`, validated) |
+| `signup` | 5 / 60s | client IP (the `x-forwarded-for` entry added by our own proxy — see `TRUSTED_PROXY_HOPS` — validated) |
 | login | throttled per email **and** per IP | — |
 | `upload` | 10 / 60s | user id |
 | `validate-xml` | 10 / 60s | user id |
@@ -236,14 +236,15 @@ CSV export escapes quotes and prefixes any value starting with `=`, `+`, `-`, `@
 or a control character with an apostrophe, so user-controlled filenames cannot
 become formulas when the file opens in Excel or Sheets.
 
-**Actions actually written:** `upload`, `conversion_started`,
-`conversion_complete`, `conversion_cancelled`, `conversion_timeout`,
-`conversion_deadlettered`, `download`, `files_purged`, `job_deleted`,
-`xml_validated`, `xml_autofix`.
-
-> The audit **page** currently offers a `conversion_failed` filter that no code
-> writes, and does not label six actions that are written. See
-> [documentation-audit.md](./documentation-audit.md#code-issues-found-during-the-audit).
+**Actions actually written:** `upload`, `mapping_changed` (the column mapping
+of a job changed; metadata holds the new and previous mapping),
+`conversion_started`, `conversion_retried`, `conversion_complete`,
+`conversion_cancelled`, `conversion_timeout`, `conversion_deadlettered`,
+`download`, `files_purged`, `job_deleted`, `xml_validated`, `xml_autofix`,
+`mapping_template_saved`, `mapping_template_deleted`, `sign_in` and
+`sign_in_failed` (a wrong password for an existing account; an address with no
+account has no user to file an entry under). The audit page labels each of
+them and offers each as a filter.
 
 ### `POST /api/validate-xml`
 
@@ -285,6 +286,16 @@ headers, and only the origins in `ALLOWED_ORIGINS` (default
 Request bodies over `MAX_REQUEST_BYTES` (100 MB default) get **413**. The check
 looks at `Content-Length` first and then counts bytes as the body streams, so a
 chunked request without a `Content-Length` cannot slip past it.
+
+At most `MAX_CONCURRENT_REQUESTS` (default 4) authenticated `/convert`,
+`/preview`, `/validate-xsd` and `/fix-xml` requests run at once; the rest wait
+for a slot before their body is read. `/health`, progress and cancel are never
+queued.
+
+Every error body is `{"detail": "<string>"}`. A request that fails validation (a
+missing field, or a `converter_type` / `schema_type` other than `counseling`,
+`training` or `training-client`) is a **422** whose detail names the field and
+the rule, without repeating the value that was sent.
 
 In production (`ENVIRONMENT=production`), `/docs`, `/redoc`, `/openapi.json` and
 the route list in 404 bodies are all disabled.
@@ -337,6 +348,7 @@ rest of the file into one oversized cell) is a `422` whose detail says so.
 | 409 | Cancelled by the user mid-conversion |
 | 422 | Unprocessable CSV — required columns missing, the file is empty/headers-only, or it cannot be parsed as CSV (e.g. an unclosed quote) |
 | 500 | Internal conversion error |
+| 504 | The conversion passed `CONVERSION_DEADLINE_SECONDS` (default 30 min, checked between phases); the web treats it as final, like its own timeout |
 
 `422` is the important one: the detail string names exactly which required
 columns are missing, so the web layer can tell the user what to fix. A
@@ -350,16 +362,18 @@ set after the web has authoritatively cancelled the job.
 
 ### `POST /convert/{job_id}/cancel`
 
-Sets the cancellation flag. Always 200 with
-`{"job_id": "…", "cancelled": true}`, including for a job that already finished.
-The conversion stops at the next phase checkpoint.
+Sets the cancellation flag: 200 with `{"job_id": "…", "cancelled": true}`,
+including for a job that already finished, or **503** when Redis did not store
+the flag (so the conversion will not see it). The conversion stops at the next
+phase checkpoint.
 
 ### `GET /convert/{job_id}/progress`
 
 The current progress snapshot (`processed`, `total`, `updated_at`), or **404**
 when none is recorded — either the job has finished (the `/convert` route clears
 the snapshot in its `finally`) or it has not started yet. The web layer treats
-404 as "no live progress" and falls back to the database row.
+404 as "no live progress" and falls back to the database row. **503** means
+Redis is unavailable, so whether progress exists is unknown.
 
 ### `POST /validate-xsd`
 
@@ -370,7 +384,10 @@ the snapshot in its `finally`) or it has not started yet. The web layer treats
 → `is_valid`, `errors`, `error_count`, `error_details`.
 
 `error_details[].row_number` is the 1-based ordinal of the record element in the
-document, so an error can be traced to a record without counting lines.
+document, so an error can be traced to a record without counting lines. (There
+is no CSV here. In a `/convert` result, `xsd_error_details[].row_number` is the
+1-based CSV data row the record was built from — for a training event, its
+first row — so a skipped row does not shift the numbers after it.)
 
 ### `POST /fix-xml`
 
@@ -383,6 +400,7 @@ Reordering only. It never invents an element to satisfy the schema.
 
 ### Unmatched paths
 
-Any other path returns 404 `{"detail": "No route matched"}`. Outside production
-the response also lists the registered routes; in production that list goes to
-the log only.
+Any other path returns 404 `{"detail": "No route matched"}`, logged at INFO.
+Outside production the response also lists the registered routes; in
+production that list goes to the startup log only. A known path with the wrong
+method is a **405**.

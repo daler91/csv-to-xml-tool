@@ -43,7 +43,8 @@ class ConversionCancelledError(Exception):
 class CancellationRegistry:
     """Redis-backed set of job IDs that should be cancelled on next check."""
 
-    def cancel(self, job_id: str) -> None:
+    def cancel(self, job_id: str) -> bool:
+        """Store the cancel signal; False when Redis did not take it."""
         try:
             get_client().set(cancel_key(job_id), "1", ex=TTL_SECONDS)
         except Exception:
@@ -51,6 +52,8 @@ class CancellationRegistry:
             # state, so a lost signal only means the worker keeps crunching
             # until it finishes. Surface it so the degradation is observable.
             logger.warning("cancellation.cancel failed for job %s", job_id, exc_info=True)
+            return False
+        return True
 
     def is_cancelled(self, job_id: str) -> bool:
         if not available():

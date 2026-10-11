@@ -67,9 +67,11 @@ Redis or Postgres.
 
 Inside `src/`, a conversion is always the same seven steps:
 
-1. **Read** — `csv.DictReader` with `utf-8-sig`, so an Excel BOM does not turn
-   the first header into `﻿Contact ID`. All three converters use stdlib
-   `csv`; there is no pandas anywhere in the project.
+1. **Read** — `BaseConverter._read_csv`: the bytes are decoded as UTF-8 (an
+   Excel BOM dropped) or, failing that, Windows-1252, and read with
+   `data_cleaning.NormalizedDictReader`, which normalizes header whitespace and
+   keeps a blank duplicate column from erasing a filled one. All three
+   converters use stdlib `csv`; there is no pandas anywhere in the project.
 2. **Resolve columns** — each converter maps CSV headers to the fields it needs.
    Counseling declares its vocabulary once in `CounselingConfig.COLUMN_MAPPING`;
    training resolves aliases through `TrainingConfig.COLUMN_MAPPING`.

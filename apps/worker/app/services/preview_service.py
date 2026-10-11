@@ -1,6 +1,5 @@
 """CSV preview and column detection for the web UI."""
 
-import csv
 import difflib
 import io
 import os
@@ -11,7 +10,7 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.config import CounselingConfig, TrainingConfig
-from src.data_cleaning import normalize_header, normalize_row_keys
+from src.data_cleaning import NormalizedDictReader
 from src.data_validation import analyze_data_quality
 
 from .column_requirements import (
@@ -327,14 +326,14 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
     services no longer share a disk). A leading UTF-8 BOM is stripped so the
     first header isn't corrupted, matching the utf-8-sig read path elsewhere.
     """
-    reader = csv.DictReader(io.StringIO(csv_content.lstrip("\ufeff")))
-    # CONV-2: normalize header whitespace (and the preview row keys) so the
-    # mapping UI's matched/missing badges agree with what conversion reads.
-    headers = [normalize_header(h) for h in (reader.fieldnames or [])]
+    # CONV-2: the converters' reader, so header normalization and duplicate
+    # columns resolve here exactly as conversion will resolve them.
+    reader = NormalizedDictReader(io.StringIO(csv_content.lstrip("\ufeff")))
+    headers = list(dict.fromkeys(reader.fieldnames))
     # Feature 2.5: the parse already walks every row to count total_rows, so
     # keep the normalized rows and run the data-quality checks over the full
     # file in the same O(n) pass; only the first max_rows feed the preview table.
-    all_rows = [normalize_row_keys(dict(row)) for row in reader]
+    all_rows = list(reader)
     total_rows = len(all_rows)
     rows = all_rows[:max_rows]
 

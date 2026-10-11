@@ -114,7 +114,12 @@ Repro: `Mailing Street="123 Main St\x0bSuite 5"` (a vertical tab — what Word l
 cannot be mapped to a row, and the converter recorded nothing. Fix: strip/replace illegal characters
 in `create_element` and record a `DOWNGRADED_VALUE` issue.
 
-### A.3 XSD errors cite the wrong column or the wrong row — `[OPEN]` — MEDIUM
+### A.3 XSD errors cite the wrong column or the wrong row — `[FIXED]` — MEDIUM
+
+> **Fixed:** converters record, per record, the CSV data row it came from and the column that
+> supplied each Part 3 fallback field (`BaseConverter.record_sources`). `build_error_details` cites
+> that row, and both it and `SchemaGuard` name the `(Meeting)` column when its value was used.
+> Standalone `/validate-xsd`, which has no CSV, still numbers records by position.
 
 - **Wrong column.** `src/xsd_error_mapping.py:79,84-85,103` maps Part 3 `TotalNumberOfEmployees`,
   `GrossRevenues`, `ProfitLoss`, `BusinessStartDatePart3` to the base column, but `_first_present`
@@ -140,14 +145,22 @@ in `create_element` and record a `DOWNGRADED_VALUE` issue.
 - `(1,500)` — how Excel formats a negative in accounting style — becomes `<ProfitLoss>0</ProfitLoss>`
   with the warning "Blank value defaulted", which is false: the cell was not blank.
 
-### A.5 Duplicate headers: the later column silently wins — `[OPEN]` — MEDIUM
+### A.5 Duplicate headers: the later column silently wins — `[FIXED]` — MEDIUM
+
+> **Fixed:** `data_cleaning.NormalizedDictReader` (converters, preview, cleaning diff) never lets a
+> blank cell overwrite an earlier same-named column, and conversion records a file-level warning
+> per repeated header. The worker's mapping step renames the header row only, so duplicates reach
+> the converter instead of being collapsed by a dict first.
 
 `src/data_cleaning.py:298-316`. The docstring says callers detect duplicates; none do. Header
 `...,Date,...,Date` with the first cell `10/05/2026` and the second blank → no `DateCounseled`, no
 issue. Salesforce report builders produce duplicate column labels easily. Fix: detect in
 `normalize_row_keys` and record a `FILE_ACCESS`/structure issue (or prefer the non-blank value).
 
-### A.6 Gender mapper ignores `F` / `M` / `Woman` — `[OPEN]` — MEDIUM
+### A.6 Gender mapper ignores `F` / `M` / `Woman` — `[FIXED]` — MEDIUM
+
+> **Fixed:** `map_gender_to_sex` matches whole words against `DEMOGRAPHIC_GENDER_KEYWORDS` as well
+> as the old substrings, for the counseling `Sex` element and the training Female/Male counts.
 
 `src/data_cleaning.py:350-366` matches only full words; `config.py:637`
 `DEMOGRAPHIC_KEYWORDS['gender']` lists the abbreviations but is dead config. Counseling `Gender=F` →
@@ -162,17 +175,21 @@ issue. Salesforce report builders produce duplicate column labels easily. Fix: d
 which fails the XSD (`minOccurs=1`). `training_converter.py:75-82` already raises `EmptyCSVError`
 for the equivalent case; counseling and training-client should match.
 
-### A.8 Unrecognised Mailing Country passes through raw — `[OPEN]` — LOW/MEDIUM
+### A.8 Unrecognised Mailing Country passes through raw — `[FIXED]` — LOW/MEDIUM
+
+> **Fixed** by the schema guard (A.2 batch): `germany` is filed as `Germany`, and a name SBA does
+> not list is left out with one warning instead of failing the file. Pinned by a test.
 
 `counseling_converter.py:693` / `data_cleaning.py:201`. `Deutschland` → enum error (twice). The
 `EXPORT_COUNTRY_LOOKUP` already used for export countries isn't consulted. Not covered by 2nd-pass
 1.4's list.
 
-### A.9 Unreadable input fails the whole file without an issue — `[PARTIAL]` — LOW/MEDIUM
+### A.9 Unreadable input fails the whole file without an issue — `[FIXED]` — LOW/MEDIUM
 
 > **Worker half fixed:** `/convert` and `/preview` answer a `csv.Error` with a 422 whose detail names
-> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **Still open:**
-> the CLI's `UnicodeDecodeError` on cp1252 input.
+> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **CLI half
+> fixed:** the converters decode input as the web upload does (UTF-8, else Windows-1252, with a
+> file-level warning), so a cp1252 export converts instead of raising `UnicodeDecodeError`.
 
 `counseling_converter.py:126` catches only `OSError` and `csv.Error` around the read loop:
 
@@ -240,7 +257,11 @@ writes `output/<id>/<id>.xml` after the row and directory are gone. No row → r
 it. Fix: write to a temp path and rename only after the guarded update succeeds, or delete on
 `count === 0`.
 
-### B.5 The reaper fails jobs still waiting in a long queue — `[OPEN]` — LOW
+### B.5 The reaper fails jobs still waiting in a long queue — `[FIXED]` — LOW
+
+> **Fixed:** the reaper skips a job the queue still holds (`pending`, `delayed` or `processing`,
+> via `isHeldByQueue` on the shared client) and fails only one the queue has lost; if Redis
+> cannot be asked it reaps nothing.
 
 `job-reaper.ts:23,38` times `queued` jobs from when they were queued. With one serial consumer per
 process and a 30-minute attempt budget, a backlog over 60 minutes gets jobs reaped as
@@ -288,7 +309,13 @@ disable Redis calls for that conversion (or for N seconds process-wide).
 inside the 100 MB body cap. Meanwhile `/health` (3 s healthcheck timeout), progress polls and
 cancels all stall. Fix: `await asyncio.to_thread(...)`, as every other route already does.
 
-### C.4 CODEBASE_ANALYSIS 3.7 was only partly fixed — `[OPEN]` — LOW/MEDIUM
+### C.4 CODEBASE_ANALYSIS 3.7 was only partly fixed — `[FIXED]` — LOW/MEDIUM
+
+> **Fixed:** `ConcurrencyLimitMiddleware` runs at most `MAX_CONCURRENT_REQUESTS` (4) authenticated
+> heavy requests at once, queueing the rest before their body is read, and `/convert` stops at the
+> next phase checkpoint after `CONVERSION_DEADLINE_SECONDS` (504, final in the web consumer).
+> `MAX_REQUEST_BYTES` stays 100 MB: JSON escaping can make the envelope larger than a 50 MB file,
+> and memory is now bounded by the upload cap times the concurrency cap.
 
 3.7 is marked `[FIXED]`, but only the chunked-body bypass landed. `MAX_REQUEST_BYTES` is still
 100 MB (`apps/worker/app/main.py:60`), there is no conversion concurrency cap (no semaphore, no
@@ -302,14 +329,14 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 | # | Where | Finding |
 |---|---|---|
 | D.1 `[FIXED]` | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | *Fixed: both catch `DefusedXmlException`, so the file is reported as unparseable.* defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
-| D.2 | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
-| D.3 | `apps/worker/app/main.py:181-191` | On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
-| D.4 | `apps/worker/app/models/schemas.py:7` | `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |
-| D.5 | `apps/worker/app/routes/validate.py:46` | Error responses have two shapes (`detail` list from FastAPI 422, string from the worker's own 422) and echo input verbatim (`"Unknown schema type: <script>x"`). JSON-only, so not XSS, but inconsistent. |
-| D.6 | `apps/worker/Dockerfile:1,4-5` | Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
-| D.7 | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
-| D.8 | web routes | Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
-| D.9 | core | Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |
+| D.2 `[FIXED]` | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | *Fixed: cancel answers 503 when Redis did not store the flag; progress answers 503 while Redis is unavailable.* Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
+| D.3 `[FIXED]` | `apps/worker/app/main.py:181-191` | *Fixed: the route list is read from the routers; the catch-all route is replaced by a 404 handler that logs at INFO and leaves 405s alone.* On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
+| D.4 `[FIXED]` | `apps/worker/app/models/schemas.py:7` | *Fixed: `converter_type` / `schema_type` are `Literal`s on every request model.* `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |
+| D.5 `[FIXED]` | `apps/worker/app/routes/validate.py:46` | *Fixed: validation errors are a string `detail` like every other error, and no error repeats request input.* Error responses have two shapes (`detail` list from FastAPI 422, string from the worker's own 422) and echo input verbatim (`"Unknown schema type: <script>x"`). JSON-only, so not XSS, but inconsistent. |
+| D.6 `[FIXED]` | `apps/worker/Dockerfile:1,4-5` | *Fixed: base image pinned by digest; the unused `-dev` packages are gone; the healthcheck and `CMD` use `$PORT` (default 8000).* Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
+| D.7 `[PARTIAL]` | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | *Fixed: login compares against a dummy cost-12 hash for an unknown email; rate-limit IPs are the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` from the right. Open: signup's 409 — signup signs the user straight in, so a fake success would be given away by the sign-in; hiding it needs email verification, which the app has no mail for.* Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
+| D.8 `[FIXED]` | web routes | *Fixed: `mapping_changed`, `mapping_template_saved`/`_deleted`, `sign_in` and `sign_in_failed` (existing accounts) are written through `recordAudit`, and the audit page labels and filters every action written.* Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
+| D.9 `[PARTIAL]` | core | *Fixed: two-digit years past next year are last century; event ids are trimmed; 9-digit and spaced ZIP+4 keep the +4 (other trailing text is reported); exporting employees keep a fraction where the XSD allows one and are reported where it does not; a whitespace-only Contact ID is a missing one; bracketed labels stay in notes; `City` was already mapped. Open: the combined "Middle Eastern or North African" answer, which the XSD can't represent as one category.* Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |
 
 ---
 

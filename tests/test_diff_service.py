@@ -62,8 +62,10 @@ class TestCleaningDiff(unittest.TestCase):
         self.assertEqual([key for key in diffs if key[0] in ("Race", "Ethnicity:", "Veteran Status")], [])
 
     def test_counselor_notes_scrubbing_is_shown(self):
-        diffs = _diff([{"Contact ID": "C-1", "Comments": "[User]: Met   with client"}])
-        self.assertEqual(diffs[("Comments", "[User]: Met   with client")]["cleaned"], "Met with client")
+        # Whitespace is collapsed; a bracketed label such as "[Q3]:" is the
+        # counselor's own text and is kept (third pass D.9).
+        diffs = _diff([{"Contact ID": "C-1", "Comments": "[Q3]: Met   with client"}])
+        self.assertEqual(diffs[("Comments", "[Q3]: Met   with client")]["cleaned"], "[Q3]: Met with client")
 
     def test_training_client_columns_use_the_forms_own_names(self):
         diffs = _diff([{"Contact ID": "C-1", "Military Status": "Not Veteran", "Race": "Caucasian"}],

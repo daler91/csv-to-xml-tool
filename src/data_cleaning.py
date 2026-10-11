@@ -5,14 +5,18 @@ This module contains functions for cleaning and standardizing Salesforce data fo
 
 from __future__ import annotations
 
+import codecs
+import csv
 import logging
 import re
+from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from .config import (
     CounselingConfig,
     DATE_INPUT_FORMATS as DEFAULT_DATE_FORMATS,
+    DEMOGRAPHIC_GENDER_KEYWORDS,
     MULTI_VALUE_DELIMITER,
     RACE_KEYWORDS,
     RACE_XSD_CODES,
@@ -248,7 +252,7 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
 
     for fmt in input_formats:
         try:
-            dt_object = datetime.strptime(date_str, fmt)
+            dt_object = _two_digit_year_in_past(datetime.strptime(date_str, fmt), fmt)
             result = dt_object.strftime('%Y-%m-%d')
             _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
             return result
@@ -257,6 +261,18 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
 
     _logger.debug("Failed to parse date '%s' with any known format", date_str)
     return default_return
+
+
+def _two_digit_year_in_past(parsed: datetime, fmt: str) -> datetime:
+    """strptime reads a two-digit year 00-68 as 20xx, so a birth or business
+    start date of 01/05/68 became 2068. None of the dates on these forms is
+    more than a year ahead, so a two-digit year past that is last century."""
+    if '%y' not in fmt or parsed.year <= datetime.now().year + 1:
+        return parsed
+    try:
+        return parsed.replace(year=parsed.year - 100)
+    except ValueError:  # 29 February in a year that was not a leap year
+        return parsed
 
 
 def is_ambiguous_date(date_str: str | None) -> bool:
@@ -318,13 +334,82 @@ def normalize_row_keys(row: dict) -> dict:
     }
 
 
+class NormalizedDictReader:
+    """``csv.DictReader`` with normalized headers that keeps duplicate columns.
+
+    DictReader builds each row with ``dict(zip(headers, cells))``, so when two
+    columns share a header the later one silently wins -- a blank second
+    "Date" column erased a filled first one, with no issue anywhere. Here a
+    blank cell never overwrites a value from an earlier column of the same
+    name (when both are filled the later column still wins, as before), and
+    ``duplicates`` names each repeated header so callers can report it.
+
+    Otherwise it matches DictReader followed by normalize_row_keys: headers
+    normalized, blank lines skipped, a short row padded with "", extra trailing
+    cells dropped.
+    """
+
+    def __init__(self, lines):
+        self._reader = csv.reader(lines)
+        header = next(self._reader, None) or []
+        self.fieldnames = [normalize_header(name) for name in header]
+        self.duplicates = {name: count for name, count in Counter(self.fieldnames).items()
+                           if count > 1}
+
+    def __iter__(self):
+        for cells in self._reader:
+            if not cells:
+                continue
+            row = dict.fromkeys(self.fieldnames, "")
+            for name, value in zip(self.fieldnames, cells, strict=False):
+                if str(value).strip() or not str(row[name]).strip():
+                    row[name] = value
+            yield row
+
+
+def duplicate_header_message(name: str, count: int) -> str:
+    """The file-level warning for a header that appears more than once."""
+    return (f"The column '{name}' appears {count} times. Each row uses the last of them that "
+            "has a value; check that this is the column you meant.")
+
+
+# cp1252 leaves five bytes (0x81, 0x8D, 0x8F, 0x90, 0x9D) undefined; decode
+# them as the C1 control of the same value, as the WHATWG decoder (and so the
+# web upload path, apps/web/src/lib/csv-decode.ts) does.
+codecs.register_error(
+    "c1_passthrough",
+    lambda error: (error.object[error.start:error.end].decode("latin-1"), error.end),
+)
+
+
+def decode_csv_bytes(data: bytes) -> tuple[str, str]:
+    """Decode a CSV the way spreadsheet tools write it; returns (text, encoding).
+
+    The same order of trust as the web's decodeCsvBuffer: a UTF-16 BOM, then
+    strict UTF-8 (a UTF-8 BOM is dropped), then Windows-1252 -- what Excel on
+    Windows writes for "CSV (Comma delimited)". Reading those files as UTF-8
+    failed the whole conversion on the first accented name. Line endings are
+    normalized to "\n", as reading the file in text mode did.
+    """
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        text, encoding = data.decode("utf-16"), "utf-16"
+    else:
+        try:
+            text, encoding = data.decode("utf-8-sig"), "utf-8"
+        except UnicodeDecodeError:
+            text, encoding = data.decode("cp1252", errors="c1_passthrough"), "windows-1252"
+    return text.replace("\r\n", "\n").replace("\r", "\n"), encoding
+
+
 def clean_whitespace(text: str | None) -> str:
     """
     Cleans excess whitespace from text while preserving normal spacing between words and sentences.
     - Replaces multiple spaces with a single space
     - Removes leading/trailing whitespace
     - Preserves single newlines but removes extras
-    - Handles Salesforce-specific patterns
+
+    Bracketed labels are kept: a pattern meant for "[User]:" artifacts also
+    deleted "[Q3]:" and any other note that began that way.
     """
     if is_empty(text):
         return ""
@@ -341,8 +426,6 @@ def clean_whitespace(text: str | None) -> str:
         line = line.strip()
         # Replace multiple spaces with single space
         line = ' '.join(line.split())
-        # Remove Salesforce-specific artifacts
-        line = re.sub(r'\[\w+\]:', '', line)  # Removes things like [User]: 
         if line:  # Only add non-empty lines
             cleaned_lines.append(line)
     
@@ -358,12 +441,15 @@ def map_gender_to_sex(gender_value: str | None) -> str:
         return ""
     
     gender_str = str(gender_value).lower()
-    
-    if "female" in gender_str:
+    # Whole words as well as the substrings: "F", "M", "Woman" and "Man" were
+    # left out of the filing with no issue, though config lists them.
+    words = set(re.findall(r"[a-z]+", gender_str))
+
+    if "female" in gender_str or words & set(DEMOGRAPHIC_GENDER_KEYWORDS["female"]):
         return "Female"
-    elif "male" in gender_str and "female" not in gender_str:  # Handle edge case for "Female" containing "male"
+    if "male" in gender_str or words & set(DEMOGRAPHIC_GENDER_KEYWORDS["male"]):
         return "Male"
-    
+
     # Return empty string for any other values like "Non-binary", "Prefer not to say", etc.
     return ""
 

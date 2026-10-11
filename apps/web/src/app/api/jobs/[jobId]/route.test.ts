@@ -18,6 +18,7 @@ vi.mock("@/lib/worker-client", async (importOriginal) => ({
   workerFetch: vi.fn(),
 }));
 vi.mock("@/lib/job-reaper", () => ({ reapStuckConvertingJobs: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ recordAudit: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ rm: vi.fn() }));
 
 import { rm } from "node:fs/promises";
@@ -26,11 +27,13 @@ import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
+import { recordAudit } from "@/lib/audit";
 
 const db = vi.mocked(prisma, true);
 const auth = vi.mocked(getRequiredUser);
 const worker = vi.mocked(workerFetch);
 const reaper = vi.mocked(reapStuckConvertingJobs);
+const audit = vi.mocked(recordAudit);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -74,6 +77,31 @@ describe("GET /api/jobs/[jobId]", () => {
 });
 
 describe("PATCH /api/jobs/[jobId]", () => {
+  it("audits a changed column mapping, which changes what gets filed", async () => {
+    db.job.findFirst.mockResolvedValue({ id: "j1", status: "mapping", columnMapping: { a: "b" } } as never);
+    db.job.updateMany.mockResolvedValue({ count: 1 } as never);
+    db.job.findUnique.mockResolvedValue({ id: "j1" } as never);
+
+    await PATCH(jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "c" } }), jobParams("j1"));
+
+    expect(audit).toHaveBeenCalledWith({
+      userId: TEST_USER.id,
+      jobId: "j1",
+      action: "mapping_changed",
+      metadata: { mapping: { a: "c" }, previous: { a: "b" } },
+    });
+  });
+
+  it("does not audit a save that leaves the mapping as it was", async () => {
+    db.job.findFirst.mockResolvedValue({ id: "j1", status: "mapping", columnMapping: { a: "b" } } as never);
+    db.job.updateMany.mockResolvedValue({ count: 1 } as never);
+    db.job.findUnique.mockResolvedValue({ id: "j1" } as never);
+
+    await PATCH(jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "b" } }), jobParams("j1"));
+
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it("refuses to modify a terminal job (409)", async () => {
     db.job.findFirst.mockResolvedValue({ id: "j1", status: "complete" } as never);
     const res = await PATCH(

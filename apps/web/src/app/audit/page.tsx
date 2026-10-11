@@ -19,67 +19,104 @@ interface AuditEntry {
  * was useless for end users and looked unfinished. This helper
  * interprets the known action types and produces a plain sentence.
  *
- * Keep the switch in sync with the action strings written by:
- *   - apps/web/src/app/api/upload/route.ts             ("upload")
- *   - apps/web/src/app/api/jobs/[jobId]/start/route.ts ("conversion_started", "conversion_complete", "conversion_failed")
- *   - apps/web/src/app/api/jobs/[jobId]/cancel/route.ts ("conversion_cancelled")
- *   - apps/web/src/app/api/jobs/[jobId]/download/route.ts ("download")
+ * Keep ACTION_LABELS and METADATA_FORMATTERS in sync with every action string the app
+ * writes (grep for `action:` in src/app/api and src/lib). Actions with no
+ * label used to show as raw keys and could not be picked in the filter.
  */
+type MetadataGetter = <T>(key: string) => T | undefined;
+type MetadataFormatter = (get: MetadataGetter) => string;
+
+const fileName: MetadataFormatter = (get) => get<string>("fileName") ?? "—";
+
+const failure: MetadataFormatter = (get) => {
+  const err = get<string>("error");
+  return err ? `Failed: ${err}` : "Failed";
+};
+
+const templateName: MetadataFormatter = (get) => {
+  const name = get<string>("name");
+  return name ? `Template "${name}"` : "—";
+};
+
+// One formatter per action: a Map rather than a switch (or an object indexed
+// by the action), so adding an action is one entry here.
+const METADATA_FORMATTERS = new Map<string, MetadataFormatter>([
+  ["upload", (get) => {
+    const name = get<string>("fileName");
+    const size = get<number>("fileSize");
+    const sizeStr = typeof size === "number" ? ` (${(size / 1024).toFixed(1)} KB)` : "";
+    return name ? `${name}${sizeStr}` : "—";
+  }],
+  ["conversion_started", () => "Conversion started"],
+  ["conversion_retried", (get) => {
+    const attempt = get<number>("attempt");
+    return attempt ? `Retried (attempt ${attempt})` : "Retried";
+  }],
+  ["conversion_complete", (get) =>
+    `${get<number>("successful") ?? 0}/${get<number>("total") ?? 0} successful, ` +
+    `${get<number>("errors") ?? 0} errors`],
+  ["conversion_failed", failure],
+  ["conversion_deadlettered", failure],
+  ["conversion_timeout", (get) => get<string>("reason") ?? "Timed out"],
+  ["conversion_cancelled", () => "Cancelled by user"],
+  ["download", () => "XML downloaded"],
+  ["job_deleted", (get) => {
+    const name = get<string>("fileName");
+    return name ? `Deleted ${name}` : "Deleted";
+  }],
+  ["files_purged", (get) => {
+    const days = get<number>("retentionDays");
+    return days ? `Files removed after ${days} days` : "Files removed";
+  }],
+  ["mapping_changed", (get) => {
+    const renames = Object.entries(get<Record<string, string>>("mapping") ?? {}).map(
+      ([from, to]) => `${from} → ${to}`
+    );
+    return renames.length ? renames.join(", ") : "All columns matched by name";
+  }],
+  ["xml_validated", fileName],
+  ["xml_autofix", fileName],
+  ["mapping_template_saved", templateName],
+  ["mapping_template_deleted", templateName],
+]);
+
 function formatAuditMetadata(
   action: string,
   metadata: Record<string, unknown> | null
 ): string {
-  if (!metadata) return "—";
-
-  const get = <T,>(key: string): T | undefined =>
-    metadata[key] as T | undefined;
-
-  switch (action) {
-    case "upload": {
-      const fileName = get<string>("fileName");
-      const size = get<number>("fileSize");
-      const sizeStr =
-        typeof size === "number"
-          ? ` (${(size / 1024).toFixed(1)} KB)`
-          : "";
-      return fileName ? `${fileName}${sizeStr}` : "—";
-    }
-    case "conversion_started":
-      return "Conversion started";
-    case "conversion_retried": {
-      const attempt = get<number>("attempt");
-      return attempt ? `Retried (attempt ${attempt})` : "Retried";
-    }
-    case "conversion_complete": {
-      const successful = get<number>("successful") ?? 0;
-      const total = get<number>("total") ?? 0;
-      const errors = get<number>("errors") ?? 0;
-      return `${successful}/${total} successful, ${errors} errors`;
-    }
-    case "conversion_failed": {
-      const err = get<string>("error");
-      return err ? `Failed: ${err}` : "Failed";
-    }
-    case "conversion_cancelled":
-      return "Cancelled by user";
-    case "download":
-      return "XML downloaded";
-    default:
-      return "—";
-  }
+  const formatter = METADATA_FORMATTERS.get(action);
+  if (!metadata || !formatter) return "—";
+  const values = new Map(Object.entries(metadata));
+  return formatter(<T,>(key: string) => values.get(key) as T | undefined);
 }
 
+const ACTION_LABELS = new Map<string, string>([
+  ["upload", "Upload"],
+  ["mapping_changed", "Column mapping changed"],
+  ["conversion_started", "Conversion started"],
+  ["conversion_retried", "Conversion retried"],
+  ["conversion_complete", "Conversion complete"],
+  ["conversion_failed", "Conversion failed"],
+  ["conversion_deadlettered", "Conversion failed"],
+  ["conversion_timeout", "Conversion timed out"],
+  ["conversion_cancelled", "Conversion cancelled"],
+  ["download", "Download"],
+  ["job_deleted", "Job deleted"],
+  ["files_purged", "Files removed (retention)"],
+  ["xml_validated", "XML validated"],
+  ["xml_autofix", "XML auto-fixed"],
+  ["mapping_template_saved", "Template saved"],
+  ["mapping_template_deleted", "Template deleted"],
+  ["sign_in", "Signed in"],
+  ["sign_in_failed", "Sign-in failed (wrong password)"],
+]);
+
+// "conversion_failed" is no longer written (dead-lettering replaced it), so
+// the filter offers only the actions current code produces.
+const FILTER_ACTIONS = [...ACTION_LABELS].filter(([action]) => action !== "conversion_failed");
+
 function formatActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    upload: "Upload",
-    conversion_started: "Conversion started",
-    conversion_retried: "Conversion retried",
-    conversion_complete: "Conversion complete",
-    conversion_failed: "Conversion failed",
-    conversion_cancelled: "Conversion cancelled",
-    download: "Download",
-  };
-  return labels[action] ?? action;
+  return ACTION_LABELS.get(action) ?? action;
 }
 
 const SKELETON_ROW_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5"];
@@ -125,12 +162,11 @@ export default function AuditPage() {
             }}
           >
             <option value="">All actions</option>
-            <option value="upload">Upload</option>
-            <option value="conversion_started">Conversion started</option>
-            <option value="conversion_complete">Conversion complete</option>
-            <option value="conversion_failed">Conversion failed</option>
-            <option value="conversion_cancelled">Conversion cancelled</option>
-            <option value="download">Download</option>
+            {FILTER_ACTIONS.map(([action, label]) => (
+              <option key={action} value={action}>
+                {label}
+              </option>
+            ))}
           </select>
           <a
             href={

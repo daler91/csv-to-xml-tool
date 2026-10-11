@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 
 from fastapi import APIRouter, HTTPException
 
@@ -13,11 +14,22 @@ from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
 from ..services.conversion_service import EmptyCSVError, run_conversion, unreadable_csv_detail
 from ..services.column_requirements import RequiredColumnsMissingError
+from ..services import redis_client
 from ..services.progress import registry as progress_registry
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# The worker's own limit on one conversion, checked at run_conversion's phase
+# checkpoints. The web aborts its request after CONVERSION_TIMEOUT_MS (30 min
+# by default), but the conversion thread kept running to the end for a result
+# nobody would read. Keep this at or under the web's value.
+CONVERSION_DEADLINE_SECONDS = float(os.environ.get("CONVERSION_DEADLINE_SECONDS", str(30 * 60)))
+
+
+class ConversionDeadlineError(Exception):
+    """The conversion passed CONVERSION_DEADLINE_SECONDS."""
 
 
 def _write_text(path: str, text: str) -> None:
@@ -38,6 +50,7 @@ def _read_text(path: str) -> str:
     responses={
         400: {"description": "Invalid request parameters"},
         409: {"description": "Conversion cancelled by user"},
+        504: {"description": "The conversion passed CONVERSION_DEADLINE_SECONDS"},
         422: {
             "description": "Unprocessable CSV: required columns missing, the file is empty, "
             "or it cannot be parsed as CSV"
@@ -80,13 +93,20 @@ async def convert(req: ConvertRequest):
         def _on_progress(processed: int, total: int) -> None:
             progress_registry.update(job_id, processed, total)
 
+        deadline = time.monotonic() + CONVERSION_DEADLINE_SECONDS
+
+        def _should_stop() -> bool:
+            if time.monotonic() > deadline:
+                raise ConversionDeadlineError()
+            return cancel_registry.is_cancelled(job_id)
+
         result = await asyncio.to_thread(
             run_conversion,
             csv_path=csv_path,
             xml_path=xml_path,
             converter_type=req.converter_type,
             column_mapping=req.column_mapping,
-            is_cancelled=lambda: cancel_registry.is_cancelled(job_id),
+            is_cancelled=_should_stop,
             on_progress=_on_progress,
         )
 
@@ -99,6 +119,10 @@ async def convert(req: ConvertRequest):
     except ConversionCancelledError as e:
         logger.info("Conversion cancelled for job %s", job_id)
         raise HTTPException(status_code=409, detail="Conversion cancelled") from e
+    except ConversionDeadlineError as e:
+        logger.warning("Conversion for job %s passed the %.0f s deadline", job_id,
+                       CONVERSION_DEADLINE_SECONDS)
+        raise HTTPException(status_code=504, detail="The conversion took too long") from e
     except RequiredColumnsMissingError as e:
         # CONV-1: surface exactly which required columns are missing instead of a
         # generic 400, so the web layer can record/show what the user must fix.
@@ -133,6 +157,7 @@ async def convert(req: ConvertRequest):
     "/convert/{job_id}/cancel",
     responses={
         200: {"description": "Cancellation requested"},
+        503: {"description": "The cancel signal could not be stored (Redis unavailable)"},
     },
 )
 async def cancel_convert(job_id: str):
@@ -148,7 +173,11 @@ async def cancel_convert(job_id: str):
     the cooperative checkpoints allow.
     """
     job_id = set_job_id(job_id)
-    await asyncio.to_thread(cancel_registry.cancel, job_id)
+    # It used to answer cancelled: true even when Redis had refused the
+    # signal, so a cancel that would never reach the conversion looked
+    # delivered.
+    if not await asyncio.to_thread(cancel_registry.cancel, job_id):
+        raise HTTPException(status_code=503, detail="The cancel signal could not be stored")
     return {"job_id": job_id, "cancelled": True}
 
 
@@ -157,6 +186,7 @@ async def cancel_convert(job_id: str):
     responses={
         200: {"description": "Current progress snapshot"},
         404: {"description": "No progress recorded for this job"},
+        503: {"description": "Progress is unavailable (Redis unavailable)"},
     },
 )
 async def get_convert_progress(job_id: str):
@@ -173,6 +203,11 @@ async def get_convert_progress(job_id: str):
     job_id = set_job_id(job_id)
     snap = await asyncio.to_thread(progress_registry.get, job_id)
     if snap is None:
+        # A failed read trips the breaker, so it is still open here. Without
+        # this check Redis being down read as "no progress", the same answer
+        # as a finished job.
+        if not redis_client.available():
+            raise HTTPException(status_code=503, detail="Progress is unavailable")
         raise HTTPException(
             status_code=404, detail="No progress recorded for this job"
         )

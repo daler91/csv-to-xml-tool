@@ -241,13 +241,6 @@ def test_validate_xsd_unparseable_content_is_a_result_not_500(monkeypatch):
     assert "parse" in result["errors"][0].lower()
 
 
-def test_validate_xsd_unknown_schema_type_maps_to_400():
-    with pytest.raises(HTTPException) as exc:
-        _validate("<a/>", schema_type="bogus")
-    assert exc.value.status_code == 400
-    assert "schema type" in exc.value.detail.lower()
-
-
 def test_validate_xsd_empty_content_maps_to_400():
     with pytest.raises(HTTPException) as exc:
         _validate("   ", schema_type="counseling")

@@ -3,7 +3,6 @@ Handles the conversion of SBA Management Training Reports from CSV to XML.
 """
 
 from .. import data_validation
-import csv
 import xml.etree.ElementTree as ET
 import re
 from collections import defaultdict
@@ -23,6 +22,7 @@ class TrainingConverter(BaseConverter):
         self.config = TrainingConfig()
         self.general_config = GeneralConfig()
         self._schema_guard = SchemaGuard("training", validator, logger)
+        self._first_rows = {}
 
     def _get_column_value(self, record, key, default=''):
         """
@@ -45,22 +45,11 @@ class TrainingConverter(BaseConverter):
         CSV, a missing event-ID column, or no row carrying a usable event ID --
         so the caller can never write a success with no output file.
         """
-        try:
-            # CONV-2: explicit utf-8-sig, and normalize_row_keys both normalizes
-            # header whitespace and coerces the None that DictReader emits for a
-            # short row into "". This is the same read path the counseling
-            # converter uses; it used to be pd.read_csv(dtype=str), which made a
-            # blank cell float('nan') -- truthy, and the direct cause of training
-            # rows passing validation and then vanishing in groupby().
-            with open(input_path, 'r', encoding='utf-8-sig') as csv_file:
-                reader = csv.DictReader(csv_file)
-                headers = [data_cleaning.normalize_header(c) for c in (reader.fieldnames or [])]
-                rows = [data_cleaning.normalize_row_keys(row) for row in reader]
-            self.logger.info(f"Successfully read CSV with {len(rows)} records.")
-        except (OSError, csv.Error) as e:
-            self.logger.error(f"Failed to read CSV file: {e}")
-            self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file", f"Failed to read CSV file: {e}")
-            raise
+        # CONV-2: the same read path the counseling converter uses. A short row
+        # reads as blank cells, not None; it used to be pd.read_csv(dtype=str),
+        # which made a blank cell float('nan') -- truthy, and the direct cause
+        # of training rows passing validation and then vanishing in groupby().
+        headers, rows = self._read_csv(input_path)
 
         if not rows:
             # CONV-6: a headers-only / empty CSV must fail, not return silently.
@@ -73,7 +62,9 @@ class TrainingConverter(BaseConverter):
             self.validator.add_issue("file", "error", ValidationCategory.MISSING_REQUIRED, event_id_col, "Event ID column is missing.")
             raise EmptyCSVError(f"Required column '{event_id_col}' is missing from the CSV.")
 
-        valid_rows = [row for index, row in enumerate(rows) if data_validation.validate_training_record(row, index, self.validator)]
+        # 1-based, like the counseling converter's Row_N ids and row numbers.
+        valid_rows = [(index, row) for index, row in enumerate(rows, 1)
+                      if data_validation.validate_training_record(row, index, self.validator)]
         if not valid_rows:
             # Must raise, not return: a silent return left convert() writing no
             # file at all while main.py still logged "Conversion process
@@ -84,8 +75,13 @@ class TrainingConverter(BaseConverter):
             raise EmptyCSVError("No rows had a usable Class/Event ID to convert.")
 
         grouped = defaultdict(list)
-        for row in valid_rows:
-            grouped[row[event_id_col]].append(row)
+        # The row each event's record cites in XSD errors: its first.
+        self._first_rows = {}
+        for index, row in valid_rows:
+            # Trimmed: "EV1 " was filed as a second event beside "EV1".
+            event_id = str(row[event_id_col]).strip()
+            grouped[event_id].append(row)
+            self._first_rows.setdefault(event_id, index)
         # sorted(), not insertion order: DataFrame.groupby defaults to
         # sort=True, so records have always been emitted ordered by event id.
         # Preserving that keeps the output byte-identical (see
@@ -146,6 +142,7 @@ class TrainingConverter(BaseConverter):
         self.validator.set_current_event_id(str(event_id))
 
         record = create_element(root, 'ManagementTrainingRecord')
+        self.record_sources.append({"row": self._first_rows.get(event_id), "columns": {}})
         create_element(record, 'PartnerTrainingNumber', str(event_id))
 
         funding_source = self._get_column_value(first_record, 'funding_source')
@@ -214,6 +211,7 @@ class TrainingConverter(BaseConverter):
 
     def convert(self, input_path: str, output_path: str):
         self.logger.info(f"Starting conversion of training data: {input_path}")
+        self.record_sources = []
 
         event_groups, event_id_col = self._read_and_validate_csv(input_path)
 

@@ -1,11 +1,13 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
+import { randomBytes } from "node:crypto";
+import { compare, hash } from "bcryptjs";
 import { prisma } from "./prisma";
 import { normalizeEmail } from "./normalize";
 import { rateLimit, resetRateLimit } from "./rate-limit";
 import { authConfig } from "./auth.config";
 import { clientIpFromHeaders } from "./client-ip";
+import { recordAudit } from "./audit";
 
 /**
  * Sign-in throttling.
@@ -24,6 +26,18 @@ import { clientIpFromHeaders } from "./client-ip";
 const LOGIN_MAX_ATTEMPTS = 10;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_IP_MAX_ATTEMPTS = 50;
+
+// Compared against when the email is unknown, so that failure takes as long
+// as a wrong password: returning straight away answered about 250 ms sooner,
+// which told a caller the address had no account. A hash of random bytes at
+// signup's cost (12), made once per process on first use -- never a literal
+// in the source, where it would read as a leaked credential.
+let timingDecoy: Promise<string> | undefined;
+
+function timingDecoyHash(): Promise<string> {
+  timingDecoy ??= hash(randomBytes(32).toString("base64"), 12);
+  return timingDecoy;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -66,17 +80,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Returning null for every failure — throttled, unknown user, or wrong
         // password — is deliberate: the login page renders one message for all
         // of them, so none of these states is distinguishable to a caller.
-        if (!user) return null;
-
         const isValid = await compare(
           credentials.password as string,
-          user.passwordHash
+          user?.passwordHash ?? (await timingDecoyHash())
         );
 
-        if (!isValid) return null;
+        if (!user) return null;
+        if (!isValid) {
+          // Audited for an existing account only: an entry needs a user,
+          // and an unknown address has none.
+          await recordAudit({ userId: user.id, action: "sign_in_failed" });
+          return null;
+        }
 
         // Don't leave a legitimate user throttled because they mistyped first.
         await resetRateLimit(emailKey);
+        await recordAudit({ userId: user.id, action: "sign_in" });
 
         return { id: user.id, email: user.email, name: user.name };
       },

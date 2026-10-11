@@ -28,7 +28,12 @@ Three recovery mechanisms, in order of how quickly they act:
 | Retry backoff | A transient failure (network, worker 5xx) with attempts left | Job waits in the `delayed` set for `JOB_RETRY_BASE_MS` × 4ⁿ, then is promoted back to the queue |
 | Visibility sweep | Claim not acked within `VISIBILITY_TIMEOUT_MS` | Re-queues the job (LREM-gated, so competing consumers cannot double-requeue) |
 | Dead-letter | `JOB_MAX_ATTEMPTS` exhausted | Job → `error`, `conversion_deadlettered` audit entry |
-| Reaper | Stuck `queued`/`converting` past `REAP_DEADLINE_MS` | Job → `error` |
+| Reaper | `queued`/`converting` past `REAP_DEADLINE_MS` **and** no longer held by the queue | Job → `error` |
+
+A job the Redis queue still holds — waiting in `pending`, backing off in
+`delayed`, or claimed in `processing` — is never reaped, however old: in a long
+backlog it is simply waiting its turn. Only a job the queue has lost (or never
+received) is failed. If Redis cannot be asked, nothing is reaped until it can.
 
 The reaper runs **lazily**, on `GET /api/jobs` and `GET /api/jobs/:id` — not on a
 timer. A stuck job is therefore cleaned up the next time anyone looks at their
@@ -181,8 +186,13 @@ availability rather than assuming the limiter covers you.
 | Upload | 10 / 60s per user |
 | Validate XML / Fix XML | 10 / 60s per user each |
 
-The IP is the first entry of `x-forwarded-for`, validated — not the whole header,
-which is trivially spoofable.
+The IP is the `x-forwarded-for` entry our own proxy appended, counted
+`TRUSTED_PROXY_HOPS` (default 1) from the right, and validated as an address.
+Everything to the left of that entry is whatever the client sent, so the first
+entry — which this used to take — let a client pick a new "IP" per request. Set
+`TRUSTED_PROXY_HOPS=2` if a CDN sits in front of the platform's proxy, or `0`
+to ignore the header. Set it too high and every request lands in one shared
+bucket.
 
 ## Capacity
 

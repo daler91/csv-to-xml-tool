@@ -1,7 +1,6 @@
 """Generates a cleaning diff by applying the same cleaning functions the converters
 use and capturing before/after for every value that changes."""
 
-import csv
 import os
 import sys
 
@@ -129,11 +128,9 @@ def generate_cleaning_diff(
     diffs: list[dict] = []
 
     with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row_index, row in enumerate(reader, 1):
-            # CONV-2: normalize header whitespace before mapping/lookup so the diff
-            # matches what conversion reads.
-            row = data_cleaning.normalize_row_keys(row)
+        # CONV-2: the converters' reader, so header normalization and duplicate
+        # columns resolve as they do in conversion.
+        for row_index, row in enumerate(data_cleaning.NormalizedDictReader(f), 1):
             # Apply column mapping (rename keys)
             if rename:
                 row = {rename.get(k, k): v for k, v in row.items()}

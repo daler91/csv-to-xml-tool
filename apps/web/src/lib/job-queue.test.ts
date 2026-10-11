@@ -12,6 +12,8 @@ const client = vi.hoisted(() => ({
   hdel: vi.fn(),
   lpush: vi.fn(),
   zrangebyscore: vi.fn(),
+  lpos: vi.fn(),
+  zscore: vi.fn(),
   on: vi.fn(),
 }));
 
@@ -34,6 +36,7 @@ import {
   getAttempts,
   promoteDueJobs,
   sweepStaleClaims,
+  isHeldByQueue,
 } from "@/lib/job-queue";
 
 const PENDING = "csvxml:jobs:pending";
@@ -180,5 +183,24 @@ describe("sweepStaleClaims", () => {
     client.zrangebyscore.mockResolvedValue([]);
     expect(await sweepStaleClaims()).toEqual([]);
     expect(client.lpush).not.toHaveBeenCalled();
+  });
+});
+
+describe("isHeldByQueue", () => {
+  it("is true while the job is pending, claimed or backing off", async () => {
+    client.lpos.mockResolvedValue(null);
+    client.zscore.mockResolvedValue(null);
+    expect(await isHeldByQueue("j1")).toBe(false);
+
+    client.lpos.mockImplementation(async (key: string) => (key === PENDING ? 42 : null));
+    expect(await isHeldByQueue("j1")).toBe(true);
+
+    client.lpos.mockImplementation(async (key: string) => (key === PROCESSING ? 0 : null));
+    expect(await isHeldByQueue("j1")).toBe(true);
+
+    client.lpos.mockResolvedValue(null);
+    client.zscore.mockResolvedValue("1700000000000");
+    expect(await isHeldByQueue("j1")).toBe(true);
+    expect(client.zscore).toHaveBeenCalledWith(DELAYED, "j1");
   });
 });

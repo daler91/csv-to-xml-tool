@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 import { sanitizeMapping } from "@/lib/column-mapping";
+import { recordAudit } from "@/lib/audit";
 
 const VALID_TYPES = new Set(CONVERTER_TYPES.map((t) => t.value));
 const MAX_NAME_LENGTH = 60;
@@ -124,6 +125,12 @@ export async function POST(req: Request) {
         mapping: true,
         updatedAt: true,
       },
+    });
+
+    await recordAudit({
+      userId: user.id,
+      action: "mapping_template_saved",
+      metadata: { name: template.name, converterType: template.converterType },
     });
 
     return NextResponse.json({ template }, { status: 201 });

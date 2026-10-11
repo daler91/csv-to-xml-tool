@@ -104,6 +104,13 @@ describe("handleFailure", () => {
     expect(requeue).not.toHaveBeenCalled();
   });
 
+  it("worker deadline (504) → dead-letter immediately, like the web's own timeout", async () => {
+    attempts.mockResolvedValue(1);
+    await handleFailure("j1", workerError(504));
+    expect(db.job.updateMany).toHaveBeenCalled();
+    expect(requeue).not.toHaveBeenCalled();
+  });
+
   it("transient 5xx with attempts remaining → delayed requeue, without blocking", async () => {
     attempts.mockResolvedValue(1);
 

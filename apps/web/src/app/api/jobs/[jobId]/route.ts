@@ -8,6 +8,7 @@ import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
 import { sanitizeMapping } from "@/lib/column-mapping";
+import { recordAudit } from "@/lib/audit";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -97,6 +98,30 @@ const CLIENT_WRITABLE_STATUS: JobStatus = "mapping";
 const QUEUE_OWNED_STATUSES = new Set<JobStatus>(["queued", "converting"]);
 const LOCKED_STATUSES = new Set<JobStatus>([...TERMINAL_STATUSES, ...QUEUE_OWNED_STATUSES]);
 
+type JobUpdate = { columnMapping?: Record<string, string>; status?: JobStatus };
+
+/**
+ * The fields a client may update, with their values validated and not just
+ * their names. Returns the update, or the reason it is rejected (a 400).
+ */
+function parseJobUpdate(body: Record<string, unknown>): JobUpdate | string {
+  const update: JobUpdate = {};
+  if ("columnMapping" in body) {
+    // Empty is legitimate here: a file whose columns all matched saves {}.
+    const mapping = sanitizeMapping(body.columnMapping, { allowEmpty: true });
+    if (mapping === null) return "columnMapping must be an object of column-name strings";
+    update.columnMapping = mapping;
+  }
+  if ("status" in body) {
+    if (body.status !== CLIENT_WRITABLE_STATUS) {
+      return `status may only be set to '${CLIENT_WRITABLE_STATUS}'`;
+    }
+    update.status = CLIENT_WRITABLE_STATUS;
+  }
+  if (Object.keys(update).length === 0) return "No valid fields to update";
+  return update;
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -140,32 +165,9 @@ export async function PATCH(
       );
     }
 
-    // Whitelist the fields a client may update, and validate their values,
-    // not just their names.
-    const sanitizedData: { columnMapping?: Record<string, string>; status?: JobStatus } = {};
-    if ("columnMapping" in body) {
-      // Empty is legitimate here: a file whose columns all matched saves {}.
-      const mapping = sanitizeMapping(body.columnMapping, { allowEmpty: true });
-      if (mapping === null) {
-        return NextResponse.json(
-          { error: "columnMapping must be an object of column-name strings" },
-          { status: 400 }
-        );
-      }
-      sanitizedData.columnMapping = mapping;
-    }
-    if ("status" in body) {
-      if (body.status !== CLIENT_WRITABLE_STATUS) {
-        return NextResponse.json(
-          { error: `status may only be set to '${CLIENT_WRITABLE_STATUS}'` },
-          { status: 400 }
-        );
-      }
-      sanitizedData.status = CLIENT_WRITABLE_STATUS;
-    }
-
-    if (Object.keys(sanitizedData).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    const sanitizedData = parseJobUpdate(body);
+    if (typeof sanitizedData === "string") {
+      return NextResponse.json({ error: sanitizedData }, { status: 400 });
     }
 
     // Conditional update to close the read-then-write race: if the
@@ -191,6 +193,20 @@ export async function PATCH(
         },
         { status: 409 }
       );
+    }
+
+    // The mapping decides which column fills which field of the filing, so
+    // a change to it is audited like the conversion it feeds.
+    if (sanitizedData.columnMapping !== undefined) {
+      const previous = sanitizeMapping(job.columnMapping, { allowEmpty: true });
+      if (JSON.stringify(previous) !== JSON.stringify(sanitizedData.columnMapping)) {
+        await recordAudit({
+          userId: user.id,
+          jobId,
+          action: "mapping_changed",
+          metadata: { mapping: sanitizedData.columnMapping, previous },
+        });
+      }
     }
 
     const fresh = await prisma.job.findUnique({ where: { id: jobId } });

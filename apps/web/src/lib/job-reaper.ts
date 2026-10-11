@@ -1,6 +1,7 @@
 import type { JobStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { REAP_DEADLINE_MS } from "@/lib/durability-timeouts";
+import { isHeldByQueue } from "@/lib/job-queue";
 
 // Backstop deadline: a job stuck in "queued" or "converting" past this is failed.
 //
@@ -19,6 +20,12 @@ import { REAP_DEADLINE_MS } from "@/lib/durability-timeouts";
 //
 // REAP_DEADLINE_MS itself lives in durability-timeouts.ts with the other two,
 // where the ordering above is asserted at consumer startup.
+//
+// Age alone is not "stuck": one serial consumer per web process works through
+// a backlog in order, so behind an hour of other users' files a job was failed
+// as conversion_timeout before it was ever claimed. A job the queue still
+// holds (pending, backing off, or claimed) is left to the queue; only one the
+// queue has lost is failed.
 
 const STUCK_STATUSES: JobStatus[] = ["queued", "converting"];
 
@@ -39,8 +46,11 @@ export async function reapStuckConvertingJobs(userId: string): Promise<number> {
     select: { id: true },
   });
 
+  const held = await Promise.all(stuck.map(({ id }) => queueStillHolds(id)));
+  const lost = stuck.filter((_, index) => !held[index]);
+
   let reaped = 0;
-  for (const { id } of stuck) {
+  for (const { id } of lost) {
     const res = await prisma.job.updateMany({
       where: { id, status: { in: STUCK_STATUSES } },
       data: { status: "error", completedAt: new Date() },
@@ -61,4 +71,15 @@ export async function reapStuckConvertingJobs(userId: string): Promise<number> {
   }
 
   return reaped;
+}
+
+async function queueStillHolds(jobId: string): Promise<boolean> {
+  try {
+    return await isHeldByQueue(jobId);
+  } catch (error) {
+    // Unknown is not lost: with Redis unreachable nothing can run anyway, and
+    // a job that really is lost is failed on the first read after it is back.
+    console.error(`[job-reaper] queue lookup failed for job ${jobId}; not reaping it:`, error);
+    return true;
+  }
 }

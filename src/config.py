@@ -571,6 +571,13 @@ RACE_KEYWORDS = {
     "north_african": ['north africa'],
 }
 
+# Whole-word answers for Gender, used by data_cleaning.map_gender_to_sex for
+# both the counseling Sex element and the training Female/Male counts.
+DEMOGRAPHIC_GENDER_KEYWORDS = {
+    "female": ['female', 'f', 'woman', 'women'],
+    "male": ['male', 'm', 'man', 'men'],
+}
+
 # The counseling XSD's Race/Code value for each RACE_KEYWORDS category.
 RACE_XSD_CODES = {
     "asian": "Asian",
@@ -665,10 +672,7 @@ class TrainingConfig:
 
     # Keywords for parsing demographic data from free-text fields
     DEMOGRAPHIC_KEYWORDS = {
-        "gender": {
-            "female": ['female', 'f', 'woman', 'women'],
-            "male": ['male', 'm', 'man', 'men']
-        },
+        "gender": DEMOGRAPHIC_GENDER_KEYWORDS,
         "military": {
             "active_duty": ['active duty', 'active-duty'],
             "veteran": ['veteran'],

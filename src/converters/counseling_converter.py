@@ -52,6 +52,40 @@ class CounselingConverter(BaseConverter):
         # (record_id, field). Cleared with _fabrication_warned at each row.
         self._warned_once = set()
 
+    # Sections the XSD makes optional but this converter requires under a
+    # condition: (ClientIntake child, CSV column, why it is required).
+    _CONDITIONAL_SECTIONS = (
+        ('CounselingSeeking', 'Nature of the Counseling Seeking?', 'for a client who is in business'),
+        ('LegalEntity', 'Legal Entity of Business', 'for a client who is in business'),
+        ('BranchOfService', 'Branch Of Service', 'for a client with military service'),
+    )
+
+    def _conditionally_required(self, record):
+        """The conditionally required sections present before the schema
+        guard runs, whose condition holds for this record."""
+        intake = record.find('ClientIntake')
+        if intake is None:
+            return []
+        in_business = intake.findtext('CurrentlyInBusiness') == 'Yes'
+        military = (intake.findtext('MilitaryStatus') or '').lower() not in (
+            '', 'no military service', 'prefer not to say')
+        applies = {'CounselingSeeking': in_business, 'LegalEntity': in_business, 'BranchOfService': military}
+        return [section for section in self._CONDITIONAL_SECTIONS
+                if applies[section[0]] and intake.find(section[0]) is not None]
+
+    def _report_conditional_drops(self, record, sections, record_id):
+        """The guard may drop an optional section whose value SBA doesn't
+        accept, with a warning -- right for the schema, but the converter's
+        own "required when ..." check had already passed on the non-blank
+        cell. Record the requirement the drop breaks as an error."""
+        intake = record.find('ClientIntake')
+        for tag, column, condition in sections:
+            if intake is None or intake.find(tag) is None:
+                self.validator.add_issue(
+                    record_id, "error", ValidationCategory.MISSING_REQUIRED, column,
+                    f"'{column}' is required {condition}, but its value is not one SBA accepts, "
+                    "so it was left out of the XML.")
+
     def _warn_constant_defaults(self, headers):
         """Hook for converters that stamp configured values into every record
         (see TrainingClientConverter). Nothing to report for counseling, whose
@@ -229,7 +263,9 @@ class CounselingConverter(BaseConverter):
                 self._build_counselor_record_section(counseling_record, row, record_id)
                 # Last, on the finished record: lengths, enumerations, patterns
                 # and ranges straight from the XSD (see src/schema_rules.py).
+                conditional = self._conditionally_required(counseling_record)
                 self._schema_guard.enforce(counseling_record, record_id, (root.tag,))
+                self._report_conditional_drops(counseling_record, conditional, record_id)
 
                 processed_records += 1
                 self.validator.record_processed(success=True)

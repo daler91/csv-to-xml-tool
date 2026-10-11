@@ -726,6 +726,31 @@ class TestAuditTrail(unittest.TestCase):
         message = self._issues('Gross Revenues/Sales', 'fabricated_default')[0]['message']
         self.assertIn("'n/a' could not be used", message)
 
+    def test_dropping_a_conditionally_required_section_is_an_error(self):
+        """An invalid, non-blank value passes the converter's "required for
+        in-business clients" check; when the schema guard then drops it, the
+        broken requirement must be an error, not just the drop's warning."""
+        self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Yes',
+            'Legal Entity of Business': 'Martian',
+            'Nature of the Counseling Seeking?': 'Martian',
+            'Veteran Status': 'Veteran',
+            'Branch Of Service': 'Starfleet',
+        })])
+        for column in ('Nature of the Counseling Seeking?', 'Legal Entity of Business', 'Branch Of Service'):
+            errors = self._issues(column, 'missing_required_field')
+            self.assertEqual(len(errors), 1, column)
+            self.assertEqual(errors[0]['severity'], 'error')
+
+    def test_a_valid_conditional_section_raises_nothing(self):
+        self._assert_valid([_make_counseling_row(**{
+            'Currently In Business?': 'Yes',
+            'Legal Entity of Business': 'LLC',
+            'Nature of the Counseling Seeking?': 'Marketing/Sales',
+        })])
+        self.assertEqual(self._issues('Legal Entity of Business'), [])
+        self.assertEqual(self._issues('Nature of the Counseling Seeking?'), [])
+
     def test_long_notes_keep_their_text_and_report_the_cut(self):
         notes = "Met with Mr. Smith " + ("word " * 400)
         tree = self._assert_valid([_make_counseling_row(Comments=notes)])

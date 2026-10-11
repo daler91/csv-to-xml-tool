@@ -359,14 +359,27 @@ class TestTrainingClientConverter(unittest.TestCase):
         """The counseling defaults injected by TrainingClientConfig.DEFAULTS for
         columns absent from the shorter training-client form (blank revenue fields
         defaulted to '0', Mailing Country 'US', etc.) are intentional and must not
-        produce a per-row FABRICATED_DEFAULT warning storm."""
+        produce a per-row FABRICATED_DEFAULT warning storm -- but they still ship,
+        so they are named once, in a single file-level warning."""
         rows = [
             self._make_valid_row(**{'Contact ID': 'C-001'}),
             self._make_valid_row(**{'Contact ID': 'C-002', 'First Name': 'Robin'}),
         ]
         self._convert_and_parse(rows)
         fabricated = [i for i in self.validator.issues if i['category'] == 'fabricated_default']
-        self.assertEqual(fabricated, [])
+        self.assertEqual([i['record_id'] for i in fabricated], ['file'])
+        message = fabricated[0]['message']
+        for constant in ("TrainingSession/HoursTrained='1.5'", "TrainingSession/EmployeesTrained='1'",
+                         "Type of Session='Training'", "Language(s) Used='English'"):
+            self.assertIn(constant, message)
+        # A column the CSV supplies is the user's data, not a constant.
+        self.assertNotIn("Agree to Impact Survey", self._file_defaults(
+            [self._make_valid_row(**{'Agree to Impact Survey': 'Yes'})]))
+
+    def _file_defaults(self, rows):
+        self.validator = ValidationTracker()
+        self._convert_and_parse(rows)
+        return next(i['message'] for i in self.validator.issues if i['field_name'] == 'configured_defaults')
 
     def test_issue_event_id_from_class_event_id(self):
         """Issues carry the Class/Event ID as event_id — proves the

@@ -228,7 +228,7 @@ def test_counseling_ragged_row():
 def test_training_aliased_headers():
     """TrainingConfig.COLUMN_MAPPING alias resolution (list form)."""
     rows = [_training_row()]
-    rows[0]["Address"] = rows[0].pop("City")  # 'Address' is a declared alias for city
+    rows[0]["city"] = rows[0].pop("City")  # lower-case 'city' is a declared alias
     _assert_matches_golden("training_aliased_headers", _convert("training", rows))
 
 

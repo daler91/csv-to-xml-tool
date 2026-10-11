@@ -173,6 +173,13 @@ and that override is recorded as a `DOWNGRADED_VALUE`. Counselor notes over 1,00
 characters are cut at a sentence or word boundary near the limit and recorded as
 `TRUNCATED_VALUE`.
 
+The training converter records a `FABRICATED_DEFAULT` for a blank `Training Topic`
+(→ `Technology`) or `Class/Event Type` (→ `In-person`), and an `INVALID_VALUE` for an
+event type it doesn't recognize. Values configured rather than read — the location
+code, sessions, hours, partner, fees and language for training; hours trained,
+employees trained, session type and every other default the shorter training-client
+form has no column for — are listed once per file in a `configured_defaults` warning.
+
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at
 conversion time when a fabrication-risk column is absent, and why the mapping

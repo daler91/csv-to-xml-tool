@@ -8,7 +8,7 @@ CounselingInformation XML.
 """
 
 from .counseling_converter import CounselingConverter
-from ..config import TrainingClientConfig, ValidationCategory
+from ..config import GeneralConfig, TrainingClientConfig, ValidationCategory
 from .. import data_cleaning
 from ..xml_utils import create_element
 
@@ -41,6 +41,38 @@ class TrainingClientConverter(CounselingConverter):
         # name either way.
         validator.field_aliases.update(
             self.training_client_config.reverse_column_mapping()
+        )
+
+    def _warn_constant_defaults(self, headers):
+        """Record, once per file, every configured value this form stamps into
+        the records it doesn't have a column for.
+
+        The per-row warnings for these are suppressed in __init__ -- one per
+        attendee per column would bury the report -- but they still ship in a
+        federal filing, so they are named once here, the way the training
+        converter reports its own constants.
+        """
+        cfg = self.training_client_config
+        constants = [
+            ('Location/LocationCode', GeneralConfig.DEFAULT_LOCATION_CODE),
+            ('TrainingSession/EmployeesTrained', cfg.EMPLOYEES_TRAINED),
+            ('TrainingSession/HoursTrained', cfg.HOURS_TRAINED),
+        ]
+        renamed = set(cfg.COLUMN_MAPPING.values())
+        for column, value in cfg.DEFAULTS.items():
+            # A column the CSV supplies (directly or via the rename) is the
+            # user's own data, not a constant.
+            if value and column not in headers and column not in renamed:
+                label = column
+                if column == 'Services Provided':
+                    label += " (for attendees whose event has no Training Topic)"
+                constants.append((label, value))
+        self.validator.add_issue(
+            "file", "warning", ValidationCategory.FABRICATED_DEFAULT, "configured_defaults",
+            "Emitted from configuration for every record (the training form has no column for "
+            "them): " + "; ".join(f"{label}='{value}'" for label, value in constants)
+            + ". Verify these match the reporting organization.",
+            event_id="",
         )
 
     def _preprocess_row(self, row):

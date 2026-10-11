@@ -86,7 +86,8 @@ function formatAuditMetadata(
 ): string {
   const formatter = METADATA_FORMATTERS.get(action);
   if (!metadata || !formatter) return "—";
-  return formatter(<T,>(key: string) => metadata[key] as T | undefined);
+  const values = new Map(Object.entries(metadata));
+  return formatter(<T,>(key: string) => values.get(key) as T | undefined);
 }
 
 const ACTION_LABELS = new Map<string, string>([

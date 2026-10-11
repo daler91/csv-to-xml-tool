@@ -19,11 +19,9 @@ interface AuditEntry {
  * was useless for end users and looked unfinished. This helper
  * interprets the known action types and produces a plain sentence.
  *
- * Keep the switch in sync with the action strings written by:
- *   - apps/web/src/app/api/upload/route.ts             ("upload")
- *   - apps/web/src/app/api/jobs/[jobId]/start/route.ts ("conversion_started", "conversion_complete", "conversion_failed")
- *   - apps/web/src/app/api/jobs/[jobId]/cancel/route.ts ("conversion_cancelled")
- *   - apps/web/src/app/api/jobs/[jobId]/download/route.ts ("download")
+ * Keep ACTION_LABELS and the switch in sync with every action string the app
+ * writes (grep for `action:` in src/app/api and src/lib). Actions with no
+ * label used to show as raw keys and could not be picked in the filter.
  */
 function formatAuditMetadata(
   action: string,
@@ -56,30 +54,72 @@ function formatAuditMetadata(
       const errors = get<number>("errors") ?? 0;
       return `${successful}/${total} successful, ${errors} errors`;
     }
-    case "conversion_failed": {
+    case "conversion_failed":
+    case "conversion_deadlettered": {
       const err = get<string>("error");
       return err ? `Failed: ${err}` : "Failed";
     }
+    case "conversion_timeout":
+      return get<string>("reason") ?? "Timed out";
     case "conversion_cancelled":
       return "Cancelled by user";
     case "download":
       return "XML downloaded";
+    case "job_deleted": {
+      const fileName = get<string>("fileName");
+      return fileName ? `Deleted ${fileName}` : "Deleted";
+    }
+    case "files_purged": {
+      const days = get<number>("retentionDays");
+      return days ? `Files removed after ${days} days` : "Files removed";
+    }
+    case "mapping_changed": {
+      const mapping = get<Record<string, string>>("mapping") ?? {};
+      const renames = Object.entries(mapping).map(([from, to]) => `${from} → ${to}`);
+      return renames.length ? renames.join(", ") : "All columns matched by name";
+    }
+    case "xml_validated":
+    case "xml_autofix": {
+      const fileName = get<string>("fileName");
+      return fileName ?? "—";
+    }
+    case "mapping_template_saved":
+    case "mapping_template_deleted": {
+      const name = get<string>("name");
+      return name ? `Template "${name}"` : "—";
+    }
     default:
       return "—";
   }
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  upload: "Upload",
+  mapping_changed: "Column mapping changed",
+  conversion_started: "Conversion started",
+  conversion_retried: "Conversion retried",
+  conversion_complete: "Conversion complete",
+  conversion_failed: "Conversion failed",
+  conversion_deadlettered: "Conversion failed",
+  conversion_timeout: "Conversion timed out",
+  conversion_cancelled: "Conversion cancelled",
+  download: "Download",
+  job_deleted: "Job deleted",
+  files_purged: "Files removed (retention)",
+  xml_validated: "XML validated",
+  xml_autofix: "XML auto-fixed",
+  mapping_template_saved: "Template saved",
+  mapping_template_deleted: "Template deleted",
+  sign_in: "Signed in",
+  sign_in_failed: "Sign-in failed (wrong password)",
+};
+
+// "conversion_failed" is no longer written (dead-lettering replaced it), so
+// the filter offers only the actions current code produces.
+const FILTER_ACTIONS = Object.keys(ACTION_LABELS).filter((action) => action !== "conversion_failed");
+
 function formatActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    upload: "Upload",
-    conversion_started: "Conversion started",
-    conversion_retried: "Conversion retried",
-    conversion_complete: "Conversion complete",
-    conversion_failed: "Conversion failed",
-    conversion_cancelled: "Conversion cancelled",
-    download: "Download",
-  };
-  return labels[action] ?? action;
+  return ACTION_LABELS[action] ?? action;
 }
 
 const SKELETON_ROW_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5"];
@@ -125,12 +165,11 @@ export default function AuditPage() {
             }}
           >
             <option value="">All actions</option>
-            <option value="upload">Upload</option>
-            <option value="conversion_started">Conversion started</option>
-            <option value="conversion_complete">Conversion complete</option>
-            <option value="conversion_failed">Conversion failed</option>
-            <option value="conversion_cancelled">Conversion cancelled</option>
-            <option value="download">Download</option>
+            {FILTER_ACTIONS.map((action) => (
+              <option key={action} value={action}>
+                {ACTION_LABELS[action]}
+              </option>
+            ))}
           </select>
           <a
             href={

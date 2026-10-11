@@ -39,7 +39,7 @@ window it opens. Responses that are limited return **429** with
 
 | Bucket | Limit | Key |
 |---|---|---|
-| `signup` | 5 / 60s | client IP (first entry of `x-forwarded-for`, validated) |
+| `signup` | 5 / 60s | client IP (the `x-forwarded-for` entry added by our own proxy — see `TRUSTED_PROXY_HOPS` — validated) |
 | login | throttled per email **and** per IP | — |
 | `upload` | 10 / 60s | user id |
 | `validate-xml` | 10 / 60s | user id |
@@ -236,14 +236,15 @@ CSV export escapes quotes and prefixes any value starting with `=`, `+`, `-`, `@
 or a control character with an apostrophe, so user-controlled filenames cannot
 become formulas when the file opens in Excel or Sheets.
 
-**Actions actually written:** `upload`, `conversion_started`,
-`conversion_complete`, `conversion_cancelled`, `conversion_timeout`,
-`conversion_deadlettered`, `download`, `files_purged`, `job_deleted`,
-`xml_validated`, `xml_autofix`.
-
-> The audit **page** currently offers a `conversion_failed` filter that no code
-> writes, and does not label six actions that are written. See
-> [documentation-audit.md](./documentation-audit.md#code-issues-found-during-the-audit).
+**Actions actually written:** `upload`, `mapping_changed` (the column mapping
+of a job changed; metadata holds the new and previous mapping),
+`conversion_started`, `conversion_retried`, `conversion_complete`,
+`conversion_cancelled`, `conversion_timeout`, `conversion_deadlettered`,
+`download`, `files_purged`, `job_deleted`, `xml_validated`, `xml_autofix`,
+`mapping_template_saved`, `mapping_template_deleted`, `sign_in` and
+`sign_in_failed` (a wrong password for an existing account; an address with no
+account has no user to file an entry under). The audit page labels each of
+them and offers each as a filter.
 
 ### `POST /api/validate-xml`
 

@@ -6,6 +6,7 @@ import { normalizeEmail } from "./normalize";
 import { rateLimit, resetRateLimit } from "./rate-limit";
 import { authConfig } from "./auth.config";
 import { clientIpFromHeaders } from "./client-ip";
+import { recordAudit } from "./audit";
 
 /**
  * Sign-in throttling.
@@ -24,6 +25,12 @@ import { clientIpFromHeaders } from "./client-ip";
 const LOGIN_MAX_ATTEMPTS = 10;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_IP_MAX_ATTEMPTS = 50;
+
+// A bcrypt hash at the cost signup uses (12) of a random password nobody has.
+// Comparing against it when the email is unknown makes that failure take as
+// long as a wrong password; returning straight away answered about 250 ms
+// sooner, which told a caller the address had no account.
+const DUMMY_PASSWORD_HASH = "$2b$12$iHtg.KAbRw7x.keyCjz3guGISulIU0grVX1ithEy743EPHMAcETmW";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -66,17 +73,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Returning null for every failure — throttled, unknown user, or wrong
         // password — is deliberate: the login page renders one message for all
         // of them, so none of these states is distinguishable to a caller.
-        if (!user) return null;
-
         const isValid = await compare(
           credentials.password as string,
-          user.passwordHash
+          user?.passwordHash ?? DUMMY_PASSWORD_HASH
         );
 
-        if (!isValid) return null;
+        if (!user) return null;
+        if (!isValid) {
+          // Audited for an existing account only: an entry needs a user,
+          // and an unknown address has none.
+          await recordAudit({ userId: user.id, action: "sign_in_failed" });
+          return null;
+        }
 
         // Don't leave a legitimate user throttled because they mistyped first.
         await resetRateLimit(emailKey);
+        await recordAudit({ userId: user.id, action: "sign_in" });
 
         return { id: user.id, email: user.email, name: user.name };
       },

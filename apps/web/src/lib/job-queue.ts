@@ -92,6 +92,23 @@ export async function claimJob(timeoutSec: number): Promise<string | null> {
   return jobId;
 }
 
+/**
+ * Whether the queue still holds a job: waiting in PENDING, backing off in
+ * DELAYED, or claimed in PROCESSING (where the sweep recovers it if its
+ * consumer died). The reaper asks before failing a job, because a job in a
+ * long backlog is old but not lost. Uses the shared client, not the consumer's
+ * connection, which may be blocked in BLMOVE.
+ */
+export async function isHeldByQueue(jobId: string): Promise<boolean> {
+  const redis = getRedis();
+  const [pending, processing, delayed] = await Promise.all([
+    redis.lpos(PENDING, jobId),
+    redis.lpos(PROCESSING, jobId),
+    redis.zscore(DELAYED, jobId),
+  ]);
+  return pending !== null || processing !== null || delayed !== null;
+}
+
 /** Current attempt count for a job (incremented at each claim). */
 export async function getAttempts(jobId: string): Promise<number> {
   const v = await getQueueRedis().hget(ATTEMPTS, jobId);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 
 export async function DELETE(
   _req: Request,
@@ -9,6 +10,12 @@ export async function DELETE(
   try {
     const user = await getRequiredUser();
     const { templateId } = await params;
+
+    // Read first for the audit entry's name; the delete stays scoped below.
+    const template = await prisma.mappingTemplate.findFirst({
+      where: { id: templateId, userId: user.id },
+      select: { name: true, converterType: true },
+    });
 
     // deleteMany so the userId scope is part of the delete itself —
     // a foreign template id deletes nothing instead of throwing.
@@ -22,6 +29,12 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    await recordAudit({
+      userId: user.id,
+      action: "mapping_template_deleted",
+      metadata: { name: template?.name ?? null, converterType: template?.converterType ?? null },
+    });
 
     return NextResponse.json({ deleted: true });
   } catch (error) {

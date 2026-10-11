@@ -164,7 +164,12 @@ following it would never see the prompt and would not know why. Documented in
 
 **Fix:** search `schemas/` (and the script directory) in `_pick_xsd`.
 
-### 2. The audit page's action list is out of sync
+### 2. The audit page's action list is out of sync — fixed
+
+> **Fixed:** the page labels and summarises every action written (including
+> the D.8 additions), and the filter is built from the same label map, without
+> `conversion_failed`. The label is still kept for entries written before
+> dead-lettering replaced it.
 
 `apps/web/src/app/audit/page.tsx` labels and offers a filter for
 `conversion_failed`, which **no code writes**. Six actions that *are* written —

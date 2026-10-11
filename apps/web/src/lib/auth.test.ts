@@ -8,6 +8,7 @@ vi.mock("@/lib/rate-limit", () => ({
   resetRateLimit: vi.fn(),
 }));
 vi.mock("bcryptjs", () => ({ compare: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ recordAudit: vi.fn() }));
 // vi.mock factories are hoisted above ordinary declarations, so the capture
 // slot has to be hoisted with them.
 const captured = vi.hoisted(() => ({ config: undefined as unknown }));
@@ -28,11 +29,13 @@ import "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { compare } from "bcryptjs";
+import { recordAudit } from "@/lib/audit";
 
 const db = vi.mocked(prisma, true);
 const limiter = vi.mocked(rateLimit);
 const resetLimiter = vi.mocked(resetRateLimit);
 const bcryptCompare = vi.mocked(compare);
+const audit = vi.mocked(recordAudit);
 
 type AuthorizeFn = (
   credentials: Record<string, unknown>,
@@ -80,7 +83,8 @@ describe("credentials authorize — throttling", () => {
 
   it("also throttles by forwarded IP when one is present", async () => {
     const request = new Request("http://localhost/api/auth/callback/credentials", {
-      headers: { "x-forwarded-for": "203.0.113.9, 10.0.0.1" },
+      // The client wrote 198.51.100.1; the edge proxy appended 203.0.113.9.
+      headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" },
     });
     await authorize()(CREDS, request);
     expect(limiter).toHaveBeenCalledWith(
@@ -120,8 +124,38 @@ describe("credentials authorize — enumeration resistance", () => {
     expect(await authorize()(CREDS)).toBeNull();
   });
 
+  it("spends a bcrypt comparison on an unknown email too", async () => {
+    // Returning before compare() answered ~250 ms sooner than a wrong
+    // password, which told a caller the address had no account.
+    db.user.findUnique.mockResolvedValue(null as never);
+    bcryptCompare.mockResolvedValue(true as never);
+
+    expect(await authorize()(CREDS)).toBeNull();
+
+    expect(bcryptCompare).toHaveBeenCalledWith("hunter2", expect.stringMatching(/^\$2[aby]\$12\$/));
+  });
+
   it("rejects missing credentials without touching the limiter", async () => {
     expect(await authorize()({ email: "", password: "" })).toBeNull();
     expect(limiter).not.toHaveBeenCalled();
+  });
+});
+
+describe("credentials authorize — audit trail", () => {
+  it("records a successful sign-in", async () => {
+    await authorize()(CREDS);
+    expect(audit).toHaveBeenCalledWith({ userId: "u1", action: "sign_in" });
+  });
+
+  it("records a wrong password against the account", async () => {
+    bcryptCompare.mockResolvedValue(false as never);
+    await authorize()(CREDS);
+    expect(audit).toHaveBeenCalledWith({ userId: "u1", action: "sign_in_failed" });
+  });
+
+  it("records nothing for an unknown address, which has no account to file it under", async () => {
+    db.user.findUnique.mockResolvedValue(null as never);
+    await authorize()(CREDS);
+    expect(audit).not.toHaveBeenCalled();
   });
 });

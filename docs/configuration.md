@@ -98,6 +98,12 @@ Raising `CONVERSION_TIMEOUT_MS` for large files means raising all three.
 > ad-hoc worker calls. The conversion path overrides it with
 > `CONVERSION_TIMEOUT_MS`; the validate/fix routes use 60 seconds.
 
+## Proxies
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TRUSTED_PROXY_HOPS` | `1` | Web: how many proxies sit in front of the app. The client IP used for the signup and login rate limits is the `X-Forwarded-For` entry that many from the right; `0` ignores the header |
+
 ## Limits
 
 | Variable | Default | Meaning |

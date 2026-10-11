@@ -257,7 +257,11 @@ writes `output/<id>/<id>.xml` after the row and directory are gone. No row → r
 it. Fix: write to a temp path and rename only after the guarded update succeeds, or delete on
 `count === 0`.
 
-### B.5 The reaper fails jobs still waiting in a long queue — `[OPEN]` — LOW
+### B.5 The reaper fails jobs still waiting in a long queue — `[FIXED]` — LOW
+
+> **Fixed:** the reaper skips a job the queue still holds (`pending`, `delayed` or `processing`,
+> via `isHeldByQueue` on the shared client) and fails only one the queue has lost; if Redis
+> cannot be asked it reaps nothing.
 
 `job-reaper.ts:23,38` times `queued` jobs from when they were queued. With one serial consumer per
 process and a 30-minute attempt budget, a backlog over 60 minutes gets jobs reaped as
@@ -330,8 +334,8 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 | D.4 `[FIXED]` | `apps/worker/app/models/schemas.py:7` | *Fixed: `converter_type` / `schema_type` are `Literal`s on every request model.* `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |
 | D.5 `[FIXED]` | `apps/worker/app/routes/validate.py:46` | *Fixed: validation errors are a string `detail` like every other error, and no error repeats request input.* Error responses have two shapes (`detail` list from FastAPI 422, string from the worker's own 422) and echo input verbatim (`"Unknown schema type: <script>x"`). JSON-only, so not XSS, but inconsistent. |
 | D.6 `[FIXED]` | `apps/worker/Dockerfile:1,4-5` | *Fixed: base image pinned by digest; the unused `-dev` packages are gone; the healthcheck and `CMD` use `$PORT` (default 8000).* Base image pinned by tag not digest; `libxml2-dev`/`libxslt1-dev` installed although the install is wheels-only; `HEALTHCHECK` hardcodes 8000 while Railway uses `$PORT`. |
-| D.7 | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
-| D.8 | web routes | Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
+| D.7 `[PARTIAL]` | `apps/web/src/app/api/auth/signup/route.ts:89-95`; `src/lib/auth.ts:64-71` | *Fixed: login compares against a dummy cost-12 hash for an unknown email; rate-limit IPs are the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` from the right. Open: signup's 409 — signup signs the user straight in, so a fake success would be given away by the sign-in; hiding it needs email verification, which the app has no mail for.* Account enumeration: signup returns 409 "Email already registered"; login skips bcrypt for unknown emails (~250 ms timing difference at cost 12). Signup's 5/min limit is keyed on spoofable `X-Forwarded-For`. |
+| D.8 `[FIXED]` | web routes | *Fixed: `mapping_changed`, `mapping_template_saved`/`_deleted`, `sign_in` and `sign_in_failed` (existing accounts) are written through `recordAudit`, and the audit page labels and filters every action written.* Audit-trail gaps: column-mapping changes (which change what gets filed), template save/delete, and sign-in success/failure write no `AuditEntry`. |
 | D.9 `[PARTIAL]` | core | *Fixed: two-digit years past next year are last century; event ids are trimmed; 9-digit and spaced ZIP+4 keep the +4 (other trailing text is reported); exporting employees keep a fraction where the XSD allows one and are reported where it does not; a whitespace-only Contact ID is a missing one; bracketed labels stay in notes; `City` was already mapped. Open: the combined "Middle Eastern or North African" answer, which the XSD can't represent as one category.* Smaller data issues: `%y` dates map `01/05/68` → 2068; training event id `"EV1 "` splits into a second event (`training_converter.py:86`); training-client `City` (capitalised) dropped (`config.py:679` maps only `city`); 9-digit ZIP loses +4 silently; export employees `12.7` truncated to 12; whitespace-only Contact ID emitted as `"   "`; `clean_whitespace` deletes `[Q3]:` from notes; "Middle Eastern or North African" counted under both MiddleEastern and NorthAfrican. |
 
 ---

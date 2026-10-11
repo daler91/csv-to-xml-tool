@@ -8,6 +8,7 @@ import { routeError } from "@/lib/api-errors";
 import { workerFetch } from "@/lib/worker-client";
 import { reapStuckConvertingJobs } from "@/lib/job-reaper";
 import { sanitizeMapping } from "@/lib/column-mapping";
+import { recordAudit } from "@/lib/audit";
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 
@@ -191,6 +192,20 @@ export async function PATCH(
         },
         { status: 409 }
       );
+    }
+
+    // The mapping decides which column fills which field of the filing, so
+    // a change to it is audited like the conversion it feeds.
+    if (sanitizedData.columnMapping !== undefined) {
+      const previous = sanitizeMapping(job.columnMapping, { allowEmpty: true });
+      if (JSON.stringify(previous) !== JSON.stringify(sanitizedData.columnMapping)) {
+        await recordAudit({
+          userId: user.id,
+          jobId,
+          action: "mapping_changed",
+          metadata: { mapping: sanitizedData.columnMapping, previous },
+        });
+      }
     }
 
     const fresh = await prisma.job.findUnique({ where: { id: jobId } });

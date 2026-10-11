@@ -7,19 +7,23 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       upsert: vi.fn(),
       deleteMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     job: { findFirst: vi.fn() },
   },
 }));
 vi.mock("@/lib/session", () => ({ getRequiredUser: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ recordAudit: vi.fn() }));
 
 import { GET, POST } from "@/app/api/mapping-templates/route";
 import { DELETE } from "@/app/api/mapping-templates/[templateId]/route";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
+import { recordAudit } from "@/lib/audit";
 
 const db = vi.mocked(prisma, true);
 const auth = vi.mocked(getRequiredUser);
+const audit = vi.mocked(recordAudit);
 
 function templateParams(templateId: string): {
   params: Promise<{ templateId: string }>;
@@ -109,6 +113,11 @@ describe("POST /api/mapping-templates", () => {
       userId: TEST_USER.id,
       name: "Monthly",
     });
+    expect(audit).toHaveBeenCalledWith({
+      userId: TEST_USER.id,
+      action: "mapping_template_saved",
+      metadata: { name: "Monthly", converterType: "counseling" },
+    });
   });
 
   it("rejects a missing name (400)", async () => {
@@ -149,6 +158,7 @@ describe("POST /api/mapping-templates", () => {
 
 describe("DELETE /api/mapping-templates/[templateId]", () => {
   it("deletes only within the user's scope", async () => {
+    db.mappingTemplate.findFirst.mockResolvedValue({ name: "Monthly", converterType: "counseling" } as never);
     db.mappingTemplate.deleteMany.mockResolvedValue({ count: 1 } as never);
     const res = await DELETE(
       new Request("http://localhost"),
@@ -157,6 +167,11 @@ describe("DELETE /api/mapping-templates/[templateId]", () => {
     expect(res.status).toBe(200);
     expect(db.mappingTemplate.deleteMany).toHaveBeenCalledWith({
       where: { id: "t1", userId: TEST_USER.id },
+    });
+    expect(audit).toHaveBeenCalledWith({
+      userId: TEST_USER.id,
+      action: "mapping_template_deleted",
+      metadata: { name: "Monthly", converterType: "counseling" },
     });
   });
 
@@ -167,5 +182,6 @@ describe("DELETE /api/mapping-templates/[templateId]", () => {
       templateParams("t-other")
     );
     expect(res.status).toBe(404);
+    expect(audit).not.toHaveBeenCalled();
   });
 });

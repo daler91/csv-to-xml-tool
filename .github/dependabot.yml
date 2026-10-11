@@ -1,0 +1,22 @@
+# Base-image updates for the two Dockerfiles. The worker's image is pinned by
+# digest (apps/worker/Dockerfile), so it only picks up upstream security fixes
+# when the digest changes; Dependabot opens a PR for each new digest of the
+# same tag. Major and minor version bumps (Python 3.12 -> 3.13, Node 20 -> 22)
+# are ignored: moving the runtime is a deliberate change, not a weekly one.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories:
+      - /apps/worker
+      - /apps/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor

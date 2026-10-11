@@ -112,9 +112,15 @@ describe("PATCH /api/jobs/[jobId]", () => {
     );
 
     expect(res.status).toBe(409);
-    const where = db.job.updateMany.mock.calls[0][0]!.where as { status: { notIn: string[] } };
-    const notIn = where.status.notIn;
-    expect(notIn).toEqual(expect.arrayContaining(["queued", "converting", "cancelled", "complete", "error"]));
+    expect(db.job.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: {
+            notIn: expect.arrayContaining(["queued", "converting", "cancelled", "complete", "error"]),
+          },
+        }),
+      })
+    );
   });
 
   it("strips non-whitelisted fields before updating", async () => {

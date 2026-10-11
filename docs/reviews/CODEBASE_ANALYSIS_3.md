@@ -89,7 +89,10 @@ worker; the federal-filing correctness backlog has not moved.
 
 ## Tier A — Output correctness (core)
 
-### A.1 `CounselorNotes` truncation can destroy the note, unaudited — `[OPEN]` — HIGH
+### A.1 `CounselorNotes` truncation can destroy the note, unaudited — `[FIXED]` — HIGH
+
+> **Fixed:** a sentence or word boundary only counts in the last fifth of the 1,000-character
+> window, and the cut is recorded as `TRUNCATED_VALUE` on `Comments`.
 
 `src/data_cleaning.py:613-627`. `truncate_counselor_notes` cuts at the *last* `.`/`!`/`?`/newline
 anywhere in the first 1000 chars, however early. No `TRUNCATED_VALUE` issue is recorded.
@@ -122,11 +125,13 @@ in `create_element` and record a `DOWNGRADED_VALUE` issue.
   3's error reads "Row 2 (Contact CCC)". The contact id is right, so it is recoverable — but the
   row number is what users look at.
 
-### A.4 Numbers: no range checks; accounting negatives become a fabricated zero — `[PARTIAL]` — MEDIUM
+### A.4 Numbers: no range checks; accounting negatives become a fabricated zero — `[FIXED]` — MEDIUM
 
 > **Range checks fixed** by `src/schema_rules.py`: a value outside the XSD's min/max is omitted with
 > an `INVALID_VALUE` warning when the element is optional, or reported as an error when required.
-> **Still open:** `(1,500)` still becomes a fabricated `0`.
+> **Accounting negatives fixed** too: `clean_numeric` reads `(1,500)` as `-1500`, and a cell that
+> still can't be read is reported as "'n/a' could not be used and was replaced with '0'" rather than
+> "Blank value defaulted".
 
 `src/data_cleaning.py:527-551`; `counseling_converter.py:348,359,636-641`.
 

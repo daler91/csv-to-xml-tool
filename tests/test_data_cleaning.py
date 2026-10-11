@@ -353,6 +353,22 @@ class TestDemographicClassifiers(unittest.TestCase):
         self.assertEqual(classify_races('Prefer not to say', km), set())
         self.assertEqual(classify_races('', km), set())
 
+    def test_clean_numeric_reads_accounting_negatives(self):
+        from src.data_cleaning import clean_numeric
+        self.assertEqual(clean_numeric('(1,500)'), '-1500')
+        self.assertEqual(clean_numeric('($2,000.50)'), '-2000.5')
+        self.assertEqual(clean_numeric('()'), '')
+
+    def test_truncate_notes_ignores_an_early_sentence_boundary(self):
+        from src.data_cleaning import truncate_counselor_notes
+        notes = "Met with Mr. Smith " + ("word " * 400)
+        truncated = truncate_counselor_notes(notes, 1000)
+        self.assertGreater(len(truncated), 800)
+        self.assertTrue(truncated.endswith('word'))
+        # A boundary near the end is still preferred.
+        late = ("a" * 900) + ". " + ("b " * 100)
+        self.assertEqual(truncate_counselor_notes(late, 1000), ("a" * 900) + ".")
+
     def test_classify_races_matches_keywords_at_word_starts(self):
         from src.config import RACE_KEYWORDS
         from src.data_cleaning import classify_races

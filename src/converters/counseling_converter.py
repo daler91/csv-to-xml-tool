@@ -134,19 +134,27 @@ class CounselingConverter(BaseConverter):
         self._warned_once.add(key)
         return True
 
-    def _warn_fabricated_default(self, record_id, field, default_value, element_label):
+    def _warn_fabricated_default(self, record_id, field, default_value, element_label, raw=None):
         """Record a FABRICATED_DEFAULT warning when a blank/missing cell is replaced
         by a non-empty default that ships in the XML. One warning per (record, field),
-        however many XML elements the default lands in."""
+        however many XML elements the default lands in.
+
+        `raw` is the cell as written, for the case where it was *not* blank but
+        could not be used ("(1,500)", "n/a", a zero duration): the message then
+        says so instead of claiming the cell was blank.
+        """
         if field not in self.fabrication_warn_fields:
             return
         key = (record_id, field)
         if key in self._fabrication_warned:
             return
         self._fabrication_warned.add(key)
+        raw_text = str(raw).strip() if raw is not None else ''
+        what = f"'{raw_text}' could not be used and was replaced" if raw_text else "Blank value defaulted"
         self.validator.add_issue(
             record_id, "warning", ValidationCategory.FABRICATED_DEFAULT, field,
-            f"Blank value defaulted to '{default_value}' ({element_label}).",
+            f"{what} with '{default_value}' ({element_label})." if raw_text
+            else f"{what} to '{default_value}' ({element_label}).",
         )
 
     def convert(self, input_path: str, output_path: str):
@@ -360,6 +368,12 @@ class CounselingConverter(BaseConverter):
 
         exporting_val = self._yes_no(row, 'Are you currently exporting?(old)',
                                      self.general_config.DEFAULT_BUSINESS_STATUS, record_id)
+        if data_cleaning.is_empty(row.get('Are you currently exporting?(old)')):
+            self._warn_fabricated_default(record_id, 'Are you currently exporting?(old)', exporting_val,
+                                          'Currently Exporting')
+        # Part 3 repeats this answer; it used to hardcode 'No' there, so an
+        # exporting client was filed as exporting and not exporting at once.
+        self._currently_exporting = exporting_val
         create_element(client_intake, 'CurrentlyExporting', exporting_val)
 
         create_element(client_intake, 'CompanyName', row.get('Account Name', ''))
@@ -412,15 +426,25 @@ class CounselingConverter(BaseConverter):
         income_part2 = create_element(client_intake, 'ClientAnnualIncomePart2')
         gross_rev = data_cleaning.clean_numeric(row.get('Gross Revenues/Sales', ''))
         if not gross_rev:
-            self._warn_fabricated_default(record_id, 'Gross Revenues/Sales', '0', 'Gross Revenues')
+            self._warn_fabricated_default(record_id, 'Gross Revenues/Sales', '0', 'Gross Revenues',
+                                          raw=row.get('Gross Revenues/Sales'))
         create_element(income_part2, 'GrossRevenues', gross_rev if gross_rev else '0')
         profit_loss = data_cleaning.clean_numeric(row.get('Profits/Losses', ''))
         if not profit_loss:
-            self._warn_fabricated_default(record_id, 'Profits/Losses', '0', 'Profit/Loss')
+            self._warn_fabricated_default(record_id, 'Profits/Losses', '0', 'Profit/Loss',
+                                          raw=row.get('Profits/Losses'))
         create_element(income_part2, 'ProfitLoss', profit_loss if profit_loss else '0')
-        create_element(income_part2, 'ExportGrossRevenuesOrSales', '0')
+        self._emit_export_revenue(income_part2)
 
         return in_business_val
+
+    def _emit_export_revenue(self, income_element):
+        """ExportGrossRevenuesOrSales has no CSV column. Zero follows from the
+        client's "not exporting" answer; for an exporter the figure is simply
+        unknown, so it is omitted (the element is optional) rather than filed
+        as a fabricated 0."""
+        if self._currently_exporting == 'No':
+            create_element(income_element, 'ExportGrossRevenuesOrSales', '0')
 
     def _build_legal_entity(self, client_intake, row, record_id):
         le_element = create_element(client_intake, 'LegalEntity')
@@ -567,6 +591,11 @@ class CounselingConverter(BaseConverter):
                                          record_id)
 
         if reportable_impact == 'Yes' and verified_in_business != 'Yes':
+            # A reportable impact presupposes a verified business, so the answer
+            # is overridden -- but never silently.
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.DOWNGRADED_VALUE, 'Verified To Be In Business',
+                f"Recorded as 'Yes' instead of '{verified_in_business}' because Reportable Impact is 'Yes'.")
             verified_in_business = 'Yes'
 
         create_element(counselor_record, 'VerifiedToBeInBusiness', verified_in_business)
@@ -575,14 +604,16 @@ class CounselingConverter(BaseConverter):
         impact_date = data_cleaning.format_date(row.get('Reportable Impact Date', ''))
         if impact_date:
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
-        create_element(counselor_record, 'CurrentlyExporting', self.general_config.DEFAULT_BUSINESS_STATUS)
+        create_element(counselor_record, 'CurrentlyExporting', self._currently_exporting)
 
         business_start_date = data_cleaning.format_date(self._mapped(row, 'business_start_date'))
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
-        total_employees = data_cleaning.clean_numeric(self._mapped(row, 'total_employees_part3', default='0'))
+        # Omitted when blank, as Part 2 does: a default of '0' made a blank cell
+        # indistinguishable from "no employees" in the filing.
+        total_employees = data_cleaning.clean_numeric(self._mapped(row, 'total_employees_part3'))
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
 
@@ -599,7 +630,7 @@ class CounselingConverter(BaseConverter):
         # whenever the base column is blank, so warning again would be noise.
         create_element(income_part3, 'GrossRevenues', gross_rev_part3 if gross_rev_part3 else '0')
         create_element(income_part3, 'ProfitLoss', profit_loss_part3 if profit_loss_part3 else '0')
-        create_element(income_part3, 'ExportGrossRevenuesOrSales', '0')
+        self._emit_export_revenue(income_part3)
 
         # Default to '' (not '0') so an absent column is indistinguishable from a
         # blank cell here and both trip the fabrication warning; the emitted value
@@ -609,13 +640,16 @@ class CounselingConverter(BaseConverter):
         equity_capital = data_cleaning.clean_numeric(row.get('Amount of Equity Capital Received', ''))
         rpsc = create_element(counselor_record, 'ResourcePartnerServiceContributed')
         if not sba_loan:
-            self._warn_fabricated_default(record_id, 'SBA Loan Amount', '0', 'SBA Loan Amount')
+            self._warn_fabricated_default(record_id, 'SBA Loan Amount', '0', 'SBA Loan Amount',
+                                          raw=row.get('SBA Loan Amount'))
         create_element(rpsc, 'SBALoanAmount', sba_loan if sba_loan else '0')
         if not non_sba_loan:
-            self._warn_fabricated_default(record_id, 'Non-SBA Loan Amount', '0', 'Non-SBA Loan Amount')
+            self._warn_fabricated_default(record_id, 'Non-SBA Loan Amount', '0', 'Non-SBA Loan Amount',
+                                          raw=row.get('Non-SBA Loan Amount'))
         create_element(rpsc, 'NonSBALoanAmount', non_sba_loan if non_sba_loan else '0')
         if not equity_capital:
-            self._warn_fabricated_default(record_id, 'Amount of Equity Capital Received', '0', 'Equity Capital Received')
+            self._warn_fabricated_default(record_id, 'Amount of Equity Capital Received', '0', 'Equity Capital Received',
+                                          raw=row.get('Amount of Equity Capital Received'))
         create_element(rpsc, 'EquityCapitalReceived', equity_capital if equity_capital else '0')
 
     def _build_coded_section(self, parent, element_name, codes, other_text, default_other_code=None):
@@ -636,10 +670,15 @@ class CounselingConverter(BaseConverter):
         # falls back -- CounselingProvided requires at least one Code.
         provided_codes = data_cleaning.split_multi_value(
             (row.get('Services Provided') or '').strip() or BUSINESS_STARTUP_PREPLANNING)
+        if data_cleaning.is_empty(row.get('Services Provided')):
+            self._warn_fabricated_default(record_id, 'Services Provided', BUSINESS_STARTUP_PREPLANNING,
+                                          'Counseling Provided')
         provided_codes = self._cap_single_code(provided_codes, record_id, 'CounselingProvided',
                                                'Services Provided')
+        # 'Other' is a valid CounselingProvided code and is emitted as-is. It
+        # used to be rewritten to 'Business Operations/Management', filing a
+        # service the counselor never said they provided.
         has_other_code = any(c.strip().lower() == 'other' for c in provided_codes)
-        provided_codes = ['Business Operations/Management' if c.strip().lower() == 'other' else c for c in provided_codes]
         cp_other = row.get('Other Counseling Provided', '').strip()
         for code in provided_codes:
             create_element(cp_element, 'Code', code)
@@ -696,11 +735,22 @@ class CounselingConverter(BaseConverter):
         contact_val = data_cleaning.clean_numeric((row.get('Duration (hours)') or '0'))
         if session_type not in self.config.NO_CONTACT_HOUR_SESSION_TYPES and float(contact_val or 0) <= 0:
             contact_val = "0.5"
+            raw_duration = row.get('Duration (hours)')
+            self._warn_fabricated_default(
+                record_id, 'Duration (hours)', contact_val, f'Contact hours for a {session_type} session',
+                raw=None if data_cleaning.is_empty(raw_duration) else raw_duration)
         emit_optional(ch_element, 'Contact', contact_val)
         emit_optional(ch_element, 'Prepare', data_cleaning.clean_numeric((row.get('Prep Hours') or '0')))
         emit_optional(ch_element, 'Travel', data_cleaning.clean_numeric((row.get('Travel Hours') or '0')))
 
-        counselor_notes = data_cleaning.truncate_counselor_notes(row.get('Comments', ''), self.config.MAX_FIELD_LENGTHS["CounselorNotes"])
+        notes_limit = self.config.MAX_FIELD_LENGTHS["CounselorNotes"]
+        counselor_notes = data_cleaning.truncate_counselor_notes(row.get('Comments', ''), notes_limit)
+        full_length = len(data_cleaning.clean_whitespace(row.get('Comments', '')))
+        if len(counselor_notes) < full_length:
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.TRUNCATED_VALUE, 'Comments',
+                f"Counselor notes are {full_length} characters; SBA allows {notes_limit}, so "
+                f"{full_length - len(counselor_notes)} characters at the end were cut.")
         if counselor_notes:
             create_element(counselor_record, 'CounselorNotes', counselor_notes)
 

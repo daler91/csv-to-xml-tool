@@ -156,6 +156,22 @@ a `FABRICATED_DEFAULT` issue naming the column and the value emitted.
 | `Mailing Country` | `United States` |
 | `Conduct Business Online?` | `No` |
 | `8(a) Certified?(old)` | `No` |
+| `Are you currently exporting?(old)` | `No` (in both Part 2 and Part 3) |
+| `Duration (hours)` | `0.5` contact hours — only for session types that require contact hours; a `0` is replaced the same way |
+| `Services Provided` | `Business Start-up/Preplanning` |
+
+A cell that is present but unusable (`n/a`, a `0` duration) is replaced the same
+way, and the issue quotes what the cell held. Accounting-format negatives such as
+`(1,500)` are read as `-1500`, not replaced.
+
+What is **not** fabricated: a blank Part 3 `Total Number of Employees` is omitted,
+as in Part 2, rather than filed as `0`; `ExportGrossRevenuesOrSales` (no CSV column
+holds it) is `0` only for a client who is not exporting and omitted for an
+exporter; `Services Provided = Other` is filed as `Other`. When `Reportable Impact`
+is `Yes`, `Verified To Be In Business` is recorded as `Yes` whatever the CSV says,
+and that override is recorded as a `DOWNGRADED_VALUE`. Counselor notes over 1,000
+characters are cut at a sentence or word boundary near the limit and recorded as
+`TRUNCATED_VALUE`.
 
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at

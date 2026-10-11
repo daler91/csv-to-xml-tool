@@ -136,6 +136,11 @@ def _column_slug(column: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', column.lower()).strip('_')
 
 
+def _session_needs_no_contact_hours(row: dict[str, str]) -> bool:
+    session = (row.get('Type of Session') or '').strip().casefold()
+    return session in {t.casefold() for t in CounselingConfig.NO_CONTACT_HOUR_SESSION_TYPES} | {'update'}
+
+
 def _counseling_quality_checks(headers: list[str], csv_rows: list[dict[str, str]],
                                fabrication_defaults: dict[str, str],
                                source_columns: dict[str, str] | None = None) -> list[dict]:
@@ -170,6 +175,8 @@ def _counseling_quality_checks(headers: list[str], csv_rows: list[dict[str, str]
             ambiguous_dates += 1
         for col in present_fab_cols:
             if is_empty(row.get(col)):
+                if col == 'Duration (hours)' and _session_needs_no_contact_hours(row):
+                    continue  # the converter only defaults it where hours are required
                 fab_blanks[col] += 1
 
     checks = []

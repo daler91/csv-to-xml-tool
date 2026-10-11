@@ -84,6 +84,39 @@ describe("PATCH /api/jobs/[jobId]", () => {
     expect(db.job.updateMany).not.toHaveBeenCalled();
   });
 
+  it.each(["queued", "converting"])(
+    "refuses to edit a %s job, which the queue owns (409)",
+    async (status) => {
+      // Saving the mapping page after starting a conversion used to move the
+      // job back to "mapping": a queued job then never ran, and a converting
+      // one had its finished result discarded.
+      db.job.findFirst.mockResolvedValue({ id: "j1", status } as never);
+      const res = await PATCH(
+        jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "b" }, status: "mapping" }),
+        jobParams("j1")
+      );
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/being converted/);
+      expect(db.job.updateMany).not.toHaveBeenCalled();
+    }
+  );
+
+  it("guards the update against a job started in the meantime", async () => {
+    db.job.findFirst.mockResolvedValue({ id: "j1", status: "mapping" } as never);
+    db.job.updateMany.mockResolvedValue({ count: 0 } as never);
+    db.job.findUnique.mockResolvedValue({ status: "queued" } as never);
+
+    const res = await PATCH(
+      jsonRequest("http://localhost", "PATCH", { columnMapping: { a: "b" } }),
+      jobParams("j1")
+    );
+
+    expect(res.status).toBe(409);
+    const where = db.job.updateMany.mock.calls[0][0]!.where as { status: { notIn: string[] } };
+    const notIn = where.status.notIn;
+    expect(notIn).toEqual(expect.arrayContaining(["queued", "converting", "cancelled", "complete", "error"]));
+  });
+
   it("strips non-whitelisted fields before updating", async () => {
     db.job.findFirst.mockResolvedValue({ id: "j1", status: "uploaded" } as never);
     db.job.updateMany.mockResolvedValue({ count: 1 } as never);

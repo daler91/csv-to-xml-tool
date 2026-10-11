@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import logging
 import os
 import shutil
@@ -10,7 +11,7 @@ from ..logging_context import set_job_id
 from ..models.schemas import ConvertRequest, ConvertResponse
 from ..services.cancellation import ConversionCancelledError
 from ..services.cancellation import registry as cancel_registry
-from ..services.conversion_service import run_conversion, EmptyCSVError
+from ..services.conversion_service import EmptyCSVError, run_conversion, unreadable_csv_detail
 from ..services.column_requirements import RequiredColumnsMissingError
 from ..services.progress import registry as progress_registry
 
@@ -38,7 +39,8 @@ def _read_text(path: str) -> str:
         400: {"description": "Invalid request parameters"},
         409: {"description": "Conversion cancelled by user"},
         422: {
-            "description": "Unprocessable CSV: required columns missing or the file is empty"
+            "description": "Unprocessable CSV: required columns missing, the file is empty, "
+            "or it cannot be parsed as CSV"
         },
         500: {"description": "Internal conversion error"},
     },
@@ -105,6 +107,11 @@ async def convert(req: ConvertRequest):
         # CONV-6: headers-only / empty CSV is unprocessable; map to 422 (before the
         # generic ValueError handler, since EmptyCSVError subclasses ValueError).
         raise HTTPException(status_code=422, detail=str(e)) from e
+    except csv.Error as e:
+        # The input, not the worker, is at fault, so 422 -- which the web's
+        # consumer treats as permanent. As a 500 it was retried three times
+        # and then shown to the user as a generic failure.
+        raise HTTPException(status_code=422, detail=unreadable_csv_detail(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid request parameters") from e
     except HTTPException:

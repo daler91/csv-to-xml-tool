@@ -114,21 +114,56 @@ export function isUploadedFile(part: FormDataEntryValue | null): part is File {
 // once it is parsed.
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
+const MAX_BODY_BYTES = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES;
+
+function bodyTooLarge(): NextResponse {
+  return NextResponse.json({ error: "File size exceeds 50MB limit" }, { status: 413 });
+}
+
 /**
  * Rejects a request whose declared Content-Length cannot hold a file within
- * the cap, *before* `req.formData()` buffers the whole body. The size check
- * on `file.size` still runs afterwards; this one is what keeps the cap a
- * bound on memory rather than only on what reaches disk.
+ * the cap, before any of the body is read.
  */
 export function declaredBodyTooLarge(req: Request): NextResponse | null {
   const declared = Number(req.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES) {
-    return NextResponse.json(
-      { error: "File size exceeds 50MB limit" },
-      { status: 413 }
-    );
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    return bodyTooLarge();
   }
   return null;
+}
+
+/**
+ * Parse a multipart upload without ever holding more than the upload cap.
+ *
+ * Checking Content-Length alone is not a bound on memory: a chunked request
+ * carries no length (`Number(null)` is 0, so it passed), and `req.formData()`
+ * then buffered the whole body before `file.size` was looked at. The body is
+ * read here as a stream and abandoned the moment it passes the cap, so a
+ * multi-gigabyte upload costs at most the cap -- in this process, which also
+ * runs the conversion consumer. Returns the form data, or the 413 to send.
+ */
+export async function readCappedFormData(req: Request): Promise<FormData | NextResponse> {
+  const declared = declaredBodyTooLarge(req);
+  if (declared) return declared;
+  if (!req.body) return req.formData();
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {});
+      return bodyTooLarge();
+    }
+    chunks.push(value);
+  }
+  // Re-parse the bytes with the request's own multipart boundary.
+  return new Response(Buffer.concat(chunks), {
+    headers: { "content-type": req.headers.get("content-type") ?? "" },
+  }).formData();
 }
 
 export function createXmlToolRoute<T>(
@@ -153,10 +188,8 @@ export function createXmlToolRoute<T>(
         );
       }
 
-      const tooLarge = declaredBodyTooLarge(req);
-      if (tooLarge) return tooLarge;
-
-      const formData = await req.formData();
+      const formData = await readCappedFormData(req);
+      if (formData instanceof NextResponse) return formData;
       const file = formData.get("file");
       const schemaType = formData.get("schemaType");
 

@@ -32,6 +32,21 @@ from .column_requirements import (
     RequiredColumnsMissingError,
 )
 
+
+def unreadable_csv_detail(error: Exception) -> str:
+    """A user-facing reason for a csv.Error.
+
+    The module's own wording ("field larger than field limit (131072)") reads
+    like an internal fault; a cell that long almost always means a quote that
+    was opened and never closed, which swallows the rest of the file.
+    """
+    if "field larger than field limit" in str(error):
+        return ("A cell in the CSV is longer than 131,072 characters. This usually means "
+                "a quotation mark is opened and never closed; check the row where the "
+                "data stops looking right.")
+    return f"The CSV could not be read: {error}"
+
+
 # Type alias mirroring BaseConverter.ProgressCallback so the worker
 # service doesn't need to import from src/converters/.
 ProgressCallback = Callable[[int, int], None]

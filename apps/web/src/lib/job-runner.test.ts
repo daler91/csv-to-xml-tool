@@ -13,18 +13,20 @@ vi.mock("@/lib/worker-client", async (importOriginal) => ({
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
   mkdir: vi.fn(),
+  rm: vi.fn(),
   writeFile: vi.fn(),
 }));
 
 import { runJob } from "@/lib/job-runner";
 import { prisma } from "@/lib/prisma";
 import { workerFetch } from "@/lib/worker-client";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 
 const db = vi.mocked(prisma, true);
 const worker = vi.mocked(workerFetch);
 const read = vi.mocked(readFile);
 const write = vi.mocked(writeFile);
+const remove = vi.mocked(rm);
 
 const JOB = {
   id: "j1",
@@ -45,6 +47,7 @@ const RESULT = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  remove.mockResolvedValue(undefined);
 });
 
 describe("runJob", () => {
@@ -128,6 +131,28 @@ describe("runJob", () => {
         }),
       })
     );
+    // ...and the XML it wrote is removed: after cancel-then-delete there is
+    // no row left for retention to find it by.
+    expect(remove).toHaveBeenCalledWith(
+      expect.stringMatching(/output[\\/]j1$/),
+      { recursive: true, force: true }
+    );
+  });
+
+  it("keeps the output when a concurrent attempt already completed the job", async () => {
+    db.job.findUnique
+      .mockResolvedValueOnce(JOB as never)
+      .mockResolvedValueOnce({ status: "complete" } as never);
+    db.job.updateMany
+      .mockResolvedValueOnce({ count: 1 } as never)
+      .mockResolvedValueOnce({ count: 0 } as never);
+    db.auditEntry.create.mockResolvedValue({} as never);
+    read.mockResolvedValue(Buffer.from("Contact ID\n003\n") as never);
+    worker.mockResolvedValue(RESULT as never);
+
+    await runJob("j1");
+
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it("persists structured xsd_error_details when the worker provides them", async () => {

@@ -16,7 +16,8 @@ POST /start ──► guarded updateMany ──► status=queued ──► LPUSH
                                        │                │
                       ack (LREM) ◄─────┘        worker POST /convert
                                                         │
-                            requeue on failure  ◄───────┘
+                            delayed requeue on  ◄───────┘
+                            failure (30 s, 2 min)
                             dead-letter after JOB_MAX_ATTEMPTS
 ```
 
@@ -24,6 +25,7 @@ Three recovery mechanisms, in order of how quickly they act:
 
 | Mechanism | Trigger | Effect |
 |---|---|---|
+| Retry backoff | A transient failure (network, worker 5xx) with attempts left | Job waits in the `delayed` set for `JOB_RETRY_BASE_MS` × 4ⁿ, then is promoted back to the queue |
 | Visibility sweep | Claim not acked within `VISIBILITY_TIMEOUT_MS` | Re-queues the job (LREM-gated, so competing consumers cannot double-requeue) |
 | Dead-letter | `JOB_MAX_ATTEMPTS` exhausted | Job → `error`, `conversion_deadlettered` audit entry |
 | Reaper | Stuck `queued`/`converting` past `REAP_DEADLINE_MS` | Job → `error` |
@@ -81,7 +83,10 @@ of [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md).
 ## Retention
 
 Uploads and generated XML are deleted after `RETENTION_DAYS` (30 by default).
-The sweep is lazy, like the reaper, and runs on dashboard reads.
+The sweep runs hourly for every user from the job consumer in each web process
+(up to 200 jobs a run; a backlog drains over successive hours), and also on a
+user's own dashboard and job-list reads. Concurrent sweeps are safe: each purge
+is claimed with a guarded update first.
 
 What survives: the job row, its summary and issues, and the full audit trail.
 `filesPurgedAt` is stamped, and downloads then return **410 "expired"** rather
@@ -202,8 +207,8 @@ which is trivially spoofable.
 
 ### Freeing disk
 
-Retention handles this on its own. To force it, hit the dashboard as the affected
-user — the sweep is per-user and lazy. Deleting a job removes its files
+Retention handles this on its own, hourly. To force it sooner for one user, load
+the dashboard as that user. Deleting a job removes its files
 immediately; note the row is deleted before the files, deliberately, so a racing
 start cannot pick up a job whose input is about to vanish.
 
@@ -211,7 +216,8 @@ start cannot pick up a job whose input is about to vanish.
 
 Change it on both services and restart both. The worker reads it at import time.
 Conversions in flight during the restart fail and are retried by the queue, up to
-`JOB_MAX_ATTEMPTS`.
+`JOB_MAX_ATTEMPTS`, after 30 s and then 2 min — so a restart that takes longer
+than about two and a half minutes can still dead-letter them.
 
 ### Upgrading
 

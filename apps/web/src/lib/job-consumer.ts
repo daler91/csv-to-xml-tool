@@ -6,16 +6,31 @@ import {
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
+import { purgeAllExpiredJobFiles } from "@/lib/retention";
 import { prisma } from "@/lib/prisma";
 import { assertTimeoutOrdering } from "@/lib/durability-timeouts";
 
 // Max conversion attempts before a job is dead-lettered to "error".
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS) || 3;
 const SWEEP_INTERVAL_MS = 60 * 1000;
+// File retention for every user, not only those who revisit the dashboard.
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 const CLAIM_TIMEOUT_SEC = 5;
 // Pause after an unexpected failure inside the loop so a persistently broken
 // dependency (Redis down, database gone) is retried, not hot-looped.
 const FAILURE_BACKOFF_MS = 1000;
+// Delay before retrying a transiently failed conversion, multiplied by 4 for
+// each further attempt: 30 s, then 2 min with the default three attempts.
+// Long enough to outlast a worker redeploy -- the old fixed 2 s pause spent
+// all three attempts in about 4 s, so a restart failed every job in flight.
+// The whole schedule is far inside REAP_DEADLINE_MS, which a delayed job
+// (still "converting") is measured against.
+const RETRY_BASE_MS = Number(process.env.JOB_RETRY_BASE_MS) || 30 * 1000;
+
+/** Backoff before the retry that follows failed attempt `attempt` (1-based). */
+export function retryDelayMs(attempt: number): number {
+  return RETRY_BASE_MS * 4 ** Math.max(0, attempt - 1);
+}
 
 // Guard against Next.js dev-mode double registration / multiple register()
 // calls in one process (mirrors the globalForRedis / globalForPrisma pattern).
@@ -65,6 +80,13 @@ export async function startConsumer(): Promise<void> {
       console.error("[job-consumer] periodic sweep failed:", err)
     );
   }, SWEEP_INTERVAL_MS);
+
+  // Not awaited, like the boot sweep: retention fails open and must never
+  // hold up startup. Then hourly.
+  void purgeAllExpiredJobFiles();
+  setInterval(() => {
+    void purgeAllExpiredJobFiles();
+  }, RETENTION_INTERVAL_MS);
 
   process.on("SIGTERM", stopConsumer);
 
@@ -164,9 +186,9 @@ export async function handleFailure(jobId: string, err: unknown): Promise<void> 
   const isTimeout = /timed out/i.test(message);
   const permanent = status === 400 || status === 422 || isTimeout;
 
-  if (!permanent && (await getAttempts(jobId)) < MAX_ATTEMPTS) {
-    await sleep(2000); // brief best-effort backoff
-    await requeueJob(jobId);
+  const attempt = await getAttempts(jobId);
+  if (!permanent && attempt < MAX_ATTEMPTS) {
+    await requeueJob(jobId, retryDelayMs(attempt));
     return;
   }
 
@@ -175,10 +197,14 @@ export async function handleFailure(jobId: string, err: unknown): Promise<void> 
 }
 
 async function deadLetter(jobId: string, error: string): Promise<void> {
-  // Guarded: only flip a still-"converting" job to error. If a cancel landed
-  // first, count=0 and the "cancelled" status is preserved.
+  // Guarded: only flip a job the queue still owns to error. If a cancel landed
+  // first, count=0 and the "cancelled" status is preserved. "queued" is
+  // included because a failure can come before the runner's queued ->
+  // converting flip (the database briefly unreachable, say); guarding on
+  // "converting" alone acked such a job while it stayed "queued", with no
+  // audit row, until the reaper failed it as a timeout an hour later.
   const updated = await prisma.job.updateMany({
-    where: { id: jobId, status: "converting" },
+    where: { id: jobId, status: { in: ["queued", "converting"] } },
     data: { status: "error", completedAt: new Date() },
   });
   if (updated.count === 0) return;

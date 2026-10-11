@@ -84,6 +84,7 @@ CONVERSION_TIMEOUT_MS  <  VISIBILITY_TIMEOUT_MS  <  REAP_DEADLINE_MS
 | `VISIBILITY_TIMEOUT_MS` | `2400000` (40 min) | A claimed job not finished within this is treated as abandoned and re-queued by the sweep |
 | `REAP_DEADLINE_MS` | `3600000` (60 min) | Backstop: a job stuck `queued`/`converting` past this is failed |
 | `JOB_MAX_ATTEMPTS` | `3` | Conversion attempts before dead-lettering to `error` |
+| `JOB_RETRY_BASE_MS` | `30000` (30 s) | Wait before retrying a transiently failed attempt; each further retry waits 4× longer (30 s, 2 min with the defaults) |
 
 Break the ordering and you get one of two failure modes. If
 `VISIBILITY_TIMEOUT_MS < CONVERSION_TIMEOUT_MS`, a healthy long conversion is
@@ -127,8 +128,8 @@ stream-counting half is what closes the bypass where a request sent with
 |---|---|---|
 | `RETENTION_DAYS` | `30` | Days uploaded CSVs and generated XML stay on disk |
 
-The sweep is **lazy** — it runs on dashboard and job reads, not on a timer — and
-it removes *files only*. Job rows and the audit trail are kept, `filesPurgedAt`
+The sweep runs hourly for all users from the web's job consumer, and also on a
+user's dashboard and job reads. It removes *files only*. Job rows and the audit trail are kept, `filesPurgedAt`
 is stamped, and downloads then return 410 "expired" rather than 404. Jobs that
 are `queued` or `converting` are never swept, because the runner still needs the
 input file.

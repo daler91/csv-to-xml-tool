@@ -317,6 +317,9 @@ stays side-effect free.
 `data_quality` is `{"total_rows": int, "checks": [{key, label, count, severity,
 detail, column}]}` and lists only checks with a non-zero count.
 
+A CSV that cannot be parsed at all (typically an unclosed quote, which turns the
+rest of the file into one oversized cell) is a `422` whose detail says so.
+
 ### `POST /convert`
 
 ```json
@@ -332,7 +335,7 @@ detail, column}]}` and lists only checks with a non-zero count.
 | 200 | Converted (possibly with `xsd_valid: false`) |
 | 400 | Invalid request parameters |
 | 409 | Cancelled by the user mid-conversion |
-| 422 | Unprocessable CSV — required columns missing, or the file is empty/headers-only |
+| 422 | Unprocessable CSV — required columns missing, the file is empty/headers-only, or it cannot be parsed as CSV (e.g. an unclosed quote) |
 | 500 | Internal conversion error |
 
 `422` is the important one: the detail string names exactly which required

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { workerFetch } from "@/lib/worker-client";
@@ -90,7 +90,7 @@ export async function runJob(jobId: string, attempt = 1): Promise<void> {
 
   // Conditional update: only write "complete" if the job is still converting.
   // If a cancel landed in the race window, updateMany returns count=0 and we
-  // discard the result (the file on disk is orphaned but harmless).
+  // discard the result -- including the file just written (below).
   const updated = await prisma.job.updateMany({
     where: { id: jobId, status: "converting" },
     data: {
@@ -106,7 +106,21 @@ export async function runJob(jobId: string, attempt = 1): Promise<void> {
     },
   });
 
-  if (updated.count === 0) return; // cancelled mid-flight — discard
+  if (updated.count === 0) {
+    // Cancelled (or deleted) mid-flight: discard the XML too. It used to be
+    // left on disk as "orphaned but harmless", but after cancel-then-delete
+    // there is no row left for retention to find it by, so a filing full of
+    // client data stayed on the volume for good. Only when no attempt
+    // completed the job: if a concurrent attempt won, this path is its output.
+    const current = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+    if (current?.status !== "complete") {
+      await rm(outputDir, { recursive: true, force: true }).catch(() => {});
+    }
+    return;
+  }
 
   await prisma.auditEntry.create({
     data: {

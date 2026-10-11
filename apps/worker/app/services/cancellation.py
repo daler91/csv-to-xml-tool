@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 
-from .redis_client import TTL_SECONDS, cancel_key, get_client
+from .redis_client import TTL_SECONDS, available, cancel_key, get_client, trip
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +53,12 @@ class CancellationRegistry:
             logger.warning("cancellation.cancel failed for job %s", job_id, exc_info=True)
 
     def is_cancelled(self, job_id: str) -> bool:
+        if not available():
+            return False  # breaker open: same fail-soft answer, without the wait
         try:
             return bool(get_client().exists(cancel_key(job_id)))
         except Exception:
+            trip()
             # Fail-soft: never cancel a valid conversion because Redis hiccuped.
             logger.warning(
                 "cancellation.is_cancelled failed for job %s; treating as not cancelled",

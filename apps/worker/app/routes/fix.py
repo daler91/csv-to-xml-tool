@@ -13,6 +13,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 import defusedxml.ElementTree as SafeET
+from defusedxml import DefusedXmlException
 from fastapi import APIRouter, HTTPException
 
 # Ensure src is importable
@@ -52,9 +53,13 @@ def _canonical(xml_text: str) -> bytes | None:
     """
     try:
         root = SafeET.fromstring(xml_text)
-    except ET.ParseError:
+    except (ET.ParseError, DefusedXmlException):
         return None
     return ET.tostring(root)
+
+
+def _changed(original: str, fixed: str) -> bool:
+    return _canonical(original) != _canonical(fixed)
 
 
 @router.post(
@@ -96,7 +101,10 @@ async def fix_xml(req: FixXmlRequest):
         )
         if fix_ok:
             fixed_content = await asyncio.to_thread(read_text, fixed_path)
-            changed = _canonical(req.xml_content) != _canonical(fixed_content)
+            # Two full parse/serialize passes: CPU-bound, so off the event loop
+            # like every other step here (about 10 s each at 28 MB, during
+            # which /health and every progress poll used to stall).
+            changed = await asyncio.to_thread(_changed, req.xml_content, fixed_content)
             validate_path = fixed_path
         else:
             # Unparseable input (or fixer I/O failure): return the original

@@ -89,6 +89,14 @@ const TERMINAL_STATUSES = new Set<JobStatus>(["cancelled", "complete", "error"])
 // from "uploaded", the contradictory state /cancel's own comment rules out.
 const CLIENT_WRITABLE_STATUS: JobStatus = "mapping";
 
+// A job the queue owns can't be edited either. Moving a queued job back to
+// "mapping" made the consumer skip it (it never ran); doing it mid-conversion
+// made the runner's guarded "complete" write miss, discarding the result;
+// and a restart then raced the old run, which could save XML built from the
+// previous mapping onto the new one.
+const QUEUE_OWNED_STATUSES = new Set<JobStatus>(["queued", "converting"]);
+const LOCKED_STATUSES = new Set<JobStatus>([...TERMINAL_STATUSES, ...QUEUE_OWNED_STATUSES]);
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ jobId: string }> }
@@ -118,6 +126,15 @@ export async function PATCH(
         {
           error:
             `This job is ${job.status} and can't be modified. Re-upload if you want to work on it again.`,
+        },
+        { status: 409 }
+      );
+    }
+    if (QUEUE_OWNED_STATUSES.has(job.status)) {
+      return NextResponse.json(
+        {
+          error:
+            "This job is being converted, so its mapping can't be changed. Cancel the conversion first if you need to edit it.",
         },
         { status: 409 }
       );
@@ -152,15 +169,15 @@ export async function PATCH(
     }
 
     // Conditional update to close the read-then-write race: if the
-    // user cancels between the findFirst above and this update, the
-    // NOT IN guard ensures the PATCH doesn't revive the cancelled
-    // job. Count is 0 when the race loses; we read back the current
-    // status and report it.
+    // user cancels or starts the job between the findFirst above and this
+    // update, the NOT IN guard ensures the PATCH can neither revive a
+    // cancelled job nor pull a queued one back. Count is 0 when the race
+    // loses; we read back the current status and report it.
     const updated = await prisma.job.updateMany({
       where: {
         id: jobId,
         userId: user.id,
-        status: { notIn: Array.from(TERMINAL_STATUSES) },
+        status: { notIn: Array.from(LOCKED_STATUSES) },
       },
       data: sanitizedData,
     });
@@ -170,7 +187,7 @@ export async function PATCH(
       return NextResponse.json(
         {
           error:
-            `This job is ${current?.status ?? "in a terminal state"} and can't be modified.`,
+            `This job is ${current?.status ?? "no longer editable"} and can't be modified.`,
         },
         { status: 409 }
       );

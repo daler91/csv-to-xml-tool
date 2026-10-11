@@ -8,6 +8,7 @@ vi.mock("@/lib/job-queue", () => ({
   sweepStaleClaims: vi.fn(),
 }));
 vi.mock("@/lib/job-runner", () => ({ runJob: vi.fn() }));
+vi.mock("@/lib/retention", () => ({ purgeAllExpiredJobFiles: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     job: { updateMany: vi.fn(), findUnique: vi.fn() },
@@ -18,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
 import {
   handleFailure,
   processClaim,
+  retryDelayMs,
   runLoop,
   startConsumer,
   stopConsumer,
@@ -31,6 +33,7 @@ import {
   sweepStaleClaims,
 } from "@/lib/job-queue";
 import { runJob } from "@/lib/job-runner";
+import { purgeAllExpiredJobFiles } from "@/lib/retention";
 import { prisma } from "@/lib/prisma";
 
 const ack = vi.mocked(ackJob);
@@ -78,7 +81,7 @@ describe("handleFailure", () => {
 
     expect(db.job.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "j1", status: "converting" },
+        where: { id: "j1", status: { in: ["queued", "converting"] } },
         data: expect.objectContaining({ status: "error" }),
       })
     );
@@ -101,25 +104,23 @@ describe("handleFailure", () => {
     expect(requeue).not.toHaveBeenCalled();
   });
 
-  it("transient 5xx with attempts remaining → requeue", async () => {
+  it("transient 5xx with attempts remaining → delayed requeue, without blocking", async () => {
     attempts.mockResolvedValue(1);
 
-    const p = handleFailure("j1", workerError(500));
-    await vi.advanceTimersByTimeAsync(2000); // skip the backoff sleep
-    await p;
+    // No timers advanced: the backoff is a delayed requeue in Redis, not a
+    // sleep that holds the consumer.
+    await handleFailure("j1", workerError(500));
 
-    expect(requeue).toHaveBeenCalledWith("j1");
+    expect(requeue).toHaveBeenCalledWith("j1", 30_000);
     expect(db.job.updateMany).not.toHaveBeenCalled();
   });
 
-  it("network error (no status) with attempts remaining → requeue", async () => {
-    attempts.mockResolvedValue(0);
+  it("network error (no status) with attempts remaining → delayed requeue", async () => {
+    attempts.mockResolvedValue(2);
 
-    const p = handleFailure("j1", new Error("fetch failed"));
-    await vi.advanceTimersByTimeAsync(2000);
-    await p;
+    await handleFailure("j1", new Error("fetch failed"));
 
-    expect(requeue).toHaveBeenCalledWith("j1");
+    expect(requeue).toHaveBeenCalledWith("j1", 120_000);
   });
 
   it("transient but attempts exhausted → dead-letter", async () => {
@@ -133,6 +134,15 @@ describe("handleFailure", () => {
   });
 });
 
+
+describe("retryDelayMs", () => {
+  it("outlasts a worker redeploy: 30 s, then 2 min", () => {
+    // The old fixed 2 s pause spent all three attempts in about 4 s.
+    expect(retryDelayMs(1)).toBe(30_000);
+    expect(retryDelayMs(2)).toBe(120_000);
+    expect(retryDelayMs(1) + retryDelayMs(2)).toBeGreaterThan(2 * 60 * 1000);
+  });
+});
 
 describe("processClaim", () => {
   it("runs the job with its attempt number and acks it", async () => {
@@ -156,7 +166,7 @@ describe("processClaim", () => {
     expect(run).not.toHaveBeenCalled();
     expect(db.job.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "j1", status: "converting" },
+        where: { id: "j1", status: { in: ["queued", "converting"] } },
         data: expect.objectContaining({ status: "error" }),
       })
     );
@@ -238,6 +248,7 @@ describe("startConsumer", () => {
     // like under maxRetriesPerRequest: null. register() awaits startConsumer,
     // so startConsumer must resolve regardless.
     sweep.mockReturnValue(new Promise(() => {}));
+    vi.mocked(purgeAllExpiredJobFiles).mockReturnValue(new Promise(() => {}));
     // Park the loop on a claim that never returns (what BLMOVE against an
     // unreachable Redis looks like) so it does not spin for the rest of the run.
     claim.mockReturnValue(new Promise(() => {}));
@@ -253,6 +264,8 @@ describe("startConsumer", () => {
 
     expect(started).toBe(true);
     expect(sweep).toHaveBeenCalledTimes(1);
+    // File retention runs for every user from here, not only on page reads.
+    expect(vi.mocked(purgeAllExpiredJobFiles)).toHaveBeenCalledTimes(1);
     expect(claim).toHaveBeenCalledTimes(1);
     log.mockRestore();
   });

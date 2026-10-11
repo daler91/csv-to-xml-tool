@@ -168,7 +168,11 @@ for the equivalent case; counseling and training-client should match.
 `EXPORT_COUNTRY_LOOKUP` already used for export countries isn't consulted. Not covered by 2nd-pass
 1.4's list.
 
-### A.9 Unreadable input fails the whole file without an issue — `[OPEN]` — LOW/MEDIUM
+### A.9 Unreadable input fails the whole file without an issue — `[PARTIAL]` — LOW/MEDIUM
+
+> **Worker half fixed:** `/convert` and `/preview` answer a `csv.Error` with a 422 whose detail names
+> the likely cause (an unclosed quote), so the web treats it as permanent and shows it. **Still open:**
+> the CLI's `UnicodeDecodeError` on cp1252 input.
 
 `counseling_converter.py:126` catches only `OSError` and `csv.Error` around the read loop:
 
@@ -182,7 +186,9 @@ for the equivalent case; counseling and training-client should match.
 
 ## Tier B — Job pipeline integrity (web)
 
-### B.1 `PATCH` can pull a queued or converting job back to `mapping` — `[OPEN]` — MEDIUM
+### B.1 `PATCH` can pull a queued or converting job back to `mapping` — `[FIXED]` — MEDIUM
+
+> **Fixed:** PATCH refuses `queued` and `converting` jobs with a 409 telling the user to cancel first, and the guarded `updateMany` excludes them too, so a job started between the read and the write is not pulled back.
 
 `apps/web/src/app/api/jobs/[jobId]/route.ts:81,140-166`. The 2nd-pass fix (4.2) restricted the
 writable status to `mapping`, but the guarded `updateMany` only excludes *terminal* statuses. From
@@ -199,7 +205,9 @@ Trace: start a conversion, press Back to the mapping page, Save.
 Fix: add `queued` and `converting` to the excluded set for PATCH (and return 409), plus a test
 seeded in each state.
 
-### B.2 The retry budget lasts about 4 seconds — `[OPEN]` — MEDIUM
+### B.2 The retry budget lasts about 4 seconds — `[FIXED]` — MEDIUM
+
+> **Fixed:** a transient failure waits in a Redis `delayed` set for 30 s, then 2 min (`JOB_RETRY_BASE_MS` × 4ⁿ), and consumers promote due retries before each claim. `deadLetter` matches `queued` as well as `converting`, so the Postgres-blip variant is failed with an audit row instead of acked silently.
 
 `apps/web/src/lib/job-consumer.ts:150-175`. On a transient failure the consumer sleeps a fixed
 2 s and requeues; `BLMOVE` reclaims immediately. Three attempts finish in ~4 s (measured: 4006 ms,
@@ -212,7 +220,9 @@ Variant: if Postgres blips *before* the queued→converting flip, `deadLetter` (
 `converting`) matches 0 rows; the job is acked while still `queued`, with no audit row, and is
 reaped as a timeout an hour later.
 
-### B.3 Retention only runs for users who come back — `[OPEN]` — MEDIUM (privacy)
+### B.3 Retention only runs for users who come back — `[FIXED]` — MEDIUM (privacy)
+
+> **Fixed:** `purgeAllExpiredJobFiles` runs the same claim-guarded purge for every user, at consumer start and hourly after, up to 200 jobs a run; the per-user read-path sweep stays as well.
 
 `apps/web/src/lib/retention.ts:27,40-52` runs only from `api/jobs/route.ts:16` and
 `dashboard/page.tsx:29`, for the viewing user, 25 jobs per visit. The convert form promises
@@ -220,7 +230,9 @@ files "are automatically deleted after N days" (`convert-form.tsx:224`). A user 
 PII (names, phones, addresses) and never signs in again keeps it on the volume indefinitely. Fix:
 a global sweep from the consumer's background loop (it already runs per process).
 
-### B.4 Cancel-then-delete can orphan converted XML — `[OPEN]` — LOW
+### B.4 Cancel-then-delete can orphan converted XML — `[FIXED]` — LOW
+
+> **Fixed:** when the runner's guarded `complete` write misses, it removes the XML it just wrote — unless a concurrent attempt completed the job, in which case that file is the job's output.
 
 `job-runner.ts:77-80` writes the XML before the guarded status update at `:94`. If the user cancels
 and then deletes (the 409 message tells them to) while the worker misses the cancel, the runner
@@ -238,7 +250,9 @@ process and a 30-minute attempt budget, a backlog over 60 minutes gets jobs reap
 
 ## Tier C — Resource limits & availability
 
-### C.1 Chunked uploads bypass the size cap before buffering — `[OPEN]` — MEDIUM
+### C.1 Chunked uploads bypass the size cap before buffering — `[FIXED]` — MEDIUM
+
+> **Fixed:** `readCappedFormData` reads the body as a stream and stops with a 413 once it passes the cap, whether or not a Content-Length was sent; `/api/upload`, `/api/validate-xml` and `/api/fix-xml` all use it.
 
 `apps/web/src/lib/xml-tool-route.ts:123-132` (`declaredBodyTooLarge`), used by `/api/upload`,
 `/api/validate-xml`, `/api/fix-xml`. The check reads only `Content-Length`; with
@@ -252,7 +266,11 @@ the web process, which also hosts the job consumer. Fix: reject requests without
 `Content-Length` on these routes, or read `req.body` through a counting stream that aborts past the
 cap.
 
-### C.2 A stalled Redis adds ~2 s per progress write to every conversion — `[OPEN]` — MEDIUM
+### C.2 A stalled Redis adds ~2 s per progress write to every conversion — `[FIXED]` — MEDIUM
+
+> **Fixed:** a circuit breaker in `redis_client`: after one failed call, progress writes, progress
+> reads and cancel checks are skipped for 30 s (`BREAKER_SECONDS`), returning their existing
+> fail-soft values instead of each waiting out the socket timeout.
 
 `apps/worker/app/services/redis_client.py:186-187` (`socket_timeout=2`), `routes/convert.py:78,87`.
 Progress and cancel checks are synchronous Redis calls in the conversion thread; "fail-soft" catches
@@ -261,7 +279,9 @@ but never replies, 600 counseling rows took **68.5 s** (vs 0.4 s with fakeredis)
 exceeds the web's 30-minute convert timeout and the job is dead-lettered. Fix: after one timeout,
 disable Redis calls for that conversion (or for N seconds process-wide).
 
-### C.3 `/fix-xml` parses on the event loop — `[OPEN]` — MEDIUM
+### C.3 `/fix-xml` parses on the event loop — `[FIXED]` — MEDIUM
+
+> **Fixed:** the change-detection round-trips run in `asyncio.to_thread`.
 
 `apps/worker/app/routes/fix.py:99` calls `_canonical()` (`:45-58`) twice synchronously inside
 `async def`. Measured 1.6 s at 5.7 MB and 9.7 s at 28.5 MB per call — ~19 s per request, well
@@ -281,7 +301,7 @@ running after the web's 30-minute abort. Update that marker to `[PARTIAL]`.
 
 | # | Where | Finding |
 |---|---|---|
-| D.1 | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
+| D.1 `[FIXED]` | `src/xml_validator.py:173,193`; `apps/worker/app/routes/fix.py:54,118` | *Fixed: both catch `DefusedXmlException`, so the file is reported as unparseable.* defusedxml's `EntitiesForbidden` is a `ValueError`, not `ParseError`, so `/fix-xml` returns **500** for any XML with an entity declaration (`/validate-xsd` correctly returns `is_valid=false`), and the `fix_sba_xml` CLI crashes with a traceback. No XXE leak — external entities are not resolved. |
 | D.2 | `apps/worker/app/routes/convert.py:145`; `services/cancellation.py:46-57` | Cancel returns `{"cancelled": true}` even when Redis swallowed the signal; progress returns 404 "No progress recorded" when Redis is down, indistinguishable from a finished job. |
 | D.3 | `apps/worker/app/main.py:181-191` | On FastAPI 0.141 `include_router` adds `_IncludedRouter` entries without `methods`, so the startup route log and the dev 404 route list show none of the real routes. The catch-all also turns 405s into 404s and logs every unauthenticated probe at ERROR. |
 | D.4 | `apps/worker/app/models/schemas.py:7` | `PreviewRequest.converter_type` is a plain `str`: `"bogus"` → 200 with empty `column_status` (`/convert` returns 400). Use `Literal[...]`. |

@@ -17,6 +17,7 @@ import { VISIBILITY_TIMEOUT_MS } from "@/lib/durability-timeouts";
  *   processing  LIST  — job ids currently claimed (BLMOVE target; crash-visible)
  *   claims      ZSET  — jobId -> claim epoch-ms, so the sweep can find stale claims
  *   attempts    HASH  — jobId -> attempt count, for retry / dead-letter
+ *   delayed     ZSET  — jobId -> epoch-ms it may run again (retry backoff)
  */
 
 const PREFIX = "csvxml:jobs:";
@@ -24,6 +25,7 @@ const PENDING = `${PREFIX}pending`;
 const PROCESSING = `${PREFIX}processing`;
 const CLAIMS = `${PREFIX}claims`;
 const ATTEMPTS = `${PREFIX}attempts`;
+const DELAYED = `${PREFIX}delayed`;
 
 // A job claimed (in PROCESSING) longer than VISIBILITY_TIMEOUT_MS is treated as
 // abandoned and re-queued by the sweep. It MUST exceed CONVERSION_TIMEOUT_MS
@@ -70,8 +72,12 @@ export async function enqueueJob(jobId: string): Promise<void> {
  * Block up to `timeoutSec` for the next job, atomically moving it from PENDING
  * to PROCESSING; record the claim time and bump the attempt count. Returns the
  * job id, or null on timeout.
+ *
+ * Retries whose backoff has elapsed are promoted to PENDING first, so every
+ * claim sees them -- at most `timeoutSec` after they fall due.
  */
 export async function claimJob(timeoutSec: number): Promise<string | null> {
+  await promoteDueJobs();
   const redis = getQueueRedis();
   const jobId = await redis.blmove(
     PENDING,
@@ -100,12 +106,39 @@ export async function ackJob(jobId: string): Promise<void> {
   await redis.hdel(ATTEMPTS, jobId);
 }
 
-/** Put a job back on PENDING for another attempt (keeps the attempt count). */
-export async function requeueJob(jobId: string): Promise<void> {
+/**
+ * Put a job back for another attempt (keeps the attempt count). With a delay
+ * it waits in DELAYED until `promoteDueJobs` moves it to PENDING, so a retry
+ * outlasts the outage that caused it instead of running straight back into it.
+ * DELAYED lives in Redis, so the retry survives this process dying too.
+ */
+export async function requeueJob(jobId: string, delayMs = 0): Promise<void> {
   const redis = getQueueRedis();
   await redis.lrem(PROCESSING, 0, jobId);
   await redis.zrem(CLAIMS, jobId);
-  await redis.lpush(PENDING, jobId);
+  if (delayMs > 0) {
+    await redis.zadd(DELAYED, Date.now() + delayMs, jobId);
+  } else {
+    await redis.lpush(PENDING, jobId);
+  }
+}
+
+/**
+ * Move delayed retries whose time has come onto PENDING. Safe under competing
+ * consumers for the same reason as the sweep: only the instance whose `ZREM`
+ * actually removes the entry pushes it. Returns the ids promoted.
+ */
+export async function promoteDueJobs(now: number = Date.now()): Promise<string[]> {
+  const redis = getQueueRedis();
+  const due = await redis.zrangebyscore(DELAYED, 0, now);
+  const results = await Promise.all(
+    due.map(async (jobId) => {
+      if ((await redis.zrem(DELAYED, jobId)) === 0) return null;
+      await redis.lpush(PENDING, jobId);
+      return jobId;
+    })
+  );
+  return results.filter((jobId): jobId is string => jobId !== null);
 }
 
 /**

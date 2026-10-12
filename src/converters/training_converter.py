@@ -206,17 +206,19 @@ class TrainingConverter(BaseConverter):
 
         # Last, on the finished record: lengths, enumerations, patterns and
         # ranges straight from the XSD (see src/schema_rules.py).
-        if self._schema_guard.enforce(record, str(event_id), (root.tag,)):
+        unfileable = self._schema_guard.enforce(record, str(event_id), (root.tag,))
+        if unfileable:
             # A required value no fix can make valid, such as a Class/Event ID
             # over 20 characters; the guard recorded why. Filing it would make
             # SBA reject the whole file.
-            self._leave_out(root, record)
+            self._leave_out(root, record, f"{event_id}, {unfileable[0]}")
             return False
         return True
 
     def convert(self, input_path: str, output_path: str):
         self.logger.info(f"Starting conversion of training data: {input_path}")
         self.record_sources = []
+        self.left_out_reasons = []
 
         event_groups, event_id_col = self._read_and_validate_csv(input_path)
 
@@ -245,7 +247,8 @@ class TrainingConverter(BaseConverter):
                 self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}", event_id=str(event_id))
                 if self._current_record is not None:
                     # Half built, so never valid; the error above explains it.
-                    self._leave_out(root, self._current_record)
+                    self._leave_out(root, self._current_record,
+                                    f"{event_id}: an error while converting it ({e})")
                 self.validator.record_processed(success=False)
 
             self._maybe_report_progress(i, total_events, every=5)
@@ -258,10 +261,7 @@ class TrainingConverter(BaseConverter):
         if len(root) == 0:
             # Every event was left out: the schema needs at least one
             # ManagementTrainingRecord, so fail like an empty CSV does.
-            self.validator.add_issue(
-                "file", "error", ValidationCategory.MISSING_REQUIRED, "input_file",
-                f"None of the {total_events} event(s) could be converted; see the errors above.")
-            raise EmptyCSVError("No events could be converted.")
+            raise self._nothing_converted(f"{total_events} event(s)")
 
         self._write_valid_xml(root, output_path)
         self.logger.info(f"XML file successfully created at {output_path}")

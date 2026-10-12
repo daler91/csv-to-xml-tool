@@ -218,12 +218,19 @@ class LeftOutRecordTest(_ValidityCase):
         self.assertEqual((summary["total_records"], summary["successful_records"]), (2, 1))
 
     def test_nothing_left_to_file_fails_the_conversion(self):
-        csv_path = self.write_csv([_make_counseling_row(**{"Contact ID": "C" * 21})])
-        with self.assertRaises(EmptyCSVError):
+        csv_path = self.write_csv([_make_counseling_row(**{"Contact ID": "", "Last Name": "Lee"}),
+                                   _make_counseling_row(**{"Contact ID": "C" * 21})])
+        with self.assertRaises(EmptyCSVError) as raised:
             self.converter.convert(csv_path, self.xml_path)
         self.assertFalse(os.path.exists(self.xml_path))
-        self.assertIn("None of the 1 row(s) could be converted",
-                      self.issues(severity="error")[-1]["message"])
+        # The web and the CLI show only this message, so it says why.
+        self.assertEqual(str(raised.exception),
+                         "None of the 2 row(s) could be converted; the first was left out for "
+                         "row 1: no Contact ID.")
+        self.assertEqual(self.issues(severity="error")[-1]["message"], str(raised.exception))
+        self.assertEqual(self.converter.left_out_reasons[1],
+                         f"{'C' * 21}, Contact ID: '{'C' * 21}' is longer than the 20 characters "
+                         "SBA allows")
 
 
 class TrainingLeftOutTest(_ValidityCase):
@@ -244,9 +251,13 @@ class TrainingLeftOutTest(_ValidityCase):
 
     def test_nothing_left_to_file_fails_the_conversion(self):
         csv_path = self.write_csv([_make_training_row(**{"Class/Event ID": "E" * 21})])
-        with self.assertRaises(EmptyCSVError):
+        with self.assertRaises(EmptyCSVError) as raised:
             self.converter.convert(csv_path, self.xml_path)
         self.assertFalse(os.path.exists(self.xml_path))
+        self.assertEqual(str(raised.exception),
+                         "None of the 1 event(s) could be converted; the first was left out for "
+                         f"{'E' * 21}, Class/Event ID: '{'E' * 21}' is longer than the 20 "
+                         "characters SBA allows.")
 
 
 class SafetyNetTest(_ValidityCase):
@@ -277,11 +288,12 @@ class SafetyNetTest(_ValidityCase):
 
     def test_nothing_left_to_file_fails_the_conversion(self):
         csv_path = self.write_csv([_make_training_row(**{"Class/Event ID": "E" * 21})])
-        with self.assertRaises(EmptyCSVError):
+        with self.assertRaises(EmptyCSVError) as raised:
             self.converter.convert(csv_path, self.xml_path)
         self.assertFalse(os.path.exists(self.xml_path))
-        self.assertIn("None of the records passed SBA's schema",
-                      self.issues(severity="error")[-1]["message"])
+        self.assertTrue(str(raised.exception).startswith(
+            "None of the 1 record(s) could be converted; the first was left out for Row 1 "
+            f"(Event {'E' * 21}): 'Class/Event ID' (CSV column 'Class/Event ID') — "))
 
     def test_without_the_schema_the_file_is_written_unchecked(self):
         with mock.patch.dict(os.environ, {"SCHEMAS_DIR": self.dir}):

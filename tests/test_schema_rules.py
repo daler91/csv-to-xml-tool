@@ -188,7 +188,7 @@ class TestSchemaGuard(unittest.TestCase):
         self.assertEqual(issues[0][:3], ("error", "invalid_value", "Race"))
         self.assertNotIn("_schema_invalid", race.find("Code").attrib)
         self.assertEqual(len(self.unfileable), 1)
-        self.assertTrue(self.unfileable[0].startswith("'Martian' is not one of the values SBA accepts"))
+        self.assertTrue(self.unfileable[0].startswith("Race: 'Martian' is not one of the values SBA accepts"))
 
     def test_a_valid_record_is_fileable(self):
         self._sub(self.record, "PartnerClientNumber", "C-1")

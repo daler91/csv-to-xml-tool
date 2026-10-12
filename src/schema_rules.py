@@ -348,9 +348,9 @@ class SchemaGuard:
         varies by row (see BaseConverter.record_sources).
 
         Returns why the record cannot be filed -- a required value no fix can
-        make valid, such as a Contact ID over 20 characters -- or [] when it
-        can. Each reason has been recorded as an error; the caller leaves the
-        record out of the XML.
+        make valid, as "Contact ID: '...' is longer than the 20 characters SBA
+        allows" -- or [] when it can. Each reason has been recorded as an
+        error; the caller leaves the record out of the XML.
         """
         self._columns = columns or {}
         self._reported: set[tuple[str, str]] = set()
@@ -487,8 +487,9 @@ class SchemaGuard:
             return
         for child in invalid:
             reason = child.attrib.pop("_schema_invalid")
-            self._unfileable.append(reason)
+            field = self._field(child, element)
+            self._unfileable.append(f"{field}: {reason}")
             self._report(
-                record_id, "error", ValidationCategory.INVALID_VALUE, self._field(child, element),
+                record_id, "error", ValidationCategory.INVALID_VALUE, field,
                 f"{reason}. This field is required, so the record was left out of the XML; "
                 "correct the value in the CSV and convert again.")

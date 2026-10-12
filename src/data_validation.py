@@ -11,6 +11,7 @@ import os
 import re
 import tempfile
 
+from collections import Counter
 from datetime import datetime
 
 from typing import TYPE_CHECKING
@@ -26,6 +27,10 @@ from .config import (
 
 if TYPE_CHECKING:
     from .validation_report import ValidationTracker
+
+_LAST_NAME = CounselingConfig.COLUMN_MAPPING['last_name']
+_FIRST_NAME = CounselingConfig.COLUMN_MAPPING['first_name']
+_ACTIVITY_ID = CounselingConfig.COLUMN_MAPPING['activity_id']
 
 
 def validate_counseling_date(date_str: str) -> bool:
@@ -65,11 +70,11 @@ def validate_counseling_record(row: dict[str, str], row_index: int, validator: V
     validator.set_current_record_id(record_id)
 
     # Example validations (can be expanded)
-    if not row.get('Last Name'):
-        validator.add_issue(record_id, "warning", VC.MISSING_FIELD, "Last Name", "Missing Last Name.")
+    if not row.get(_LAST_NAME):
+        validator.add_issue(record_id, "warning", VC.MISSING_FIELD, _LAST_NAME, "Missing Last Name.")
     # Stripped rather than is_empty: "Nan" is a first name.
-    if not (row.get('First Name') or '').strip():
-        validator.add_issue(record_id, "warning", VC.MISSING_FIELD, "First Name", "Missing First Name.")
+    if not (row.get(_FIRST_NAME) or '').strip():
+        validator.add_issue(record_id, "warning", VC.MISSING_FIELD, _FIRST_NAME, "Missing First Name.")
 
     counseling_date = row.get('Date', '')
     if counseling_date:
@@ -144,6 +149,48 @@ def _session_needs_no_contact_hours(row: dict[str, str]) -> bool:
     return session in {t.casefold() for t in CounselingConfig.NO_CONTACT_HOUR_SESSION_TYPES} | {'update'}
 
 
+# The per-row warnings _counseling_quality_checks reports, in order:
+# (key, column, label, detail). The label's {column} becomes the user's name
+# for the column.
+_ROW_PROBLEM_CHECKS = (
+    ("missing_last_name", _LAST_NAME, "Rows missing '{column}'",
+     "These clients are recorded without a last name in the federal XML."),
+    ("missing_first_name", _FIRST_NAME, "Rows missing '{column}'",
+     "These clients are recorded without a first name in the federal XML."),
+    # The converter omits DateCounseled (optional in the XSD) when the date
+    # cannot be parsed, so the row converts but loses its session date.
+    ("invalid_date", 'Date', "Rows with an unreadable '{column}'",
+     "The date could not be read, so the counseling session date is "
+     "left out of the federal XML."),
+    ("ambiguous_date", 'Date', "Rows with an ambiguous '{column}'",
+     "These dates read as either MM/DD or DD/MM; they are parsed "
+     "month-first in the federal XML."),
+)
+_BLANK = "blank:"
+
+
+def _row_problems(row: dict[str, str], header_set: set[str], fab_cols: list[str]) -> list[str]:
+    """The _ROW_PROBLEM_CHECKS keys that apply to one row with a Contact ID,
+    then "blank:<column>" for each fabrication-risk column it leaves blank."""
+    problems = []
+    if is_empty(row.get(_LAST_NAME)):
+        problems.append("missing_last_name")
+    # Stripped rather than is_empty, as validate_counseling_record does.
+    if _FIRST_NAME in header_set and not (row.get(_FIRST_NAME) or '').strip():
+        problems.append("missing_first_name")
+    date_raw = row.get('Date', '')
+    if not is_empty(date_raw) and not format_date(date_raw):
+        problems.append("invalid_date")
+    if is_ambiguous_date(date_raw):
+        problems.append("ambiguous_date")
+    for col in fab_cols:
+        # The converter only defaults Duration where hours are required.
+        hours_not_needed = col == 'Duration (hours)' and _session_needs_no_contact_hours(row)
+        if is_empty(row.get(col)) and not hours_not_needed:
+            problems.append(_BLANK + col)
+    return problems
+
+
 def _counseling_quality_checks(headers: list[str], csv_rows: list[dict[str, str]],
                                fabrication_defaults: dict[str, str],
                                source_columns: dict[str, str] | None = None) -> list[dict]:
@@ -155,73 +202,35 @@ def _counseling_quality_checks(headers: list[str], csv_rows: list[dict[str, str]
     them in their file.
     """
     def src(col: str) -> str:
-        return source_columns.get(col, col) if source_columns else col
+        return (source_columns or {}).get(col, col)
 
     contact_col = CounselingConfig.REQUIRED_FIELDS[0]
     header_set = set(headers)
     present_fab_cols = [c for c in fabrication_defaults if c in header_set]
-    fab_blanks = dict.fromkeys(present_fab_cols, 0)
-    missing_contact = missing_last = missing_first = invalid_dates = ambiguous_dates = 0
-
+    missing_contact = 0
+    counts: Counter[str] = Counter()
     for row in csv_rows:
         if is_empty(row.get(contact_col)):
             # Mirrors validate_counseling_record: the converter skips the whole
             # row, so nothing else in it ships in the XML.
             missing_contact += 1
-            continue
-        if is_empty(row.get('Last Name')):
-            missing_last += 1
-        if 'First Name' in header_set and not (row.get('First Name') or '').strip():
-            missing_first += 1
-        date_raw = row.get('Date', '')
-        if not is_empty(date_raw) and not format_date(date_raw):
-            invalid_dates += 1
-        if is_ambiguous_date(date_raw):
-            ambiguous_dates += 1
-        for col in present_fab_cols:
-            if is_empty(row.get(col)):
-                if col == 'Duration (hours)' and _session_needs_no_contact_hours(row):
-                    continue  # the converter only defaults it where hours are required
-                fab_blanks[col] += 1
+        else:
+            counts.update(_row_problems(row, header_set, present_fab_cols))
 
     checks = []
     if missing_contact:
         checks.append(_quality_check(
             "missing_contact_id", f"Rows missing '{src(contact_col)}'",
             missing_contact, "error", _SKIPPED_ROW_DETAIL, src(contact_col)))
-    if missing_last:
-        checks.append(_quality_check(
-            "missing_last_name", f"Rows missing '{src('Last Name')}'",
-            missing_last, "warning",
-            "These clients are recorded without a last name in the federal XML.",
-            src('Last Name')))
-    if missing_first:
-        checks.append(_quality_check(
-            "missing_first_name", f"Rows missing '{src('First Name')}'",
-            missing_first, "warning",
-            "These clients are recorded without a first name in the federal XML.",
-            src('First Name')))
-    if invalid_dates:
-        # The converter omits DateCounseled (optional in the XSD) when the date
-        # cannot be parsed, so the row converts but loses its session date.
-        checks.append(_quality_check(
-            "invalid_date", f"Rows with an unreadable '{src('Date')}'",
-            invalid_dates, "warning",
-            "The date could not be read, so the counseling session date is "
-            "left out of the federal XML.",
-            src('Date')))
-    if ambiguous_dates:
-        checks.append(_quality_check(
-            "ambiguous_date", f"Rows with an ambiguous '{src('Date')}'",
-            ambiguous_dates, "warning",
-            "These dates read as either MM/DD or DD/MM; they are parsed "
-            "month-first in the federal XML.",
-            src('Date')))
+    for key, column, label, detail in _ROW_PROBLEM_CHECKS:
+        if counts[key]:
+            checks.append(_quality_check(
+                key, label.format(column=src(column)), counts[key], "warning", detail, src(column)))
     for col in present_fab_cols:
-        if fab_blanks[col]:
+        if counts[_BLANK + col]:
             checks.append(_quality_check(
                 f"blank_{_column_slug(src(col))}", f"Blank '{src(col)}' cells",
-                fab_blanks[col], "warning",
+                counts[_BLANK + col], "warning",
                 f"Blank cells will be recorded as '{fabrication_defaults[col]}' "
                 f"in the federal XML.",
                 src(col)))
@@ -232,18 +241,18 @@ def analyze_counseling_quality(headers: list[str], csv_rows: list[dict[str, str]
     """Data-quality checks for a counseling (Form 641) CSV."""
     checks = _counseling_quality_checks(headers, csv_rows, COUNSELING_FABRICATION_DEFAULTS)
     # Mirrors CounselingConverter._warn_blank_session_number. (A file with no
-    # 'Activity ID' column at all gets one warning at conversion instead.)
-    if 'Activity ID' in headers:
+    # Activity ID column at all gets one warning at conversion instead.)
+    if _ACTIVITY_ID in headers:
         contact_col = CounselingConfig.REQUIRED_FIELDS[0]
         missing_activity = sum(
             1 for row in csv_rows
-            if not is_empty(row.get(contact_col)) and not (row.get('Activity ID') or '').strip())
+            if not is_empty(row.get(contact_col)) and not (row.get(_ACTIVITY_ID) or '').strip())
         if missing_activity:
             checks.append(_quality_check(
-                "missing_activity_id", "Rows missing 'Activity ID'",
+                "missing_activity_id", f"Rows missing '{_ACTIVITY_ID}'",
                 missing_activity, "warning",
                 "These sessions are filed with an empty session number (PartnerSessionNumber).",
-                'Activity ID'))
+                _ACTIVITY_ID))
     return checks
 
 

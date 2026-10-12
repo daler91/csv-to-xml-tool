@@ -22,6 +22,8 @@ class TrainingClientConverter(CounselingConverter):
     for fields not collected on the shorter training client form.
     """
     SCHEMA_TYPE = "training-client"
+    SESSION_NUMBER_FIELD = 'Member ID'
+    SESSION_NUMBER_BLANK = "No Member ID or Class/Event ID"
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
@@ -104,13 +106,8 @@ class TrainingClientConverter(CounselingConverter):
 
     def _check_session_column(self, headers):
         """The session number is the Member ID, else the Class/Event ID, so
-        there is no one column to miss; a row with neither is reported below."""
-
-    def _warn_blank_session_number(self, record_id):
-        self.validator.add_issue(
-            record_id, "warning", ValidationCategory.MISSING_FIELD, "Member ID",
-            "No Member ID or Class/Event ID, so this attendee's session is filed with an "
-            "empty session number (PartnerSessionNumber).")
+        there is no one column to miss; a row with neither is reported on its
+        own (CounselingConverter._warn_blank_session_number)."""
 
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = super()._build_counselor_record_section(parent, row, record_id)

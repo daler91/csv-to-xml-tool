@@ -349,6 +349,18 @@ def test_convert_ignores_stale_event_id_mapping(monkeypatch):
 # --- Feature 2.4: structured XSD error details on /convert ---
 
 
+def _emit_raw_race_unguarded(monkeypatch):
+    """Make the converter write an invalid Race/Code, as it once did: the race
+    mapping passes labels through and the schema guard is off. The converters
+    no longer produce invalid XML, but /convert must still trace an XSD error
+    back to its row and column if one ever gets through."""
+    from src import data_cleaning
+    from src.schema_rules import SchemaGuard
+
+    monkeypatch.setattr(data_cleaning, "classify_race_label", lambda label: (label.strip(), None))
+    monkeypatch.setattr(SchemaGuard, "enforce", lambda *args, **kwargs: [])
+
+
 def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     """When post-convert XSD validation fails, /convert adds xsd_error_details
     tracing each raw error back to the record (row) and CSV column while the
@@ -356,6 +368,7 @@ def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     from app.services import conversion_service
 
     monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    _emit_raw_race_unguarded(monkeypatch)
     req = ConvertRequest(
         job_id="jobBadRace", csv_content=COUNSELING_CSV, converter_type="counseling"
     )
@@ -366,9 +379,8 @@ def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     check.assertGreaterEqual(len(result["xsd_errors"]), 1)
     details = result["xsd_error_details"]
     check.assertEqual(len(details), len(result["xsd_errors"]))
-    # Race is required, so the converter keeps the unrecognised value (and
-    # reports it) rather than dropping it; the XSD error traces back to the
-    # second CSV row / Contact C-002 and the 'Race' source column.
+    # The XSD error traces back to the second CSV row / Contact C-002 and
+    # the 'Race' source column.
     for detail in details:
         check.assertEqual(
             (detail["element"], detail["row_number"], detail["record_id"], detail["csv_column"]),

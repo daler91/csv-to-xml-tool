@@ -306,11 +306,12 @@ def test_counseling_data_quality_reports_values_the_converter_would_change():
     assert (middle["count"], middle["severity"], middle["column"]) == (2, "warning", "Middle Name")
     assert checks["invalid_value_email"]["count"] == 1
     assert checks["invalid_value_mailing_state_province"]["count"] == 1
-    # Race is required: an unrecognised one is an error that fails the file.
+    # An answer outside SBA's race list is filed as self-described, so it is
+    # a warning about the value -- not an error that fails the file.
     race = checks["invalid_value_race"]
-    assert (race["count"], race["severity"]) == (1, "error")
-    assert "fail SBA validation" in race["detail"]
+    assert (race["count"], race["severity"]) == (1, "warning")
     assert "'Martian'" in race["detail"]
+    assert "Prefer to Self-Describe" in race["detail"]
 
 
 def test_data_quality_value_checks_name_only_the_users_columns():

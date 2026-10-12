@@ -59,6 +59,7 @@ _COUNSELING_ELEMENT_FIELDS = {
     "OnFile": ("Client Signature(On File)", "Client Signature(On File)"),
     "Race": ("Race", "Race"),
     "Race/Code": ("Race", "Race"),
+    "SelfDescribedRace": ("Race (self-described)", "Race"),
     "Ethnicity": ("Ethnicity", "Ethnicity:"),
     "Sex": ("Gender", "Gender"),
     "Disability": ("Disability", "Disability"),

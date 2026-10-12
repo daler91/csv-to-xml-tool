@@ -346,13 +346,33 @@ class CounselingConverter(BaseConverter):
 
     def _build_race(self, client_intake, row, record_id):
         race_element = create_element(client_intake, 'Race')
-        race_codes = data_cleaning.split_multi_value(row.get('Race', ''))
-        if race_codes:
-            for code in race_codes:
-                create_element(race_element, 'Code', data_cleaning.map_race_to_xsd(code))
-        else:
-            create_element(race_element, 'Code', 'Prefer not to say')
+        codes, descriptions, unlisted = [], [], []
+        for label in data_cleaning.split_multi_value(row.get('Race', '')):
+            code, description = data_cleaning.classify_race_label(label)
+            if not code:
+                continue
+            if description:
+                descriptions.append(description)
+                if not data_cleaning.is_self_describe_answer(label):
+                    unlisted.append(description)
+            if code not in codes:
+                codes.append(code)
+        if not codes:
+            codes = [data_cleaning.RACE_PREFER_NOT_TO_SAY]
             self.validator.add_issue(record_id, "warning", ValidationCategory.MISSING_FIELD, "Race", "Race missing, defaulted to 'Prefer not to say'.")
+        for code in codes:
+            create_element(race_element, 'Code', code)
+        if descriptions:
+            # After every Code, as the schema orders them; at most 80
+            # characters, which the schema guard enforces (and reports).
+            create_element(race_element, 'SelfDescribedRace', '; '.join(descriptions))
+        if unlisted:
+            listed = ', '.join(f"'{d}'" for d in unlisted)
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.INVALID_VALUE, "Race",
+                f"{listed} {'is' if len(unlisted) == 1 else 'are'} not among SBA's race "
+                f"categories, so the answer was filed as '{data_cleaning.RACE_SELF_DESCRIBE}' "
+                "with the text as written.")
 
     def _build_demographics(self, client_intake, row):
         # Each of these is an XSD enumeration, so the raw CSV label has to be

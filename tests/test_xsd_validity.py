@@ -24,7 +24,6 @@ from tests.test_integration_xsd import (
     TRAINING_XSD,
     _make_counseling_row,
     _make_training_client_row,
-    _make_training_row,
 )
 
 _XSD = {

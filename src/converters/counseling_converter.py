@@ -635,7 +635,7 @@ class CounselingConverter(BaseConverter):
             # The detail is the text of an "Other" answer. Written on its own
             # it left CounselingSeeking with no Code, which the schema requires.
             cs_codes = ['Other']
-        if cs_codes or cs_other:
+        if cs_codes:
             cs_element = create_element(client_intake, 'CounselingSeeking')
             cs_codes = self._cap_single_code(cs_codes, record_id, 'CounselingSeeking',
                                              'Nature of the Counseling Seeking?')
@@ -853,12 +853,10 @@ class CounselingConverter(BaseConverter):
         # than producing a Language with no Code.
         lang_codes = (data_cleaning.split_multi_value(row.get('Language(s) Used') or '')
                       or [self.general_config.DEFAULT_LANGUAGE])
-        lang_other = row.get('Language(s) Used (Other)', '').strip()
-        if lang_codes or lang_other:
-            lang_element = create_element(counselor_record, 'Language')
-            for code in lang_codes:
-                create_element(lang_element, 'Code', code)
-            emit_optional(lang_element, 'Other', lang_other)
+        lang_element = create_element(counselor_record, 'Language')
+        for code in lang_codes:
+            create_element(lang_element, 'Code', code)
+        emit_optional(lang_element, 'Other', row.get('Language(s) Used (Other)', '').strip())
 
         date_raw = row.get('Date', '')
         date_counseled = data_cleaning.format_date(date_raw)

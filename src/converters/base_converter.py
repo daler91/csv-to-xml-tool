@@ -10,13 +10,19 @@ logic for reading, processing, and writing data, but must conform to the
 from __future__ import annotations
 
 import abc
+import contextlib
 import csv
 import io
 import logging
+import os
 from typing import TYPE_CHECKING, Callable, Optional
 
 from .. import data_cleaning
 from ..config import ValidationCategory
+from ..schema_rules import schema_path
+from ..xml_utils import write_document
+from ..xml_validator import validate_against_xsd
+from ..xsd_error_mapping import errors_by_record
 
 if TYPE_CHECKING:
     from ..validation_report import ValidationTracker
@@ -44,6 +50,10 @@ class BaseConverter(abc.ABC):
     validation tracker.
     """
 
+    # The schema the output is filed against: "counseling", "training" or
+    # "training-client" (see schema_rules.XSD_FILES).
+    SCHEMA_TYPE = ""
+
     def __init__(self, logger: logging.Logger, validator: ValidationTracker) -> None:
         """
         Initializes the converter with a logger and a validator.
@@ -61,11 +71,14 @@ class BaseConverter(abc.ABC):
         # unchanged. See docs/reviews/UX_REVIEW.md §3.6.
         self.progress_callback: Optional[ProgressCallback] = None
         # Filled by convert(): for each record element, in document order,
-        # {"row": the 1-based CSV data row it came from, "columns": {element
-        # ("Parent/Tag" or "Tag"): the CSV column that supplied it, where that
-        # differs by row}}. Passed to xsd_error_mapping.build_error_details so
-        # XSD errors cite the user's row, not the record's position in the XML.
+        # {"row": the 1-based CSV data row it came from, "event": its event or
+        # activity id, "columns": {element ("Parent/Tag" or "Tag"): the CSV
+        # column that supplied it, where that differs by row}}. Passed to
+        # xsd_error_mapping.build_error_details so XSD errors cite the user's
+        # row, not the record's position in the XML.
         self.record_sources: list[dict] = []
+        # Why each record left out of the file was (see _leave_out), in order.
+        self.left_out_reasons: list[str] = []
 
     def _read_csv(self, input_path: str) -> tuple[list[str], list[dict]]:
         """Read the input CSV as (normalized headers, rows).
@@ -84,8 +97,7 @@ class BaseConverter(abc.ABC):
             rows = list(reader)
         except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
-            self.validator.add_issue("file", "error", ValidationCategory.FILE_ACCESS, "input_file",
-                                     f"Failed to read CSV file: {e}")
+            self._file_error(ValidationCategory.FILE_ACCESS, f"Failed to read CSV file: {e}")
             raise
         self.logger.info(f"Successfully read CSV file with {len(rows)} records")
         if encoding == "windows-1252":
@@ -97,6 +109,86 @@ class BaseConverter(abc.ABC):
             self.validator.add_issue("file", "warning", ValidationCategory.INVALID_FORMAT, name,
                                      data_cleaning.duplicate_header_message(name, count))
         return reader.fieldnames, rows
+
+    def _file_error(self, category: str, message: str) -> None:
+        """Record an error about the input file as a whole."""
+        self.validator.add_issue("file", "error", category, "input_file", message)
+
+    def _leave_out(self, root, record, why: str) -> None:
+        """Remove a record element from the output, with its record_sources
+        entry. Used for a record that cannot be filed -- one the schema guard
+        found an unfixable required value in, one half built when an error
+        stopped it, one the XSD still rejects -- so the rest of the file stays
+        valid. `why` ("C-1, LocationCode: 'abc' is not a number") goes in
+        left_out_reasons; the issue itself is the caller's to record."""
+        records = [child for child in root if child.tag == record.tag]
+        # The record being built is the last one; avoid the scan's cost for it.
+        index = len(records) - 1 if records and records[-1] is record else records.index(record)
+        root.remove(record)
+        if index < len(self.record_sources):
+            del self.record_sources[index]
+        self.left_out_reasons.append(why)
+
+    def _nothing_converted(self, what: str) -> EmptyCSVError:
+        """Record that none of `what` ("3 row(s)") could be filed, and return
+        the EmptyCSVError for the caller to raise: the schema needs at least one
+        record. The web and the CLI show the error's message without the
+        report, so it says why the first record was left out."""
+        message = f"None of the {what} could be converted"
+        if self.left_out_reasons:
+            message += f"; the first was left out for {self.left_out_reasons[0].rstrip('.')}"
+        self._file_error(ValidationCategory.MISSING_REQUIRED, message + ".")
+        return EmptyCSVError(message + ".")
+
+    def _write_valid_xml(self, root, output_path: str) -> int:
+        """Write the document, then check it against SBA's XSD: the safety net
+        under SchemaGuard, for anything it misses. A record that still fails is
+        left out, with an error per XSD message naming its row, and the file is
+        written again, so the file produced is one SBA accepts. Returns how many
+        records were left out; raises EmptyCSVError when none is left. Without
+        the XSD (a broken install) the file is only written; the worker reports
+        a missing schema itself.
+        """
+        write_document(root, output_path)
+        xsd = schema_path(self.SCHEMA_TYPE)
+        if not os.path.exists(xsd):
+            return 0
+        result = validate_against_xsd(output_path, xsd)
+        if result["is_valid"]:
+            return 0
+        failing = errors_by_record(output_path, result["errors"], self.SCHEMA_TYPE,
+                                   self.record_sources)
+        # Anything outside every record can't be fixed by leaving records out;
+        # the worker's own validation reports it.
+        if failing:
+            total = len(root)
+            self._leave_out_failing(root, failing)
+            if len(root) == 0:
+                with contextlib.suppress(OSError):
+                    os.remove(output_path)
+                raise self._nothing_converted(f"{total} record(s)")
+            write_document(root, output_path)
+        return len(failing)
+
+    def _leave_out_failing(self, root, failing: dict[int, list[dict]]) -> None:
+        """Leave out the records errors_by_record found failing, recording an
+        error per XSD message against the row each came from."""
+        self.logger.error(f"Left out {len(failing)} record(s) that failed XSD validation")
+        # The root holds only records, in the order errors_by_record counts;
+        # both lists are copied before _leave_out shortens them.
+        records, sources = list(root), list(self.record_sources)
+        for position in sorted(failing):
+            event = sources[position - 1].get("event", "") if position <= len(sources) else ""
+            for detail in failing[position]:
+                self.validator.add_issue(
+                    detail["record_id"] or f"Row_{detail['row_number']}", "error",
+                    ValidationCategory.INVALID_VALUE,
+                    detail["csv_column"] or detail["field_label"] or "record",
+                    f"{detail['friendly_message']} SBA's schema rejects this, so the record was "
+                    "left out of the XML; correct the value in the CSV and convert again.",
+                    event_id=event)
+            self._leave_out(root, records[position - 1], failing[position][0]["friendly_message"])
+            self.validator.record_left_out()
 
     def _report_progress(self, processed: int, total: int) -> None:
         """Report progress to the callback if one is set. No-op otherwise."""

@@ -18,6 +18,13 @@ def create_element(parent: ET.Element, element_name: str, element_text: str = No
     return element
 
 
+def write_document(root: ET.Element, path: str) -> None:
+    """Write `root` to `path` as indented UTF-8 with an XML declaration."""
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+
+
 def emit_optional(parent: ET.Element, element_name: str, element_text) -> ET.Element | None:
     """Create a sub-element only when there is a value to put in it.
 

@@ -19,8 +19,10 @@ applied to each finished record element by :class:`SchemaGuard`:
   -- except identifiers, which are never altered.
 * A value that still violates a facet is dropped when the schema lets the
   element (or its immediate optional parent) be omitted, with a warning naming
-  what was lost. Otherwise it is kept and recorded as an error, so the problem
-  is reported against its row before XSD validation rather than only after.
+  what was lost. Otherwise the record cannot be filed: it is recorded as an
+  error, and ``enforce`` returns the reasons so the converter leaves the record
+  out of the XML rather than writing a file SBA would reject.
+* Repeats beyond the schema's ``maxOccurs`` are dropped, with a warning.
 """
 
 from __future__ import annotations
@@ -101,6 +103,7 @@ class ElementRule:
     min_inclusive: Decimal | None = None
     max_inclusive: Decimal | None = None
     has_children: bool = False       # complex type: its own text is not checked
+    max_occurs: int | None = 1       # None: unbounded
 
 
 def _local(tag: str) -> str:
@@ -144,17 +147,24 @@ def _merge_simple_type(simple_type, simple_types: dict, facets: dict) -> None:
             _merge_restriction(child, simple_types, facets)
 
 
-def _content_elements(node):
-    """Yield the xs:element children of a complexType's content model,
-    descending through sequence/choice/all."""
+def _content_elements(node, repeated: bool = False):
+    """Yield (xs:element, repeated) for a complexType's content model,
+    descending through sequence/choice/all. `repeated` is True inside a
+    compositor that may itself occur more than once, where the element's own
+    maxOccurs no longer bounds how often it appears."""
     for child in node:
         if not isinstance(child.tag, str):
             continue
         name = _local(child.tag)
         if name == "element":
-            yield child
+            yield child, repeated
         elif name in ("sequence", "choice", "all", "complexType"):
-            yield from _content_elements(child)
+            yield from _content_elements(child, repeated or child.get("maxOccurs", "1") != "1")
+
+
+def _max_occurs(element, repeated: bool) -> int | None:
+    value = element.get("maxOccurs", "1")
+    return None if repeated or value == "unbounded" else int(value)
 
 
 @functools.lru_cache(maxsize=None)
@@ -172,7 +182,8 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
     complex_types = {ct.get("name"): ct for ct in schema.findall(f"{_XS}complexType")}
     rules: dict[tuple[str, ...], ElementRule] = {}
 
-    def visit(element, parent_path: tuple[str, ...], stack: frozenset) -> None:
+    def visit(element, parent_path: tuple[str, ...], stack: frozenset,
+              repeated: bool = False) -> None:
         path = parent_path + (element.get("name"),)
         facets: dict = {}
         type_ref = element.get("type", "")
@@ -192,14 +203,15 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
         rules[path] = ElementRule(
             optional=element.get("minOccurs") == "0",
             has_children=complex_node is not None,
+            max_occurs=_max_occurs(element, repeated),
             **facets,
         )
         # `stack` holds the named complex types being expanded, so a type that
         # (indirectly) contains itself can't recurse forever. Inline types have
         # no name and can't recur, so they are never added to it.
         if complex_node is not None and type_ref not in stack:
-            for child in _content_elements(complex_node):
-                visit(child, path, stack | {type_ref} if type_ref else stack)
+            for child, child_repeated in _content_elements(complex_node):
+                visit(child, path, stack | {type_ref} if type_ref else stack, child_repeated)
 
     for top in schema.findall(f"{_XS}element"):
         visit(top, (), frozenset())
@@ -329,15 +341,23 @@ class SchemaGuard:
             self.rules = {}
 
     def enforce(self, record: Element, record_id: str, parent_path: tuple[str, ...],
-                columns: dict[str, str] | None = None) -> None:
+                columns: dict[str, str] | None = None) -> list[str]:
         """Check every element of `record` in place. `parent_path` is the tag
         path of the record's parent from the document root; `columns` maps
         "Parent/Tag" (or "Tag") to the CSV column that supplied it, where that
-        varies by row (see BaseConverter.record_sources)."""
+        varies by row (see BaseConverter.record_sources).
+
+        Returns why the record cannot be filed -- a required value no fix can
+        make valid, as "Contact ID: '...' is longer than the 20 characters SBA
+        allows" -- or [] when it can. Each reason has been recorded as an
+        error; the caller leaves the record out of the XML.
+        """
         self._columns = columns or {}
         self._reported: set[tuple[str, str]] = set()
         self._pending_invalid = 0
+        self._unfileable: list[str] = []
         self._visit(record, parent_path + (record.tag,), None, str(record_id))
+        return self._unfileable
 
     def _report(self, record_id: str, severity: str, category: str, field: str, message: str) -> None:
         # Name, email and address are written to both Part 1 and Part 3 from
@@ -360,8 +380,34 @@ class SchemaGuard:
             self._check_text(element, path, parent, rule, record_id)
         for child in list(element):
             self._visit(child, path + (child.tag,), element, record_id)
+        self._limit_repeats(element, path, record_id)
         if self._pending_invalid:
             self._prune_childless_required(element, path, parent, record_id)
+
+    def _limit_repeats(self, element, path, record_id) -> None:
+        """Drop children beyond the schema's maxOccurs (Media allows 13 Codes,
+        LegalEntity 6, ...), keeping the first ones. Runs after the children
+        were checked, so values already dropped as invalid don't count."""
+        seen: dict[str, list] = {}
+        for child in element:
+            seen.setdefault(child.tag, []).append(child)
+        for tag, children in seen.items():
+            rule = self.rules.get(path + (tag,))
+            if rule is None or rule.max_occurs is None or len(children) <= rule.max_occurs:
+                continue
+            if any("_schema_invalid" in child.attrib for child in children):
+                # Then none of them is valid (see _has_valid_sibling), and the
+                # pass below drops the section or leaves the record out.
+                continue
+            extra = children[rule.max_occurs:]
+            for child in extra:
+                element.remove(child)
+            limit = rule.max_occurs
+            self._report(
+                record_id, "warning", ValidationCategory.DOWNGRADED_VALUE, self._field(extra[0], element),
+                f"SBA allows at most {limit} {tag} value{'s' if limit != 1 else ''} in {element.tag}; "
+                f"kept the first {limit} and left out "
+                + ", ".join(f"'{_show(child.text or '')}'" for child in extra) + ".")
 
     def _check_text(self, element, path, parent, rule, record_id) -> None:
         def field() -> str:
@@ -441,7 +487,9 @@ class SchemaGuard:
             return
         for child in invalid:
             reason = child.attrib.pop("_schema_invalid")
+            field = self._field(child, element)
+            self._unfileable.append(f"{field}: {reason}")
             self._report(
-                record_id, "error", ValidationCategory.INVALID_VALUE, self._field(child, element),
-                f"{reason}. This field is required, so the file will fail SBA validation "
-                "until the value in the CSV is corrected.")
+                record_id, "error", ValidationCategory.INVALID_VALUE, field,
+                f"{reason}. This field is required, so the record was left out of the XML; "
+                "correct the value in the CSV and convert again.")

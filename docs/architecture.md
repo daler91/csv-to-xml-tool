@@ -91,12 +91,18 @@ Inside `src/`, a conversion is always the same seven steps:
    element's length, enumeration, pattern and range facets from the bundled
    XSD and applies them to the finished record: control characters are
    replaced, enumeration values are matched case-insensitively, over-length
-   text is truncated (never identifiers), and a value that still fails is
-   omitted where the schema allows or reported as an error where it doesn't —
-   each with an issue against the row.
+   text is truncated (never identifiers), repeats beyond `maxOccurs` are
+   dropped, and a value that still fails is omitted where the schema allows.
+   Where it doesn't (a required value no fix can make valid, such as an ID
+   over 20 characters), the record is left out of the XML so the rest of the
+   file can still be filed. Each case is an issue against the row.
 7. **Validate the document** — `src/xml_validator.py` runs lxml against the
    bundled XSD with `resolve_entities=False`, and `src/xsd_error_mapping.py`
-   translates each schema error back to a CSV row and column name.
+   translates each schema error back to a CSV row and column name. The
+   converters run this check themselves as a safety net under step 6
+   (`BaseConverter._write_valid_xml`): a record that still fails is left out
+   with an error naming its row, so the file produced is one SBA accepts. The
+   worker validates the file again for the results page.
 
 Step 7 is the part worth protecting. An unmapped lxml error reads
 `Line 20: Element 'ZipCode': '' is not a valid value`. Mapped, it reads

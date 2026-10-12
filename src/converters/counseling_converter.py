@@ -34,12 +34,17 @@ class CounselingConverter(BaseConverter):
     # Which schema's facets SchemaGuard enforces, and whose CSV column names
     # its issues use (training-client overrides this).
     SCHEMA_TYPE = "counseling"
+    # The column PartnerSessionNumber is read from, which a blank session
+    # number is reported against, and how that warning starts.
+    SESSION_NUMBER_FIELD = 'Activity ID'
+    SESSION_NUMBER_BLANK = "Blank Activity ID"
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
         self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
+        self._has_activity_column = True  # set per file by _check_session_column
         # The record being built's column-per-element overrides (see _mapped).
         self._record_columns = {}
         # Fabrication-risk fields (plan 1.3): when one of these is blank/missing
@@ -172,7 +177,28 @@ class CounselingConverter(BaseConverter):
     def _partner_session_number(self, row):
         """Hook for subclasses to choose the PartnerSessionNumber value.
         Defaults to the Activity ID."""
-        return row.get('Activity ID', '')
+        return (row.get(CounselingConverter.SESSION_NUMBER_FIELD) or '').strip()
+
+    def _check_session_column(self, headers):
+        """Without an Activity ID column every session is filed with an empty
+        PartnerSessionNumber. That validates, but leaves SBA nothing to tell
+        the sessions apart by, so it is said once for the file rather than on
+        every row (see _warn_blank_session_number)."""
+        column = self.SESSION_NUMBER_FIELD
+        self._has_activity_column = column in headers
+        if not self._has_activity_column:
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.MISSING_FIELD, column,
+                f"The CSV has no '{column}' column, so every session is filed with an empty "
+                "session number (PartnerSessionNumber). Add the column if your export has it.",
+                event_id="")
+
+    def _warn_blank_session_number(self, record_id):
+        if self._has_activity_column:
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.MISSING_FIELD, self.SESSION_NUMBER_FIELD,
+                f"{self.SESSION_NUMBER_BLANK}, so this session is filed with an empty session "
+                "number (PartnerSessionNumber).")
 
     def _first_time(self, record_id, field):
         """True the first time (record_id, field) is seen in the current row."""
@@ -222,12 +248,14 @@ class CounselingConverter(BaseConverter):
             raise EmptyCSVError("CSV has no data rows to convert.")
 
         self._warn_constant_defaults(set(rows[0]))
+        self._check_session_column(set(rows[0]))
 
         root = ET.Element('CounselingInformation')
         # One entry per CounselingRecord, in document order: the CSV row it was
         # built from and the columns that fed it, so an XSD error can name the
         # row and column the user has to fix (xsd_error_mapping).
         self.record_sources = []
+        self.left_out_reasons = []
         processed_records = 0
         skipped_records = 0
         total_rows = len(rows)
@@ -237,57 +265,10 @@ class CounselingConverter(BaseConverter):
         self._report_progress(0, total_rows)
 
         for row_index, row in enumerate(rows, 1):
-            row = self._preprocess_row(row)
-            contact_id = row.get('Contact ID')
-            if contact_id is not None:
-                # A whitespace-only id was written to the filing as "   ";
-                # trimmed, it fails as a missing id like a blank cell does.
-                row['Contact ID'] = contact_id = str(contact_id).strip()
-            record_id = contact_id if contact_id is not None else f"Row_{row_index}"
-            # Set before validate_counseling_record so pre-validation issues
-            # (including missing-Contact-ID "Row_N" ones) carry the event id.
-            self.validator.set_current_event_id(row.get('Activity ID', ''))
-            # Reset per row so duplicate Contact IDs still warn independently.
-            self._fabrication_warned.clear()
-            self._warned_once.clear()
-
-            if not data_validation.validate_counseling_record(row, row_index, self.validator):
-                self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
-                skipped_records += 1
-                self._maybe_report_progress(row_index, total_rows)
-                continue
-
-            try:
-                counseling_record = create_element(root, 'CounselingRecord')
-                self._record_columns = {}
-                self.record_sources.append({"row": row_index, "columns": self._record_columns})
-                create_element(counseling_record, 'PartnerClientNumber', record_id)
-
-                location = create_element(counseling_record, 'Location')
-                # `or`, not the .get default: a LocationCode column with a blank
-                # cell must fall back too, or it emits <LocationCode/>, which the
-                # xs:integer type rejects.
-                create_element(location, 'LocationCode',
-                               (row.get('LocationCode') or '').strip() or self.general_config.DEFAULT_LOCATION_CODE)
-
-                self._build_client_request_section(counseling_record, row, record_id)
-                self._build_client_intake_section(counseling_record, row, record_id)
-                self._build_counselor_record_section(counseling_record, row, record_id)
-                # Last, on the finished record: lengths, enumerations, patterns
-                # and ranges straight from the XSD (see src/schema_rules.py).
-                conditional = self._conditionally_required(counseling_record)
-                self._schema_guard.enforce(counseling_record, record_id, (root.tag,),
-                                           self._record_columns)
-                self._report_conditional_drops(counseling_record, conditional, record_id)
-
+            if self._convert_row(root, row, row_index):
                 processed_records += 1
-                self.validator.record_processed(success=True)
-
-            except (ValueError, KeyError, AttributeError) as e:
-                self.logger.error(f"Error processing record {record_id}: {str(e)}", exc_info=True)
-                self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing record: {str(e)}")
-                self.validator.record_processed(success=False)
-
+            else:
+                skipped_records += 1
             self._maybe_report_progress(row_index, total_rows)
 
         # Final tick so the bar ends at 100% regardless of batch size.
@@ -301,22 +282,90 @@ class CounselingConverter(BaseConverter):
             # XSD (it needs at least one CounselingRecord), so fail the way the
             # empty-CSV case above and the training converter already do
             # rather than writing a file SBA would reject.
-            self.validator.add_issue(
-                "file", "error", ValidationCategory.MISSING_REQUIRED, "input_file",
-                f"None of the {total_rows} row(s) could be converted; see the errors above.")
-            raise EmptyCSVError("No rows could be converted.")
+            raise self._nothing_converted(f"{total_rows} row(s)")
 
         try:
-            tree = ET.ElementTree(root)
-            ET.indent(tree, space="  ")
-            tree.write(output_path, encoding='utf-8', xml_declaration=True)
-            self.logger.info(f"XML file created successfully with {processed_records} records at {output_path}")
-            if skipped_records > 0:
-                self.logger.info(f"Skipped {skipped_records} records due to validation errors.")
+            left_out = self._write_valid_xml(root, output_path)
+            self.logger.info(f"XML file created successfully with {processed_records - left_out} "
+                             f"records at {output_path}")
+            if skipped_records + left_out > 0:
+                self.logger.info(f"Skipped {skipped_records + left_out} records due to validation errors.")
         except OSError as e:
             self.logger.error(f"Failed to write XML file: {str(e)}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_WRITE, "output_file", f"Failed to write XML file: {str(e)}")
             raise
+
+    def _convert_row(self, root, row, row_index) -> bool:
+        """Append the CounselingRecord for one CSV row to `root`. Returns
+        whether it was filed; a row that can't be is left out, with the
+        reason recorded."""
+        row = self._preprocess_row(row)
+        contact_id = row.get('Contact ID')
+        if contact_id is not None:
+            # A whitespace-only id was written to the filing as "   ";
+            # trimmed, it fails as a missing id like a blank cell does.
+            row['Contact ID'] = contact_id = str(contact_id).strip()
+        record_id = contact_id if contact_id is not None else f"Row_{row_index}"
+        activity_id = row.get('Activity ID', '')
+        # Set before validate_counseling_record so pre-validation issues
+        # (including missing-Contact-ID "Row_N" ones) carry the event id.
+        self.validator.set_current_event_id(activity_id)
+        # Reset per row so duplicate Contact IDs still warn independently.
+        self._fabrication_warned.clear()
+        self._warned_once.clear()
+
+        if not data_validation.validate_counseling_record(row, row_index, self.validator):
+            self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
+            self.left_out_reasons.append(f"row {row_index}: no Contact ID")
+            # Counted, so "Total Records" is every row and the ones left out
+            # are the difference from "Successful".
+            self.validator.record_processed(success=False)
+            return False
+
+        counseling_record = create_element(root, 'CounselingRecord')
+        self._record_columns = {}
+        self.record_sources.append({"row": row_index, "event": activity_id,
+                                    "columns": self._record_columns})
+        try:
+            filed = self._fill_record(root, counseling_record, row, record_id)
+        except (ValueError, KeyError, AttributeError) as e:
+            self.logger.error(f"Error processing record {record_id}: {str(e)}", exc_info=True)
+            self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing record: {str(e)}")
+            # Half built, so never valid; the error above explains it.
+            self._leave_out(root, counseling_record, f"{record_id}: an error while converting it ({e})")
+            filed = False
+        self.validator.record_processed(success=filed)
+        return filed
+
+    def _fill_record(self, root, counseling_record, row, record_id) -> bool:
+        """Build the record's content. Returns False, having left the record
+        out, when SchemaGuard finds a required value no fix can make valid."""
+        create_element(counseling_record, 'PartnerClientNumber', record_id)
+
+        location = create_element(counseling_record, 'Location')
+        # `or`, not the .get default: a LocationCode column with a blank
+        # cell must fall back too, or it emits <LocationCode/>, which the
+        # xs:integer type rejects.
+        create_element(location, 'LocationCode',
+                       (row.get('LocationCode') or '').strip() or self.general_config.DEFAULT_LOCATION_CODE)
+
+        self._build_client_request_section(counseling_record, row, record_id)
+        self._build_client_intake_section(counseling_record, row, record_id)
+        self._build_counselor_record_section(counseling_record, row, record_id)
+        # Last, on the finished record: lengths, enumerations, patterns
+        # and ranges straight from the XSD (see src/schema_rules.py).
+        conditional = self._conditionally_required(counseling_record)
+        unfileable = self._schema_guard.enforce(counseling_record, record_id, (root.tag,),
+                                                self._record_columns)
+        if unfileable:
+            # A required value no fix can make valid -- a Contact ID over 20
+            # characters, a LocationCode that isn't a number. The guard
+            # recorded why; filing the record anyway would make SBA reject the
+            # whole file, so it is left out.
+            self._leave_out(root, counseling_record, f"{record_id}, {unfileable[0]}")
+            return False
+        self._report_conditional_drops(counseling_record, conditional, record_id)
+        return True
 
     def _build_client_request_section(self, parent, row, record_id):
         client_request = create_element(parent, 'ClientRequest')
@@ -344,15 +393,41 @@ class CounselingConverter(BaseConverter):
             'Yes' if data_cleaning.is_affirmative(signature_onfile) else 'No',
         )
 
+    @staticmethod
+    def _classify_races(raw):
+        """(codes, descriptions, unlisted) for a Race cell: each answer's SBA
+        code, once and in order; the text to file as SelfDescribedRace; and
+        those descriptions that weren't given as one, to warn about."""
+        codes, descriptions, unlisted = [], [], []
+        for label in data_cleaning.split_multi_value(raw):
+            code, description = data_cleaning.classify_race_label(label)
+            if code and code not in codes:
+                codes.append(code)
+            if description:
+                descriptions.append(description)
+                if not data_cleaning.is_self_describe_answer(label):
+                    unlisted.append(description)
+        return codes, descriptions, unlisted
+
     def _build_race(self, client_intake, row, record_id):
         race_element = create_element(client_intake, 'Race')
-        race_codes = data_cleaning.split_multi_value(row.get('Race', ''))
-        if race_codes:
-            for code in race_codes:
-                create_element(race_element, 'Code', data_cleaning.map_race_to_xsd(code))
-        else:
-            create_element(race_element, 'Code', 'Prefer not to say')
+        codes, descriptions, unlisted = self._classify_races(row.get('Race', ''))
+        if not codes:
+            codes = [data_cleaning.RACE_PREFER_NOT_TO_SAY]
             self.validator.add_issue(record_id, "warning", ValidationCategory.MISSING_FIELD, "Race", "Race missing, defaulted to 'Prefer not to say'.")
+        for code in codes:
+            create_element(race_element, 'Code', code)
+        if descriptions:
+            # After every Code, as the schema orders them; at most 80
+            # characters, which the schema guard enforces (and reports).
+            create_element(race_element, 'SelfDescribedRace', '; '.join(descriptions))
+        if unlisted:
+            listed = ', '.join(f"'{d}'" for d in unlisted)
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.INVALID_VALUE, "Race",
+                f"{listed} {'is' if len(unlisted) == 1 else 'are'} not among SBA's race "
+                f"categories, so the answer was filed as '{data_cleaning.RACE_SELF_DESCRIBE}' "
+                "with the text as written.")
 
     def _build_demographics(self, client_intake, row):
         # Each of these is an XSD enumeration, so the raw CSV label has to be
@@ -398,20 +473,23 @@ class CounselingConverter(BaseConverter):
 
     def _build_media_and_internet(self, client_intake, row, record_id):
         media_codes = data_cleaning.split_multi_value(row.get('What Prompted you to contact us?', ''))
-        media_other = row.get('Internet (specify)', '').strip()
-        if media_codes or media_other:
+        if media_codes:
             media = create_element(client_intake, 'Media')
             for code in media_codes:
                 create_element(media, 'Code', code)
-            if media_other:
-                create_element(media, 'Other', media_other)
 
-        internet_usage = row.get('InternetUsage', '').strip()
-        if internet_usage:
-            create_element(client_intake, 'Internet', internet_usage)
+        # "Internet (specify)" names the internet source behind a media answer
+        # of "Internet", which the schema files in its own Internet element.
+        # It used to go to Media/Other -- SBA's text for a media answer of
+        # "Other" -- and with no media answer given that left a Media section
+        # with no Code, which fails the schema. InternetUsage, the older
+        # column, is the fallback.
+        internet = self._mapped(row, 'internet', 'ClientIntake/Internet')
+        if internet:
+            create_element(client_intake, 'Internet', internet)
 
         has_internet_media = any(c.strip().lower() == 'internet' for c in media_codes)
-        if has_internet_media and not internet_usage and not media_other:
+        if has_internet_media and not internet:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "Internet", "Internet field should be mandatory when the media code is 'Internet'.")
 
@@ -553,7 +631,11 @@ class CounselingConverter(BaseConverter):
     def _build_counseling_seeking(self, client_intake, row, record_id, in_business_val):
         cs_codes = data_cleaning.split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
         cs_other = row.get('Nature of the Counseling Seeking - Other Detail', '').strip()
-        if cs_codes or cs_other:
+        if cs_other and not cs_codes:
+            # The detail is the text of an "Other" answer. Written on its own
+            # it left CounselingSeeking with no Code, which the schema requires.
+            cs_codes = ['Other']
+        if cs_codes:
             cs_element = create_element(client_intake, 'CounselingSeeking')
             cs_codes = self._cap_single_code(cs_codes, record_id, 'CounselingSeeking',
                                              'Nature of the Counseling Seeking?')
@@ -611,7 +693,10 @@ class CounselingConverter(BaseConverter):
         self._build_export_countries(client_intake, row, record_id)
 
     def _build_counselor_identity(self, counselor_record, row, record_id):
-        create_element(counselor_record, 'PartnerSessionNumber', self._partner_session_number(row))
+        session_number = self._partner_session_number(row)
+        if not session_number:
+            self._warn_blank_session_number(record_id)
+        create_element(counselor_record, 'PartnerSessionNumber', session_number)
 
         # FundingSource is an XSD enumeration of SBA disaster/program codes. A
         # partner's own funding label ("Federal", "CORE") is not in it, so an
@@ -725,13 +810,16 @@ class CounselingConverter(BaseConverter):
 
     def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
-        # `or` rather than the .get default so a present-but-blank cell also
-        # falls back -- CounselingProvided requires at least one Code.
-        provided_codes = data_cleaning.split_multi_value(
-            (row.get('Services Provided') or '').strip() or BUSINESS_STARTUP_PREPLANNING)
-        if data_cleaning.is_empty(row.get('Services Provided')):
+        # CounselingProvided requires at least one Code, so a cell that gives
+        # none falls back -- blank, or only separators (";"), which split to
+        # nothing and used to leave the section without a Code.
+        raw_provided = row.get('Services Provided')
+        provided_codes = data_cleaning.split_multi_value(raw_provided or '')
+        if not provided_codes:
+            provided_codes = [BUSINESS_STARTUP_PREPLANNING]
             self._warn_fabricated_default(record_id, 'Services Provided', BUSINESS_STARTUP_PREPLANNING,
-                                          'Counseling Provided')
+                                          'Counseling Provided',
+                                          raw=None if data_cleaning.is_empty(raw_provided) else raw_provided)
         provided_codes = self._cap_single_code(provided_codes, record_id, 'CounselingProvided',
                                                'Services Provided')
         # 'Other' is a valid CounselingProvided code and is emitted as-is. It
@@ -760,16 +848,15 @@ class CounselingConverter(BaseConverter):
             session_type = self.config.DEFAULT_SESSION_TYPE
         create_element(counselor_record, 'SessionType', session_type)
 
-        # Language requires at least one Code child, so a blank cell falls back
-        # to the default language rather than producing an empty <Language/>.
-        lang_codes = data_cleaning.split_multi_value(
-            (row.get('Language(s) Used') or '').strip() or self.general_config.DEFAULT_LANGUAGE)
-        lang_other = row.get('Language(s) Used (Other)', '').strip()
-        if lang_codes or lang_other:
-            lang_element = create_element(counselor_record, 'Language')
-            for code in lang_codes:
-                create_element(lang_element, 'Code', code)
-            emit_optional(lang_element, 'Other', lang_other)
+        # Language requires at least one Code child, so a cell that gives none
+        # (blank, or only separators) falls back to the default language rather
+        # than producing a Language with no Code.
+        lang_codes = (data_cleaning.split_multi_value(row.get('Language(s) Used') or '')
+                      or [self.general_config.DEFAULT_LANGUAGE])
+        lang_element = create_element(counselor_record, 'Language')
+        for code in lang_codes:
+            create_element(lang_element, 'Code', code)
+        emit_optional(lang_element, 'Other', row.get('Language(s) Used (Other)', '').strip())
 
         date_raw = row.get('Date', '')
         date_counseled = data_cleaning.format_date(date_raw)

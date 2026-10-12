@@ -64,10 +64,35 @@ class TestDataValidation(unittest.TestCase):
             "C-124", "warning", VC.MISSING_FIELD, "Last Name", "Missing Last Name."
         )
 
+    def test_validate_counseling_record_missing_first_name(self):
+        row = {
+            CounselingConfig.REQUIRED_FIELDS[0]: "C-127",
+            'Last Name': 'Doe',
+            'First Name': '  ',
+            'Date': _VALID_DATE
+        }
+
+        self.assertTrue(validate_counseling_record(row, 3, self.validator))
+        self.validator.add_issue.assert_called_once_with(
+            "C-127", "warning", VC.MISSING_FIELD, "First Name", "Missing First Name."
+        )
+
+    def test_nan_is_a_first_name(self):
+        row = {
+            CounselingConfig.REQUIRED_FIELDS[0]: "C-128",
+            'Last Name': 'Doe',
+            'First Name': 'Nan',
+            'Date': _VALID_DATE
+        }
+
+        validate_counseling_record(row, 3, self.validator)
+        self.validator.add_issue.assert_not_called()
+
     def test_validate_counseling_record_invalid_date_format(self):
         row = {
             CounselingConfig.REQUIRED_FIELDS[0]: "C-125",
             'Last Name': 'Doe',
+            'First Name': 'John',
             'Date': 'invalid-date'
         }
 
@@ -83,6 +108,7 @@ class TestDataValidation(unittest.TestCase):
         row = {
             CounselingConfig.REQUIRED_FIELDS[0]: "C-126",
             'Last Name': 'Doe',
+            'First Name': 'John',
             'Date': '2020-01-01'
         }
 

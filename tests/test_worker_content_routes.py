@@ -349,6 +349,48 @@ def test_convert_ignores_stale_event_id_mapping(monkeypatch):
 # --- Feature 2.4: structured XSD error details on /convert ---
 
 
+def _emit_raw_race_unguarded(monkeypatch, safety_net=False):
+    """Make the converter write an invalid Race/Code, as it once did: the race
+    mapping passes labels through and the schema guard is off. The converters
+    no longer produce invalid XML, but /convert must still trace an XSD error
+    back to its row and column if one ever gets through -- which, unless
+    `safety_net`, means switching off their final XSD check too."""
+    from src import data_cleaning
+    from src.converters.base_converter import BaseConverter
+    from src.schema_rules import SchemaGuard
+    from src.xml_utils import write_document
+
+    monkeypatch.setattr(data_cleaning, "classify_race_label", lambda label: (label.strip(), None))
+    monkeypatch.setattr(SchemaGuard, "enforce", lambda *args, **kwargs: [])
+    if not safety_net:
+        monkeypatch.setattr(BaseConverter, "_write_valid_xml",
+                            lambda self, root, path: write_document(root, path) or 0)
+
+
+def test_convert_leaves_out_a_record_the_xsd_rejects(monkeypatch):
+    """The converters' final XSD check (decision D2 in
+    docs/reviews/XSD_VALIDITY_ANALYSIS.md): a record that gets past the schema
+    guard invalid is left out, with an error naming its row and column, and
+    the rest of the file is valid."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    _emit_raw_race_unguarded(monkeypatch, safety_net=True)
+    req = ConvertRequest(
+        job_id="jobBadRaceNet", csv_content=COUNSELING_CSV, converter_type="counseling"
+    )
+    result = asyncio.run(convert_route.convert(req))
+
+    check = unittest.TestCase()
+    check.assertIs(result["xsd_valid"], True)
+    check.assertEqual(result["xsd_errors"], [])
+    check.assertEqual((result["stats"]["total"], result["stats"]["successful"]), (2, 1))
+    errors = [i for i in result["issues"] if i["severity"] == "error"]
+    check.assertEqual([(e["record_id"], e["field_name"]) for e in errors], [("C-002", "Race")])
+    check.assertTrue(errors[0]["message"].startswith("Row 2 (Contact C-002): 'Race' (CSV column 'Race') — "))
+    check.assertIn("record was left out of the XML", errors[0]["message"])
+
+
 def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     """When post-convert XSD validation fails, /convert adds xsd_error_details
     tracing each raw error back to the record (row) and CSV column while the
@@ -356,6 +398,7 @@ def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     from app.services import conversion_service
 
     monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    _emit_raw_race_unguarded(monkeypatch)
     req = ConvertRequest(
         job_id="jobBadRace", csv_content=COUNSELING_CSV, converter_type="counseling"
     )
@@ -366,9 +409,8 @@ def test_convert_xsd_invalid_record_populates_error_details(monkeypatch):
     check.assertGreaterEqual(len(result["xsd_errors"]), 1)
     details = result["xsd_error_details"]
     check.assertEqual(len(details), len(result["xsd_errors"]))
-    # Race is required, so the converter keeps the unrecognised value (and
-    # reports it) rather than dropping it; the XSD error traces back to the
-    # second CSV row / Contact C-002 and the 'Race' source column.
+    # The XSD error traces back to the second CSV row / Contact C-002 and
+    # the 'Race' source column.
     for detail in details:
         check.assertEqual(
             (detail["element"], detail["row_number"], detail["record_id"], detail["csv_column"]),

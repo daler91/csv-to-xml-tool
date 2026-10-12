@@ -17,12 +17,15 @@ class TrainingConverter(BaseConverter):
     """
     Converter for Management Training Report data.
     """
+    SCHEMA_TYPE = "training"
+
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.config = TrainingConfig()
         self.general_config = GeneralConfig()
-        self._schema_guard = SchemaGuard("training", validator, logger)
+        self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
         self._first_rows = {}
+        self._current_record = None
 
     def _get_column_value(self, record, key, default=''):
         """
@@ -91,13 +94,6 @@ class TrainingConverter(BaseConverter):
         self.logger.info(f"Found {len(event_groups)} unique training events.")
         return event_groups, event_id_col
 
-    def _write_xml_output(self, root, output_path):
-        """Format and write XML tree to output file."""
-        tree = ET.ElementTree(root)
-        ET.indent(tree, space="  ")
-        tree.write(output_path, encoding='utf-8', xml_declaration=True)
-        self.logger.info(f"XML file successfully created at {output_path}")
-
     def _warn_fabricated_default(self, event_id, field, default_value, element_label):
         """Record a FABRICATED_DEFAULT warning for a value substituted for a blank cell.
 
@@ -136,13 +132,16 @@ class TrainingConverter(BaseConverter):
         )
 
     def _build_training_record(self, root, event_id, group_rows):
-        """Build a single ManagementTrainingRecord element."""
+        """Build a single ManagementTrainingRecord element. Returns False when
+        the record cannot be filed and was left out (see SchemaGuard.enforce)."""
         first_record = group_rows[0]
         self.validator.set_current_record_id(str(event_id))
         self.validator.set_current_event_id(str(event_id))
 
         record = create_element(root, 'ManagementTrainingRecord')
-        self.record_sources.append({"row": self._first_rows.get(event_id), "columns": {}})
+        self._current_record = record
+        self.record_sources.append({"row": self._first_rows.get(event_id), "event": str(event_id),
+                                    "columns": {}})
         create_element(record, 'PartnerTrainingNumber', str(event_id))
 
         funding_source = self._get_column_value(first_record, 'funding_source')
@@ -207,11 +206,19 @@ class TrainingConverter(BaseConverter):
 
         # Last, on the finished record: lengths, enumerations, patterns and
         # ranges straight from the XSD (see src/schema_rules.py).
-        self._schema_guard.enforce(record, str(event_id), (root.tag,))
+        unfileable = self._schema_guard.enforce(record, str(event_id), (root.tag,))
+        if unfileable:
+            # A required value no fix can make valid, such as a Class/Event ID
+            # over 20 characters; the guard recorded why. Filing it would make
+            # SBA reject the whole file.
+            self._leave_out(root, record, f"{event_id}, {unfileable[0]}")
+            return False
+        return True
 
     def convert(self, input_path: str, output_path: str):
         self.logger.info(f"Starting conversion of training data: {input_path}")
         self.record_sources = []
+        self.left_out_reasons = []
 
         event_groups, event_id_col = self._read_and_validate_csv(input_path)
 
@@ -231,12 +238,17 @@ class TrainingConverter(BaseConverter):
             if not group_rows:
                 self._maybe_report_progress(i, total_events, every=5)
                 continue
+            self._current_record = None
             try:
-                self._build_training_record(root, event_id, group_rows)
-                self.validator.record_processed(success=True)
+                filed = self._build_training_record(root, event_id, group_rows)
+                self.validator.record_processed(success=filed)
             except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
                 self.validator.add_issue(str(event_id), "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing event: {e}", event_id=str(event_id))
+                if self._current_record is not None:
+                    # Half built, so never valid; the error above explains it.
+                    self._leave_out(root, self._current_record,
+                                    f"{event_id}: an error while converting it ({e})")
                 self.validator.record_processed(success=False)
 
             self._maybe_report_progress(i, total_events, every=5)
@@ -246,7 +258,13 @@ class TrainingConverter(BaseConverter):
         # File-level issues below must not inherit the last event's id.
         self.validator.set_current_event_id(None)
 
-        self._write_xml_output(root, output_path)
+        if len(root) == 0:
+            # Every event was left out: the schema needs at least one
+            # ManagementTrainingRecord, so fail like an empty CSV does.
+            raise self._nothing_converted(f"{total_events} event(s)")
+
+        self._write_valid_xml(root, output_path)
+        self.logger.info(f"XML file successfully created at {output_path}")
 
     def _build_location_section(self, parent, record):
         training_location = create_element(parent, 'TrainingLocation')

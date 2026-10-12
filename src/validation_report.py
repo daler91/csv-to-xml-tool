@@ -111,6 +111,11 @@ class ValidationTracker:
         if success:
             self.successful_records += 1
     
+    def record_left_out(self) -> None:
+        """A record already counted as successful was left out of the file
+        after all (the converters' final XSD check)."""
+        self.successful_records -= 1
+
     def get_summary(self) -> dict:
         """
         Get a summary of validation issues.

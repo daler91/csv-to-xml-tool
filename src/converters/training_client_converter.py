@@ -22,6 +22,8 @@ class TrainingClientConverter(CounselingConverter):
     for fields not collected on the shorter training client form.
     """
     SCHEMA_TYPE = "training-client"
+    SESSION_NUMBER_FIELD = 'Member ID'
+    SESSION_NUMBER_BLANK = "No Member ID or Class/Event ID"
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
@@ -101,6 +103,11 @@ class TrainingClientConverter(CounselingConverter):
         remapped Class/Event ID) when the CSV has no Member ID."""
         member_id = (row.get('Member ID') or '').strip()
         return member_id or super()._partner_session_number(row)
+
+    def _check_session_column(self, headers):
+        """The session number is the Member ID, else the Class/Event ID, so
+        there is no one column to miss; a row with neither is reported on its
+        own (CounselingConverter._warn_blank_session_number)."""
 
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = super()._build_counselor_record_section(parent, row, record_id)

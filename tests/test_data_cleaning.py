@@ -382,10 +382,14 @@ class TestDemographicClassifiers(unittest.TestCase):
         self.assertEqual(map_race_to_xsd('Caucasian'), 'White')
         self.assertEqual(map_race_to_xsd('black'), 'Black or African American')
         self.assertEqual(map_race_to_xsd('Prefer not to say'), 'Prefer not to say')
-        # Ambiguous or unknown labels are left for the schema guard to report.
+        # An answer outside SBA's list -- unknown, or matching two categories --
+        # is filed as self-described rather than passed through to fail the file.
         self.assertEqual(map_race_to_xsd('Middle Eastern or North African'),
-                         'Middle Eastern or North African')
-        self.assertEqual(map_race_to_xsd('Martian'), 'Martian')
+                         'Prefer to Self-Describe')
+        self.assertEqual(map_race_to_xsd('Martian'), 'Prefer to Self-Describe')
+        # Declining the question is SBA's "Prefer not to say".
+        self.assertEqual(map_race_to_xsd('Decline to answer'), 'Prefer not to say')
+        self.assertEqual(map_race_to_xsd('Unknown'), 'Prefer not to say')
 
     def test_map_branch_of_service_to_xsd(self):
         from src.data_cleaning import map_branch_of_service_to_xsd

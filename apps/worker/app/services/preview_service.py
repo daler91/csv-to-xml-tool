@@ -94,7 +94,7 @@ COUNSELING_FIELD_METADATA: dict[str, dict[str, str]] = {
         "conditional_rule": "Required when 'What Prompted you to contact us?' is set to an Internet option.",
     },
     "InternetUsage": {
-        "description": "Type of internet usage the client reported.",
+        "description": "Older column for the internet source; used when 'Internet (specify)' is blank.",
         "conditional_rule": "Required when 'What Prompted you to contact us?' is set to an Internet option.",
     },
     "Currently In Business?": {

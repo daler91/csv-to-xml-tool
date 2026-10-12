@@ -632,27 +632,56 @@ def map_military_status_to_xsd(value: str | None) -> str:
     return ""
 
 
-def map_race_to_xsd(value: str | None) -> str:
-    """Map one race label onto the counseling XSD's Race/Code spelling.
+RACE_PREFER_NOT_TO_SAY = "Prefer not to say"
+RACE_SELF_DESCRIBE = "Prefer to Self-Describe"
+
+# Answers that decline the question rather than describe a race.
+_RACE_REFUSAL = re.compile(
+    r"\b(?:prefer not|declin|refus|rather not|do(?: not|n't) wish|no answer|not answered|"
+    r"not (?:stated|specified|disclosed|reported|provided|given)|undisclosed|unknown)")
+_RACE_REFUSAL_EXACT = {"n/a", "na", "none", "-", "?"}
+_RACE_SELF_DESCRIBE = re.compile(r"(?:prefer to )?self[- ]describe[ds]?")
+
+
+def classify_race_label(value: str | None) -> tuple[str, str | None]:
+    """(Race/Code, self-description) for one race answer.
 
     Synonyms resolve through RACE_KEYWORDS ("Caucasian" -> "White", "Asian
-    Indian" -> "Asian"). A label that matches no category, or more than one
-    ("Middle Eastern or North African"), is returned unchanged: Race is
-    required, so the schema guard reports it rather than this guessing.
+    Indian" -> "Asian"); answers that decline the question ("Decline to
+    answer", "Unknown") are "Prefer not to say", the value SBA renamed
+    "Unknown/Not Stated" to (change 41 in the schema). Anything else -- a label that
+    matches no category or more than one, such as "Two or More Races" or
+    "Middle Eastern or North African" -- is filed the way the schema provides
+    for answers outside its list: "Prefer to Self-Describe", with the answer as
+    written for SelfDescribedRace. It used to be returned unchanged, and since
+    Race is required, one such answer made the whole file fail SBA validation.
     """
     if is_empty(value):
-        return ""
+        return "", None
     text = str(value).strip()
     lowered = text.lower()
-    if "prefer not" in lowered:
-        return "Prefer not to say"
-    if "self-describe" in lowered or "self describe" in lowered:
-        return "Prefer to Self-Describe"
+    if lowered in _RACE_REFUSAL_EXACT or _RACE_REFUSAL.search(lowered):
+        return RACE_PREFER_NOT_TO_SAY, None
+    self_described = _RACE_SELF_DESCRIBE.search(lowered)
+    if self_described:
+        # "Prefer to Self-Describe: Arab American" carries its own description.
+        rest = (text[:self_described.start()] + text[self_described.end():]).strip(" :-–—")
+        return RACE_SELF_DESCRIBE, rest or None
     categories = classify_races(text, RACE_KEYWORDS)
     if len(categories) == 1:
-        return RACE_XSD_CODES[categories.pop()]
-    return text
+        return RACE_XSD_CODES[categories.pop()], None
+    return RACE_SELF_DESCRIBE, text
 
+
+def is_self_describe_answer(value: str | None) -> bool:
+    """True when the answer itself chose "Prefer to Self-Describe"."""
+    return bool(value) and _RACE_SELF_DESCRIBE.search(str(value).lower()) is not None
+
+
+def map_race_to_xsd(value: str | None) -> str:
+    """The counseling XSD's Race/Code for one race answer (see
+    classify_race_label); "" for a blank one."""
+    return classify_race_label(value)[0]
 
 # Abbreviations and short forms for the BranchOfService enumeration. Keys are
 # lower-cased with any leading "US"/"U.S."/"United States" removed.

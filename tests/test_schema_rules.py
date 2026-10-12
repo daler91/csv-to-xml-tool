@@ -62,6 +62,17 @@ class TestLoadRules(unittest.TestCase):
     def test_yes_no_type_is_named(self):
         self.assertEqual(self.rules[RECORD + ("ClientRequest", "SurveyAgreement")].type_name, "YesNoType")
 
+    def test_repeat_limits(self):
+        intake = RECORD + ("ClientIntake",)
+        self.assertEqual(self.rules[intake + ("Media", "Code")].max_occurs, 13)
+        self.assertEqual(self.rules[intake + ("LegalEntity", "Code")].max_occurs, 6)
+        self.assertIsNone(self.rules[intake + ("Race", "Code")].max_occurs)
+        self.assertEqual(self.rules[RECORD + ("PartnerClientNumber",)].max_occurs, 1)
+        self.assertIsNone(self.rules[RECORD[:1] + ("CounselingRecord",)].max_occurs)
+        training = load_rules(schema_path("training"))
+        partners = ("ManagementTrainingReport", "ManagementTrainingRecord", "TrainingPartners", "Code")
+        self.assertEqual(training[partners].max_occurs, 14)
+
     def test_training_schema_loads(self):
         rules = load_rules(schema_path("training"))
         title = rules[("ManagementTrainingReport", "ManagementTrainingRecord", "TrainingTitle")]
@@ -112,7 +123,7 @@ class TestSchemaGuard(unittest.TestCase):
         return node
 
     def _run(self):
-        self.guard.enforce(self.record, "C-1", ("CounselingInformation",))
+        self.unfileable = self.guard.enforce(self.record, "C-1", ("CounselingInformation",))
         return [(i["severity"], i["category"], i["field_name"], i["message"]) for i in self.validator.issues]
 
     def test_control_characters_become_spaces(self):
@@ -133,6 +144,8 @@ class TestSchemaGuard(unittest.TestCase):
         issues = self._run()
         self.assertEqual(pcn.text, "X" * 21)
         self.assertEqual(issues[0][:3], ("error", "invalid_value", "Contact ID"))
+        self.assertIn("record was left out of the XML", issues[0][3])
+        self.assertEqual(len(self.unfileable), 1)
 
     def test_enumeration_is_matched_case_insensitively_without_noise(self):
         code = self._sub(self.record, "CounselorRecord", "Language", "Code", "english")
@@ -167,13 +180,52 @@ class TestSchemaGuard(unittest.TestCase):
         self.assertIsNone(self.record.find("ClientIntake/Media"))
         self.assertEqual(issues[0][:3], ("warning", "downgraded_value", "What Prompted you to contact us?"))
 
-    def test_invalid_required_value_is_kept_and_reported_as_error(self):
+    def test_invalid_required_value_makes_the_record_unfileable(self):
         race = self._sub(self.record, "ClientIntake", "Race", None)
         create_element(race, "Code", "Martian")
         issues = self._run()
         self.assertEqual(race.find("Code").text, "Martian")
         self.assertEqual(issues[0][:3], ("error", "invalid_value", "Race"))
         self.assertNotIn("_schema_invalid", race.find("Code").attrib)
+        self.assertEqual(len(self.unfileable), 1)
+        self.assertTrue(self.unfileable[0].startswith("Race: 'Martian' is not one of the values SBA accepts"))
+
+    def test_a_valid_record_is_fileable(self):
+        self._sub(self.record, "PartnerClientNumber", "C-1")
+        self.assertEqual(self._run(), [])
+        self.assertEqual(self.unfileable, [])
+
+    def test_repeats_beyond_the_schema_limit_are_dropped(self):
+        media = self._sub(self.record, "ClientIntake", "Media", None)
+        codes = ["Boots to Business", "Business Owner", "Chamber of Commerce",
+                 "Educational Institution", "Internet", "Lender",
+                 "Local Economic Development Official", "Magazine/Newspaper", "SBA District",
+                 "SBA Web site", "SBDC", "SCORE", "Television/Radio", "USEAC", "VBOC"]
+        for code in codes:
+            create_element(media, "Code", code)
+        issues = self._run()
+        self.assertEqual([c.text for c in media.findall("Code")], codes[:13])
+        self.assertEqual(issues, [(
+            "warning", "downgraded_value", "What Prompted you to contact us?",
+            "SBA allows at most 13 Code values in Media; kept the first 13 and left out "
+            "'USEAC', 'VBOC'.")])
+        self.assertEqual(self.unfileable, [])
+
+    def test_unbounded_repeats_are_kept(self):
+        language = self._sub(self.record, "CounselorRecord", "Language", None)
+        for code in ("English", "Spanish", "Arabic", "Armenian", "Burmese", "Czech", "Farsi",
+                     "French", "German", "Italian", "Japanese", "Korean", "Russian", "Thai"):
+            create_element(language, "Code", code)
+        self._run()
+        self.assertEqual(len(language.findall("Code")), 14)
+
+    def test_the_limit_ignores_a_section_with_no_valid_code(self):
+        media = self._sub(self.record, "ClientIntake", "Media", None)
+        for n in range(14):
+            create_element(media, "Code", f"Billboard {n}")
+        issues = self._run()
+        self.assertIsNone(self.record.find("ClientIntake/Media"))
+        self.assertEqual([i[1] for i in issues], ["downgraded_value"])
 
     def test_required_child_never_drops_a_large_optional_parent(self):
         # ClientIntake is optional, but one bad CurrentlyInBusiness must not

@@ -43,6 +43,22 @@ What it handles that hand-built XML usually gets wrong:
   semicolon-delimited and are split into repeated elements — except where the
   schema allows only one code, in which case the first is kept and the dropped
   values are recorded as a `DOWNGRADED_VALUE` issue so the loss stays auditable.
+  A cell holding only separators (`;`) counts as blank, so the usual default
+  applies rather than a code list with no code.
+- **Race answers outside SBA's nine codes.** "Two or More Races", "Middle
+  Eastern or North African", "Hispanic or Latino" and the like are filed the way
+  the schema provides: `Prefer to Self-Describe`, with the answer as written in
+  `SelfDescribedRace` (up to 80 characters) and an `INVALID_VALUE` warning.
+  Answers that decline the question ("Decline to answer", "Unknown", "N/A") are
+  `Prefer not to say`, the value SBA renamed "Unknown/Not Stated" to.
+- **"Other" text with no code.** `Nature of the Counseling Seeking - Other
+  Detail` without a `Nature of the Counseling Seeking?` answer is filed under the
+  code `Other`; on its own it would leave the section without the `Code` the
+  schema requires.
+- **Internet source.** `Internet (specify)` fills the schema's `Internet`
+  element (the internet source behind a media answer of `Internet`), with
+  `InternetUsage` as the fallback. It is not written to `Media/Other`, which SBA
+  defines as the text for a media answer of `Other`.
 - **Field length caps**, applied with a record rather than a silent trim:
 
   | Element | Max |
@@ -118,7 +134,7 @@ so the results page can show a before/after diff for each value.
 | Percentages | Clamped to 0–100, recorded as `CLAMPED_VALUE` |
 | States | Standardized to the schema's spelling (`IA` → `Iowa`) |
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |
-| Enumerations | Ethnicity, disability and military status are classified onto XSD values instead of passed through raw |
+| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described) |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |

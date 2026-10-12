@@ -153,8 +153,8 @@ class CounselingConfig:
         "veteran_status": 'Veteran Status',
         "branch_of_service": 'Branch Of Service',
         "what_prompted_contact": 'What Prompted you to contact us?',
-        "internet_specify": 'Internet (specify)',
-        "internet_usage": 'InternetUsage',
+        # The XSD's Internet element: the internet source, else the older column.
+        "internet": ['Internet (specify)', 'InternetUsage'],
         # Business profile (intake snapshot)
         "currently_in_business": 'Currently In Business?',
         "currently_exporting": 'Are you currently exporting?(old)',

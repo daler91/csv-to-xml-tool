@@ -62,8 +62,8 @@ catches `Zip Code` vs `Zip/Postal Code`.
 | Column | Required when |
 |---|---|
 | `Branch Of Service` | military status indicates service |
-| `Internet (specify)` | the contact medium is Internet |
-| `InternetUsage` | the contact medium is Internet |
+| `Internet (specify)` | the contact medium is Internet (filed in the `Internet` element) |
+| `InternetUsage` | the contact medium is Internet and `Internet (specify)` is blank (older column, used as its fallback) |
 | `Legal Entity of Business` | the client is in business |
 | `Other legal entity (specify)` | legal entity is `Other` |
 | `FIPS_Code` | Rural/Urban is set |

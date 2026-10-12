@@ -418,20 +418,23 @@ class CounselingConverter(BaseConverter):
 
     def _build_media_and_internet(self, client_intake, row, record_id):
         media_codes = data_cleaning.split_multi_value(row.get('What Prompted you to contact us?', ''))
-        media_other = row.get('Internet (specify)', '').strip()
-        if media_codes or media_other:
+        if media_codes:
             media = create_element(client_intake, 'Media')
             for code in media_codes:
                 create_element(media, 'Code', code)
-            if media_other:
-                create_element(media, 'Other', media_other)
 
-        internet_usage = row.get('InternetUsage', '').strip()
-        if internet_usage:
-            create_element(client_intake, 'Internet', internet_usage)
+        # "Internet (specify)" names the internet source behind a media answer
+        # of "Internet", which the schema files in its own Internet element.
+        # It used to go to Media/Other -- SBA's text for a media answer of
+        # "Other" -- and with no media answer given that left a Media section
+        # with no Code, which fails the schema. InternetUsage, the older
+        # column, is the fallback.
+        internet = self._mapped(row, 'internet', 'ClientIntake/Internet')
+        if internet:
+            create_element(client_intake, 'Internet', internet)
 
         has_internet_media = any(c.strip().lower() == 'internet' for c in media_codes)
-        if has_internet_media and not internet_usage and not media_other:
+        if has_internet_media and not internet:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED,
                 "Internet", "Internet field should be mandatory when the media code is 'Internet'.")
 
@@ -573,6 +576,10 @@ class CounselingConverter(BaseConverter):
     def _build_counseling_seeking(self, client_intake, row, record_id, in_business_val):
         cs_codes = data_cleaning.split_multi_value(row.get('Nature of the Counseling Seeking?', ''))
         cs_other = row.get('Nature of the Counseling Seeking - Other Detail', '').strip()
+        if cs_other and not cs_codes:
+            # The detail is the text of an "Other" answer. Written on its own
+            # it left CounselingSeeking with no Code, which the schema requires.
+            cs_codes = ['Other']
         if cs_codes or cs_other:
             cs_element = create_element(client_intake, 'CounselingSeeking')
             cs_codes = self._cap_single_code(cs_codes, record_id, 'CounselingSeeking',
@@ -745,13 +752,16 @@ class CounselingConverter(BaseConverter):
 
     def _build_counseling_provided(self, counselor_record, row, record_id):
         cp_element = create_element(counselor_record, 'CounselingProvided')
-        # `or` rather than the .get default so a present-but-blank cell also
-        # falls back -- CounselingProvided requires at least one Code.
-        provided_codes = data_cleaning.split_multi_value(
-            (row.get('Services Provided') or '').strip() or BUSINESS_STARTUP_PREPLANNING)
-        if data_cleaning.is_empty(row.get('Services Provided')):
+        # CounselingProvided requires at least one Code, so a cell that gives
+        # none falls back -- blank, or only separators (";"), which split to
+        # nothing and used to leave the section without a Code.
+        raw_provided = row.get('Services Provided')
+        provided_codes = data_cleaning.split_multi_value(raw_provided or '')
+        if not provided_codes:
+            provided_codes = [BUSINESS_STARTUP_PREPLANNING]
             self._warn_fabricated_default(record_id, 'Services Provided', BUSINESS_STARTUP_PREPLANNING,
-                                          'Counseling Provided')
+                                          'Counseling Provided',
+                                          raw=None if data_cleaning.is_empty(raw_provided) else raw_provided)
         provided_codes = self._cap_single_code(provided_codes, record_id, 'CounselingProvided',
                                                'Services Provided')
         # 'Other' is a valid CounselingProvided code and is emitted as-is. It
@@ -780,10 +790,11 @@ class CounselingConverter(BaseConverter):
             session_type = self.config.DEFAULT_SESSION_TYPE
         create_element(counselor_record, 'SessionType', session_type)
 
-        # Language requires at least one Code child, so a blank cell falls back
-        # to the default language rather than producing an empty <Language/>.
-        lang_codes = data_cleaning.split_multi_value(
-            (row.get('Language(s) Used') or '').strip() or self.general_config.DEFAULT_LANGUAGE)
+        # Language requires at least one Code child, so a cell that gives none
+        # (blank, or only separators) falls back to the default language rather
+        # than producing a Language with no Code.
+        lang_codes = (data_cleaning.split_multi_value(row.get('Language(s) Used') or '')
+                      or [self.general_config.DEFAULT_LANGUAGE])
         lang_other = row.get('Language(s) Used (Other)', '').strip()
         if lang_codes or lang_other:
             lang_element = create_element(counselor_record, 'Language')

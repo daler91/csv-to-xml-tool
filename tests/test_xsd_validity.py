@@ -115,6 +115,58 @@ class RaceTest(_ValidityCase):
         self.assertTrue([i for i in self.issues("Race") if "80" in i["message"]])
 
 
+class CodeListTest(_ValidityCase):
+    """V.2, V.3 and D3: code lists left with no Code."""
+
+    def test_seeking_detail_without_an_answer_is_filed_as_other(self):
+        root = self.convert_row(**{"Currently In Business?": "Yes",
+                                   "Nature of the Counseling Seeking?": "",
+                                   "Nature of the Counseling Seeking - Other Detail": "Export help"})
+        seeking = root.find(".//ClientIntake/CounselingSeeking")
+        self.assertEqual([c.text for c in seeking.findall("Code")], ["Other"])
+        self.assertEqual(seeking.findtext("Other"), "Export help")
+
+    def test_internet_specify_fills_the_internet_element(self):
+        root = self.convert_row(**{"What Prompted you to contact us?": "Internet",
+                                   "Internet (specify)": "Google search"})
+        intake = root.find(".//ClientIntake")
+        self.assertEqual([c.text for c in intake.findall("Media/Code")], ["Internet"])
+        self.assertIsNone(intake.find("Media/Other"))
+        self.assertEqual(intake.findtext("Internet"), "Google search")
+        self.assertEqual(self.issues("Internet"), [])
+
+    def test_internet_specify_without_a_media_answer(self):
+        root = self.convert_row(**{"What Prompted you to contact us?": "",
+                                   "Internet (specify)": "Google search"})
+        intake = root.find(".//ClientIntake")
+        self.assertIsNone(intake.find("Media"))
+        self.assertEqual(intake.findtext("Internet"), "Google search")
+
+    def test_internet_usage_is_the_fallback(self):
+        root = self.convert_row(**{"What Prompted you to contact us?": "Internet",
+                                   "Internet (specify)": "", "InternetUsage": "Social media"})
+        self.assertEqual(root.findtext(".//ClientIntake/Internet"), "Social media")
+
+    def test_internet_answer_without_a_source_is_still_reported(self):
+        self.convert_row(**{"What Prompted you to contact us?": "Internet",
+                            "Internet (specify)": "", "InternetUsage": ""})
+        self.assertEqual(len(self.issues("Internet", "error")), 1)
+
+    def test_a_separator_only_services_cell_gets_the_default(self):
+        root = self.convert_row(**{"Services Provided": " ; "})
+        self.assertEqual([c.text for c in root.findall(".//CounselingProvided/Code")],
+                         ["Business Start-up/Preplanning"])
+        defaulted = self.issues("Services Provided", "warning")
+        self.assertEqual(len(defaulted), 1)
+        self.assertIn("';' could not be used", defaulted[0]["message"])
+
+    def test_a_separator_only_language_cell_gets_the_default(self):
+        root = self.convert_row(**{"Language(s) Used": ";", "Language(s) Used (Other)": "Klingon"})
+        language = root.find(".//CounselorRecord/Language")
+        self.assertEqual([c.text for c in language.findall("Code")], ["English"])
+        self.assertEqual(language.findtext("Other"), "Klingon")
+
+
 class TrainingClientRaceTest(_ValidityCase):
     converter_class = TrainingClientConverter
 
@@ -123,6 +175,10 @@ class TrainingClientRaceTest(_ValidityCase):
         race = root.find(".//ClientIntake/Race")
         self.assertEqual([c.text for c in race.findall("Code")], ["Prefer to Self-Describe"])
         self.assertEqual(race.findtext("SelfDescribedRace"), "Two or More Races")
+
+    def test_a_separator_only_topic_still_gets_a_code(self):
+        root = self.convert([_make_training_client_row(**{"Training Topic": ";"})])
+        self.assertEqual(len(root.findall(".//CounselingProvided/Code")), 1)
 
 
 if __name__ == "__main__":

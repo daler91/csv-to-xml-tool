@@ -245,8 +245,15 @@ class ErrorLocationTest(_ConverterCase):
         "Row 2" -- its position in the XML."""
         rows = [_make_counseling_row(**{"Contact ID": "AAA"}),
                 _make_counseling_row(**{"Contact ID": ""}),
-                _make_counseling_row(**{"Contact ID": "C" * 60})]
+                _make_counseling_row(**{"Contact ID": "CCC"})]
         self.convert(_rows_csv(rows))
+        # The converter only writes valid records now, so break the third
+        # row's record by hand: an ID over the schema's 20 characters.
+        with open(self.xml_path, encoding="utf-8") as f:
+            xml = f.read()
+        with open(self.xml_path, "w", encoding="utf-8") as f:
+            f.write(xml.replace("<PartnerClientNumber>CCC<",
+                                "<PartnerClientNumber>" + "C" * 60 + "<"))
 
         errors = validate_against_xsd(self.xml_path, COUNSELING_XSD)["errors"]
         self.assertTrue(errors)

@@ -98,6 +98,18 @@ class BaseConverter(abc.ABC):
                                      data_cleaning.duplicate_header_message(name, count))
         return reader.fieldnames, rows
 
+    def _leave_out(self, root, record) -> None:
+        """Remove a record element from the output, with its record_sources
+        entry. Used for a record that cannot be filed -- one the schema guard
+        found an unfixable required value in, or one half built when an error
+        stopped it -- so the rest of the file stays valid."""
+        records = [child for child in root if child.tag == record.tag]
+        # The record being built is the last one; avoid the scan's cost for it.
+        index = len(records) - 1 if records and records[-1] is record else records.index(record)
+        root.remove(record)
+        if index < len(self.record_sources):
+            del self.record_sources[index]
+
     def _report_progress(self, processed: int, total: int) -> None:
         """Report progress to the callback if one is set. No-op otherwise."""
         if self.progress_callback is not None:

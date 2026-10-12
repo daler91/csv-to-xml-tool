@@ -254,9 +254,13 @@ class CounselingConverter(BaseConverter):
             if not data_validation.validate_counseling_record(row, row_index, self.validator):
                 self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
                 skipped_records += 1
+                # Counted, so "Total Records" is every row and the ones left
+                # out are the difference from "Successful".
+                self.validator.record_processed(success=False)
                 self._maybe_report_progress(row_index, total_rows)
                 continue
 
+            counseling_record = None
             try:
                 counseling_record = create_element(root, 'CounselingRecord')
                 self._record_columns = {}
@@ -276,16 +280,27 @@ class CounselingConverter(BaseConverter):
                 # Last, on the finished record: lengths, enumerations, patterns
                 # and ranges straight from the XSD (see src/schema_rules.py).
                 conditional = self._conditionally_required(counseling_record)
-                self._schema_guard.enforce(counseling_record, record_id, (root.tag,),
-                                           self._record_columns)
-                self._report_conditional_drops(counseling_record, conditional, record_id)
-
-                processed_records += 1
-                self.validator.record_processed(success=True)
+                unfileable = self._schema_guard.enforce(counseling_record, record_id, (root.tag,),
+                                                        self._record_columns)
+                if unfileable:
+                    # A required value no fix can make valid -- a Contact ID
+                    # over 20 characters, a LocationCode that isn't a number.
+                    # The guard recorded why; filing the record anyway would
+                    # make SBA reject the whole file, so it is left out.
+                    self._leave_out(root, counseling_record)
+                    skipped_records += 1
+                    self.validator.record_processed(success=False)
+                else:
+                    self._report_conditional_drops(counseling_record, conditional, record_id)
+                    processed_records += 1
+                    self.validator.record_processed(success=True)
 
             except (ValueError, KeyError, AttributeError) as e:
                 self.logger.error(f"Error processing record {record_id}: {str(e)}", exc_info=True)
                 self.validator.add_issue(record_id, "error", ValidationCategory.PROCESSING_ERROR, "record", f"Error processing record: {str(e)}")
+                if counseling_record is not None:
+                    # Half built, so never valid; the error above explains it.
+                    self._leave_out(root, counseling_record)
                 self.validator.record_processed(success=False)
 
             self._maybe_report_progress(row_index, total_rows)

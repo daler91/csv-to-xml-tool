@@ -98,7 +98,11 @@ Inside `src/`, a conversion is always the same seven steps:
    file can still be filed. Each case is an issue against the row.
 7. **Validate the document** — `src/xml_validator.py` runs lxml against the
    bundled XSD with `resolve_entities=False`, and `src/xsd_error_mapping.py`
-   translates each schema error back to a CSV row and column name.
+   translates each schema error back to a CSV row and column name. The
+   converters run this check themselves as a safety net under step 6
+   (`BaseConverter._write_valid_xml`): a record that still fails is left out
+   with an error naming its row, so the file produced is one SBA accepts. The
+   worker validates the file again for the results page.
 
 Step 7 is the part worth protecting. An unmapped lxml error reads
 `Line 20: Element 'ZipCode': '' is not a valid value`. Mapped, it reads

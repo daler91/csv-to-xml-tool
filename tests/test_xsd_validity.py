@@ -9,6 +9,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from defusedxml import ElementTree as SafeET
 
@@ -17,6 +18,7 @@ from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.training_converter import TrainingConverter
 from src.logging_util import ConversionLogger
+from src.schema_rules import SchemaGuard
 from src.validation_report import ValidationTracker
 from src.xml_validator import validate_against_xsd
 
@@ -245,6 +247,48 @@ class TrainingLeftOutTest(_ValidityCase):
         with self.assertRaises(EmptyCSVError):
             self.converter.convert(csv_path, self.xml_path)
         self.assertFalse(os.path.exists(self.xml_path))
+
+
+class SafetyNetTest(_ValidityCase):
+    """D2: the final XSD check catches what the schema guard misses -- here
+    simulated by switching the guard off -- and leaves those records out."""
+
+    converter_class = TrainingConverter
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(SchemaGuard, "enforce", return_value=[])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_failing_record_is_left_out_with_its_row(self):
+        long_id = "E" * 21
+        root = self.convert([_make_training_row(**{"Class/Event ID": "EVT-001"}),
+                             _make_training_row(**{"Class/Event ID": long_id}),
+                             _make_training_row(**{"Class/Event ID": "EVT-003"})])
+        self.assertEqual([r.findtext("PartnerTrainingNumber") for r in root], ["EVT-001", "EVT-003"])
+        self.assertEqual([source["row"] for source in self.converter.record_sources], [1, 3])
+        errors = self.issues(severity="error")
+        self.assertEqual([(e["record_id"], e["event_id"]) for e in errors], [(long_id, long_id)])
+        self.assertTrue(errors[0]["message"].startswith(f"Row 2 (Event {long_id}): "))
+        self.assertIn("record was left out of the XML", errors[0]["message"])
+        summary = self.validator.get_summary()
+        self.assertEqual((summary["total_records"], summary["successful_records"]), (3, 2))
+
+    def test_nothing_left_to_file_fails_the_conversion(self):
+        csv_path = self.write_csv([_make_training_row(**{"Class/Event ID": "E" * 21})])
+        with self.assertRaises(EmptyCSVError):
+            self.converter.convert(csv_path, self.xml_path)
+        self.assertFalse(os.path.exists(self.xml_path))
+        self.assertIn("None of the records passed SBA's schema",
+                      self.issues(severity="error")[-1]["message"])
+
+    def test_without_the_schema_the_file_is_written_unchecked(self):
+        with mock.patch.dict(os.environ, {"SCHEMAS_DIR": self.dir}):
+            self.converter.convert(
+                self.write_csv([_make_training_row(**{"Class/Event ID": "E" * 21})]), self.xml_path)
+        self.assertTrue(os.path.exists(self.xml_path))
+        self.assertEqual(self.issues(severity="error"), [])
 
 
 class TrainingClientRaceTest(_ValidityCase):

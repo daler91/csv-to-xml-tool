@@ -264,7 +264,8 @@ class CounselingConverter(BaseConverter):
             try:
                 counseling_record = create_element(root, 'CounselingRecord')
                 self._record_columns = {}
-                self.record_sources.append({"row": row_index, "columns": self._record_columns})
+                self.record_sources.append({"row": row_index, "event": row.get('Activity ID', ''),
+                                            "columns": self._record_columns})
                 create_element(counseling_record, 'PartnerClientNumber', record_id)
 
                 location = create_element(counseling_record, 'Location')
@@ -322,12 +323,11 @@ class CounselingConverter(BaseConverter):
             raise EmptyCSVError("No rows could be converted.")
 
         try:
-            tree = ET.ElementTree(root)
-            ET.indent(tree, space="  ")
-            tree.write(output_path, encoding='utf-8', xml_declaration=True)
-            self.logger.info(f"XML file created successfully with {processed_records} records at {output_path}")
-            if skipped_records > 0:
-                self.logger.info(f"Skipped {skipped_records} records due to validation errors.")
+            left_out = self._write_valid_xml(root, output_path)
+            self.logger.info(f"XML file created successfully with {processed_records - left_out} "
+                             f"records at {output_path}")
+            if skipped_records + left_out > 0:
+                self.logger.info(f"Skipped {skipped_records + left_out} records due to validation errors.")
         except OSError as e:
             self.logger.error(f"Failed to write XML file: {str(e)}")
             self.validator.add_issue("file", "error", ValidationCategory.FILE_WRITE, "output_file", f"Failed to write XML file: {str(e)}")

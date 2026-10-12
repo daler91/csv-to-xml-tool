@@ -360,6 +360,18 @@ def _locate(record, record_sources: list[dict] | None, element: str | None,
     return row_number, record_id, parent_tag, columns
 
 
+def errors_by_record(xml_source: str, errors: list[str], schema_type: str,
+                     record_sources: list[dict] | None = None) -> dict[int, list[dict]]:
+    """build_error_details' output grouped by the record each error falls in:
+    {position: [detail, ...]}, positions counting the schema type's records
+    from 1 in document order. Errors outside every record are left out."""
+    grouped: dict[int, list[dict]] = {}
+    for position, detail in _details(xml_source, errors, schema_type, record_sources):
+        if position is not None:
+            grouped.setdefault(position, []).append(detail)
+    return grouped
+
+
 def build_error_details(xml_source: str, errors: list[str], schema_type: str,
                         record_sources: list[dict] | None = None) -> list[dict]:
     """Map validator error strings back to records and CSV columns.
@@ -380,12 +392,17 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str,
         unknown element, unparseable XML, unknown schema type) degrade to None
         fields — never an exception.
     """
+    return [detail for _, detail in _details(xml_source, errors, schema_type, record_sources)]
+
+
+def _details(xml_source: str, errors: list[str], schema_type: str,
+             record_sources: list[dict] | None):
+    """Yield (record position or None, detail dict) per error, in order."""
     shape = _RECORD_SHAPES.get(schema_type)
     element_fields = _ELEMENT_FIELD_MAPS.get(schema_type, {})
     records = _enumerate_records(xml_source, shape[0], shape[1]) if shape else []
     id_kind = shape[2] if shape else "Record"
 
-    details = []
     for raw in errors:
         line = None
         message = raw
@@ -397,12 +414,13 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str,
         element_match = _ELEMENT_RE.match(message)
         element = element_match.group(1) if element_match else None
 
+        record = _record_for_line(records, line)
         row_number, record_id, parent_tag, columns = _locate(
-            _record_for_line(records, line), record_sources, element, line)
+            record, record_sources, element, line)
         field_label, csv_column = _resolve_field(element, parent_tag, element_fields,
                                                  columns, schema_type)
         restatement = _restatement(message, element)
-        details.append({
+        yield (record[1] if record else None), {
             "line": line,
             "row_number": row_number,
             "record_id": record_id,
@@ -413,5 +431,4 @@ def build_error_details(xml_source: str, errors: list[str], schema_type: str,
             "friendly_message": _friendly_message(
                 row_number, record_id, id_kind, field_label, csv_column, restatement
             ),
-        })
-    return details
+        }

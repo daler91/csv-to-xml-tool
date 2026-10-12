@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.xsd_error_mapping import build_error_details
+from src.xsd_error_mapping import build_error_details, errors_by_record
 
 # Explicit fixture strings so source lines are known; tests look line numbers
 # up by content (via _line_of) so edits don't silently break the assertions.
@@ -152,6 +152,25 @@ def test_line_outside_any_record_is_unmappable():
     assert detail["friendly_message"] == (
         "'Counseling Information': Missing child element(s)."
     )
+
+
+def test_errors_are_grouped_by_record_position():
+    zip_line = _line_of(COUNSELING_XML, "<ZipCode>BAD</ZipCode>")
+    date_line = _line_of(COUNSELING_XML, "<DateCounseled>2025-13-45")
+    errors = [
+        "Line 2: Element 'CounselingInformation': Missing child element(s).",
+        f"Line {zip_line}: Element 'ZipCode': The value 'BAD' is not accepted.",
+        f"Line {date_line}: Element 'DateCounseled': '2025-13-45' is not a valid value.",
+        "Validation error",
+    ]
+    # The record_sources row (the CSV row) shows in the details, but the key
+    # stays the record's position in the XML -- what a caller removes by.
+    grouped = errors_by_record(COUNSELING_XML, errors, "counseling",
+                               [{"row": 1}, {"row": 5}])
+
+    assert list(grouped) == [2]
+    assert [d["element"] for d in grouped[2]] == ["ZipCode", "DateCounseled"]
+    assert {d["row_number"] for d in grouped[2]} == {5}
 
 
 def test_error_without_line_prefix_degrades_to_raw_message():

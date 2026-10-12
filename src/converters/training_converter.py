@@ -17,11 +17,13 @@ class TrainingConverter(BaseConverter):
     """
     Converter for Management Training Report data.
     """
+    SCHEMA_TYPE = "training"
+
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.config = TrainingConfig()
         self.general_config = GeneralConfig()
-        self._schema_guard = SchemaGuard("training", validator, logger)
+        self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
         self._first_rows = {}
         self._current_record = None
 
@@ -92,13 +94,6 @@ class TrainingConverter(BaseConverter):
         self.logger.info(f"Found {len(event_groups)} unique training events.")
         return event_groups, event_id_col
 
-    def _write_xml_output(self, root, output_path):
-        """Format and write XML tree to output file."""
-        tree = ET.ElementTree(root)
-        ET.indent(tree, space="  ")
-        tree.write(output_path, encoding='utf-8', xml_declaration=True)
-        self.logger.info(f"XML file successfully created at {output_path}")
-
     def _warn_fabricated_default(self, event_id, field, default_value, element_label):
         """Record a FABRICATED_DEFAULT warning for a value substituted for a blank cell.
 
@@ -145,7 +140,8 @@ class TrainingConverter(BaseConverter):
 
         record = create_element(root, 'ManagementTrainingRecord')
         self._current_record = record
-        self.record_sources.append({"row": self._first_rows.get(event_id), "columns": {}})
+        self.record_sources.append({"row": self._first_rows.get(event_id), "event": str(event_id),
+                                    "columns": {}})
         create_element(record, 'PartnerTrainingNumber', str(event_id))
 
         funding_source = self._get_column_value(first_record, 'funding_source')
@@ -267,7 +263,8 @@ class TrainingConverter(BaseConverter):
                 f"None of the {total_events} event(s) could be converted; see the errors above.")
             raise EmptyCSVError("No events could be converted.")
 
-        self._write_xml_output(root, output_path)
+        self._write_valid_xml(root, output_path)
+        self.logger.info(f"XML file successfully created at {output_path}")
 
     def _build_location_section(self, parent, record):
         training_location = create_element(parent, 'TrainingLocation')

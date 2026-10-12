@@ -337,8 +337,8 @@ _VALUE_ISSUE_CATEGORIES = {
                             "Characters XML cannot carry are replaced with a space."),
 }
 _REQUIRED_INVALID_DETAIL = (
-    "This field is required, so these records are left out of the XML until the "
-    "values are corrected in the CSV."
+    "SBA's schema cannot accept these values here, so these records are left out "
+    "of the XML until the values are corrected in the CSV."
 )
 
 

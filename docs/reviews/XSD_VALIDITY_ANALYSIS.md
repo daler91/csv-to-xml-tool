@@ -5,6 +5,14 @@ Date: 2026-10-11, against `master` at `2574104` (after PR #133).
 Markers: **`[OPEN]`** reproduced at that commit; **`[FIXED]`** resolved (keep the entry,
 add the fix underneath).
 
+**Status (PR #135):** every finding below is fixed and decisions D1–D4 are taken as
+recommended. Rerunning the fuzzing on the fixed code, every one of 5,400 generated
+files across the three converters, with both input mixes, validates against the supplied
+XSDs. With realistic input no row is left out. With adversarial input the only rows left
+out are those with an ID over 20 characters or a bad `LocationCode` (D1), and the final
+XSD check (D2) never had to step in. `tests/test_xsd_validity_fuzz.py` keeps a seeded
+version of that run as a regression test, and `tests/test_xsd_validity.py` pins each fix.
+
 ## Question
 
 The SBA validates each uploaded file against two XSDs. Does every file this tool
@@ -78,7 +86,7 @@ than a real export would. What matters is that one such row fails the whole file
 
 ## Findings
 
-### V.1 Race answers outside SBA's nine codes fail the file — `[OPEN]` — HIGH (reported)
+### V.1 Race answers outside SBA's nine codes fail the file — `[FIXED]` — HIGH (reported)
 
 `Race/Code` is required and limited to Asian, Black or African American, Middle
 Eastern, Native American/Alaska Native, Native Hawaiian/Other Pacific Islander, North
@@ -104,7 +112,12 @@ Codes, at most 80 characters). Record a warning that says so. This files what th
 person actually said, without guessing a category. Where several races are listed,
 recognised codes are kept alongside it.
 
-### V.2 "Other" text with no code — `[OPEN]` — HIGH (silent)
+> **Fixed** (`1301456`): `data_cleaning.classify_race_label` sends refusal wordings to
+> `Prefer not to say` and any other unrecognised label to `Prefer to Self-Describe`, with
+> the text in `SelfDescribedRace` and a warning saying so. "Prefer to Self-Describe: …"
+> keeps the description without a warning.
+
+### V.2 "Other" text with no code — `[FIXED]` — HIGH (silent)
 
 `CounselingSeeking` and `Media` must start with at least one `<Code>`. When the code
 column is blank but the matching "Other"/"specify" column has text, the converter
@@ -125,7 +138,11 @@ and `ReferredClient` already work this way.
 
 **Fix, Media:** this depends on decision D3 below.
 
-### V.3 A code cell holding only separators — `[OPEN]` — MEDIUM (silent)
+> **Fixed** (`fb8dcd3`): CounselingSeeking gets `<Code>Other</Code>` before detail text
+> given without an answer. "Internet (specify)" now fills the `Internet` element (D3), so
+> `Media` only ever holds codes.
+
+### V.3 A code cell holding only separators — `[FIXED]` — MEDIUM (silent)
 
 A cell of `;` or ` ; ` is not blank, so the converter's defaults don't apply, but it
 splits into no codes.
@@ -139,7 +156,10 @@ No error is recorded.
 **Fix:** treat an empty split as a blank cell, so the existing defaults (with their
 fabricated-default warnings) apply.
 
-### V.4 Repeat limits aren't enforced — `[OPEN]` — LOW (silent)
+> **Fixed** (`fb8dcd3`): `Services Provided`, `Training Topic` and `Language(s) Used`
+> that split into nothing get the same defaults and warnings as a blank cell.
+
+### V.4 Repeat limits aren't enforced — `[FIXED]` — LOW (silent)
 
 The guard checks values but not `maxOccurs`.
 
@@ -150,7 +170,10 @@ The guard checks values but not `maxOccurs`.
 **Fix:** load `maxOccurs` into `schema_rules.ElementRule` and drop repeats beyond it
 with a warning, as `_cap_single_code` already does for the two single-code fields.
 
-### V.5 Required identifiers over 20 characters, or a bad `LocationCode` — `[OPEN]` — LOW (reported)
+> **Fixed** (`7630030`): `ElementRule.max_occurs` is loaded from the XSD. The guard keeps
+> the first values up to the limit and warns with the ones it left out.
+
+### V.5 Required identifiers over 20 characters, or a bad `LocationCode` — `[FIXED]` — LOW (reported)
 
 `PartnerClientNumber` (Contact ID), `PartnerSessionNumber` (Activity ID or Member ID)
 and `PartnerTrainingNumber` (Class/Event ID) are limited to 20 characters. They are
@@ -164,7 +187,12 @@ column whose value isn't an integer from 1 to 9,999,999 also fails.
 
 **Fix:** decision D1.
 
-### V.6 Valid, but empty: blank Activity ID or First Name — `[OPEN]` — MEDIUM
+> **Fixed** (`7630030`): `SchemaGuard.enforce` returns why a record can't be filed, and the
+> converters leave that record out with an error naming its row. The rest of the file
+> stays valid. "Total Records" now counts every row, so the ones left out are the
+> difference from "Successful". A file with nothing left fails like an empty CSV.
+
+### V.6 Valid, but empty: blank Activity ID or First Name — `[FIXED]` — MEDIUM
 
 A blank `Activity ID` writes `<PartnerSessionNumber/>`, and a blank `First Name` writes
 `<First/>`.
@@ -177,14 +205,31 @@ A blank `Activity ID` writes `<PartnerSessionNumber/>`, and a blank `First Name`
 **Fix:** report a blank Activity ID as an error (or apply D1's choice to it), and a
 blank First Name as a warning.
 
-### V.7 An invalid file can still be downloaded — `[OPEN]` — INFO
+> **Fixed** as warnings. Activity ID is not a required column, and the sample CSV the app
+> ships has none, so an error or a left-out row would have rejected files that were fine
+> before.
+> - A blank `Activity ID` is a warning on its row, and a file without the column gets one
+>   warning.
+> - On the training-client form, a row with neither `Member ID` nor `Class/Event ID` gets
+>   a warning.
+> - A blank `First Name` is a warning, as a blank `Last Name` already was.
+> - The preview's data-quality checks count both before conversion.
+
+### V.7 An invalid file can still be downloaded — `[FIXED]` — INFO
 
 The results page shows a red "XML failed XSD validation (N errors)" banner with the
 mapped row and column for each error, but the download is not gated. Once V.1–V.4 are
 fixed, this should only happen for D1's cases. Decision D2 is about closing it
 completely.
 
+> **Fixed** by D2 (`8be1055`). The converters validate the file they wrote, and any record
+> that fails is left out with the XSD message mapped to its row and column. The banner
+> remains for errors outside every record, which leaving records out can't fix.
+
 ## Decisions needed
+
+> **Taken as recommended** (PR #135): D1 leave the row out, D2 add the safety net, D3
+> option a, D4 self-described.
 
 - **D1: rows that can't be made valid.** Applies to a required value the tool must not
   invent or truncate, such as an over-long ID or a bad `LocationCode`.

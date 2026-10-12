@@ -57,6 +57,11 @@ catches `Zip Code` vs `Zip/Postal Code`.
 > `Ethnicity:` really does end with a colon — that is the Salesforce export
 > header, and it is matched literally.
 
+`Activity ID` is not required, but it is the session number SBA receives
+(`PartnerSessionNumber`). A blank cell files an empty one and is reported as a
+warning on its row; a file without the column gets one warning instead. A blank
+`First Name` is reported the same way as a blank `Last Name`.
+
 **Conditional (9).** Each is required only in a particular case:
 
 | Column | Required when |
@@ -199,7 +204,8 @@ fail schema validation. The accepted list is `VALID_FUNDING_SOURCES` in
 
 **Required (2):** `Class/Event ID`, `Contact ID`.
 **Conditional (1):** `Member ID` — the per-attendee session id. Without it, every
-attendee at an event shares the event id as their session number.
+attendee at an event shares the event id as their session number; a row with
+neither is reported as a warning.
 
 **Expected set (28 columns),** in the order the converter declares them:
 

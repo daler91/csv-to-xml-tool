@@ -111,6 +111,23 @@ def test_counseling_data_quality_skips_absent_fabrication_columns():
     assert result["data_quality"] == {"total_rows": 2, "checks": []}
 
 
+def test_counseling_data_quality_counts_blank_names_and_session_numbers():
+    csv = (
+        "Contact ID,Last Name,First Name,Activity ID,Date\n"
+        "C-1,Smith,,A-1,2025-01-15\n"
+        "C-2,Jones,Amy, ,2025-01-15\n"
+        ",Lee,,,2025-01-15\n"
+    )
+    checks = _checks_by_key(read_csv_preview(csv, "counseling"))
+
+    # The third row has no Contact ID, so it is skipped whole and counted only
+    # as that.
+    assert checks["missing_first_name"]["count"] == 1
+    assert checks["missing_first_name"]["severity"] == "warning"
+    assert checks["missing_activity_id"]["count"] == 1
+    assert checks["missing_activity_id"]["column"] == "Activity ID"
+
+
 def test_counseling_data_quality_covers_rows_beyond_the_preview_window():
     # 25 data rows (> the 20-row preview window); the last one is missing its
     # Contact ID and must still be counted.

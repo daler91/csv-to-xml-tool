@@ -102,6 +102,16 @@ class TrainingClientConverter(CounselingConverter):
         member_id = (row.get('Member ID') or '').strip()
         return member_id or super()._partner_session_number(row)
 
+    def _check_session_column(self, headers):
+        """The session number is the Member ID, else the Class/Event ID, so
+        there is no one column to miss; a row with neither is reported below."""
+
+    def _warn_blank_session_number(self, record_id):
+        self.validator.add_issue(
+            record_id, "warning", ValidationCategory.MISSING_FIELD, "Member ID",
+            "No Member ID or Class/Event ID, so this attendee's session is filed with an "
+            "empty session number (PartnerSessionNumber).")
+
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = super()._build_counselor_record_section(parent, row, record_id)
         self._build_training_session(counselor_record, row)

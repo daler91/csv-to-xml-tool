@@ -40,6 +40,7 @@ class CounselingConverter(BaseConverter):
         self.config = CounselingConfig()
         self.general_config = GeneralConfig()
         self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
+        self._has_activity_column = True  # set per file by _check_session_column
         # The record being built's column-per-element overrides (see _mapped).
         self._record_columns = {}
         # Fabrication-risk fields (plan 1.3): when one of these is blank/missing
@@ -172,7 +173,27 @@ class CounselingConverter(BaseConverter):
     def _partner_session_number(self, row):
         """Hook for subclasses to choose the PartnerSessionNumber value.
         Defaults to the Activity ID."""
-        return row.get('Activity ID', '')
+        return (row.get('Activity ID') or '').strip()
+
+    def _check_session_column(self, headers):
+        """Without an 'Activity ID' column every session is filed with an empty
+        PartnerSessionNumber. That validates, but leaves SBA nothing to tell
+        the sessions apart by, so it is said once for the file rather than on
+        every row (see _warn_blank_session_number)."""
+        self._has_activity_column = 'Activity ID' in headers
+        if not self._has_activity_column:
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.MISSING_FIELD, "Activity ID",
+                "The CSV has no 'Activity ID' column, so every session is filed with an empty "
+                "session number (PartnerSessionNumber). Add the column if your export has it.",
+                event_id="")
+
+    def _warn_blank_session_number(self, record_id):
+        if self._has_activity_column:
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.MISSING_FIELD, "Activity ID",
+                "Blank Activity ID, so this session is filed with an empty session number "
+                "(PartnerSessionNumber).")
 
     def _first_time(self, record_id, field):
         """True the first time (record_id, field) is seen in the current row."""
@@ -222,6 +243,7 @@ class CounselingConverter(BaseConverter):
             raise EmptyCSVError("CSV has no data rows to convert.")
 
         self._warn_constant_defaults(set(rows[0]))
+        self._check_session_column(set(rows[0]))
 
         root = ET.Element('CounselingInformation')
         # One entry per CounselingRecord, in document order: the CSV row it was
@@ -653,7 +675,10 @@ class CounselingConverter(BaseConverter):
         self._build_export_countries(client_intake, row, record_id)
 
     def _build_counselor_identity(self, counselor_record, row, record_id):
-        create_element(counselor_record, 'PartnerSessionNumber', self._partner_session_number(row))
+        session_number = self._partner_session_number(row)
+        if not session_number:
+            self._warn_blank_session_number(record_id)
+        create_element(counselor_record, 'PartnerSessionNumber', session_number)
 
         # FundingSource is an XSD enumeration of SBA disaster/program codes. A
         # partner's own funding label ("Federal", "CORE") is not in it, so an

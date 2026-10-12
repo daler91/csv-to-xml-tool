@@ -291,6 +291,35 @@ class SafetyNetTest(_ValidityCase):
         self.assertEqual(self.issues(severity="error"), [])
 
 
+class BlankIdentityTest(_ValidityCase):
+    """V.6: a blank Activity ID or First Name validates but files an empty
+    element; both are now reported."""
+
+    def session_warnings(self):
+        return [(i["record_id"], i["message"]) for i in self.issues("Activity ID", "warning")]
+
+    def test_a_blank_activity_id_is_reported(self):
+        root = self.convert([_make_counseling_row(), _make_counseling_row(**{"Contact ID": "C-002",
+                                                                             "Activity ID": "  "})])
+        self.assertEqual([r.findtext("CounselorRecord/PartnerSessionNumber") for r in root],
+                         ["A-001", ""])
+        warnings = self.session_warnings()
+        self.assertEqual([record_id for record_id, _ in warnings], ["C-002"])
+        self.assertIn("empty session number", warnings[0][1])
+
+    def test_no_activity_id_column_is_reported_once(self):
+        rows = [_make_counseling_row(**{"Contact ID": f"C-{n}"}) for n in range(3)]
+        for row in rows:
+            del row["Activity ID"]
+        self.convert(rows)
+        self.assertEqual([record_id for record_id, _ in self.session_warnings()], ["file"])
+
+    def test_a_blank_first_name_is_reported(self):
+        root = self.convert_row(**{"First Name": ""})
+        self.assertEqual(root.findtext(".//ClientNamePart1/First"), "")
+        self.assertEqual([i["message"] for i in self.issues("First Name")], ["Missing First Name."])
+
+
 class TrainingClientRaceTest(_ValidityCase):
     converter_class = TrainingClientConverter
 
@@ -303,6 +332,17 @@ class TrainingClientRaceTest(_ValidityCase):
     def test_a_separator_only_topic_still_gets_a_code(self):
         root = self.convert([_make_training_client_row(**{"Training Topic": ";"})])
         self.assertEqual(len(root.findall(".//CounselingProvided/Code")), 1)
+
+    def test_the_event_id_stands_in_for_a_blank_member_id(self):
+        root = self.convert([_make_training_client_row(**{"Member ID": ""})])
+        self.assertEqual(root.findtext(".//CounselorRecord/PartnerSessionNumber"), "701Pe00000vtCVy")
+        self.assertEqual(self.issues("Member ID"), [])
+
+    def test_no_member_or_event_id_is_reported(self):
+        self.convert([_make_training_client_row(**{"Member ID": "", "Class/Event ID": ""})])
+        warnings = self.issues("Member ID", "warning")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("empty session number", warnings[0]["message"])
 
     def test_a_member_id_over_twenty_characters_leaves_the_attendee_out(self):
         root = self.convert([_make_training_client_row(),

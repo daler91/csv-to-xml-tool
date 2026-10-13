@@ -277,7 +277,11 @@ class TestTrainingClientConverter(unittest.TestCase):
         cib = root.find('CounselingRecord/ClientIntake/CurrentlyInBusiness')
         self.assertEqual(cib.text, 'No')
         downgraded = [i for i in self.validator.issues if i['category'] == 'downgraded_value']
-        self.assertEqual(len(downgraded), 1)
+        self.assertEqual([i['field_name'] for i in downgraded],
+                         ['CurrentlyInBusiness', 'Legal Entity of Business'])
+        # The legal entity given is not filed for a client who isn't in
+        # business, and the report says so.
+        self.assertIn("'LLC' was left out of the XML", downgraded[1]['message'])
 
     def test_defaults_applied_financial(self):
         """Test that financial fields default to 0."""

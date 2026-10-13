@@ -93,10 +93,12 @@ Two behaviours to be aware of:
   the converter sorts explicitly. This is load-bearing: the earlier pandas
   implementation used `groupby(sort=True)`, and output has always been ordered.
   The characterization goldens in `tests/golden/` exist to pin this.
-- **Event-level fields come from the first row of each group**
-  (`training_converter.py:142`). If two rows for the same event disagree about
-  the event name or start date, the first row wins and the disagreement is not
-  reported. See [Known gaps](#known-gaps).
+- **Event-level fields come from the first row of each group that has them**
+  (`TrainingConverter._event_value`). A funding source or cosponsor only a
+  later row gives is still filed. If rows for the same event disagree about the
+  event name, start date or another event field, the first value wins and the
+  disagreement is reported as a warning. The location is the first row with a
+  complete city, state and ZIP.
 
 Column matching for this converter is **alias-based**: `TrainingConfig.COLUMN_MAPPING`
 lists several accepted spellings per field (`Cosponsor` / `CosponsorsName` /
@@ -127,7 +129,7 @@ so the results page can show a before/after diff for each value.
 
 | Rule | Behaviour |
 |---|---|
-| Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD` |
+| Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD`. A time after the date, as Salesforce exports a Date/Time field (`1/15/2025 10:30 AM`, `2025-01-15T14:30:00.000Z`), is dropped; an optional date that can't be read is left out with a warning |
 | Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE` |
 | Phone numbers | Reduced to digits; a leading country-code digit is dropped from an 11-digit number; too-short numbers are rejected rather than emitted malformed |
 | Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision |
@@ -138,7 +140,7 @@ so the results page can show a before/after diff for each value.
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
-| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
+| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Whether a value is valid is decided by libxml2 against the element's own type, so the guard and SBA's validation never disagree about a pattern, a number or a date. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
 
 ### Issue categories
 
@@ -214,7 +216,8 @@ TrainingConfig.DEFAULT_LOCATION                = {"city": "Des Moines", "state":
 TrainingConfig.DEFAULT_START_DATE              = "2023-12-12"
 ```
 
-Every XML file carries `<LocationCode>249003</LocationCode>`. Training files carry
+Every XML file carries `<LocationCode>249003</LocationCode>` unless the CSV has a
+`LocationCode` column (all three converters read one). Training files carry
 `<City>Des Moines</City>` and `<Code>Women's Business Center</Code>`. Any event
 with an unparseable start date becomes 2023-12-12.
 
@@ -263,8 +266,9 @@ From [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md), still ope
 
 - **Training demographics count rows, not distinct people.** Total is
   `max(len(rows), 1)`. An attendee listed twice is counted twice.
-- **Event-level fields are taken from the first row of the group.** Rows
-  disagreeing about event name, type or start date are silently overruled.
+- **A training event's location is read from the `City`/`State`/`Zip` columns**,
+  which in a campaign-member export are each attendee's mailing address. The
+  first complete address among the event's rows is filed as the event's.
 - **The counseling converter still reads ~70 headers as string literals**
   (§5.2), so a differently-named column must be mapped, not auto-detected.
 - **`training` has no exact-match required-column check** in the worker, on

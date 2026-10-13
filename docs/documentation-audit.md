@@ -201,6 +201,8 @@ problems survived the rewrite** in dict form:
   people**. An attendee listed twice is counted twice.
 - `first_record = group_rows[0]` (`training_converter.py:142`) — event-level
   fields come from the first row; disagreeing rows are silently overruled.
+  *(Fixed since by the second XSD validity pass: each field comes from the
+  first row that has it, and disagreements are reported.)*
 
 The findings are correct; only their mechanism description is out of date. Both
 are documented in [converters.md](./converters.md#known-gaps).

@@ -159,8 +159,10 @@ The worker does **not** hard-fail on the exact spelling for this converter,
 because the converter resolves the column through aliases and flags a missing
 event id itself. An exact-match check here would reject valid aliased uploads.
 
-**Alias-based matching.** Each field accepts several spellings; the first one
-present wins:
+**Alias-based matching.** Each field accepts several spellings; in each row,
+the first one that is filled wins. An event-level field (name, start date,
+funding source, topic, type, cosponsor) is taken from the first of the event's
+rows that has it, with a warning when rows disagree:
 
 | Field | Accepted headers |
 |---|---|
@@ -182,6 +184,9 @@ present wins:
 | Ethnicity | `Ethnicity`, `ethnicity`, `Ethnic Background` |
 
 The mapping page shows the first spelling of each as the "expected" name.
+
+An optional `LocationCode` column is also read, as on the counseling form; without
+it every event is filed under the configured location code.
 
 **No total columns are needed.** Supply one row per attendee; the converter
 computes female/male, race, ethnicity, veteran, disability and business-status

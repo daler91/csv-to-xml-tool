@@ -564,8 +564,10 @@ def map_gender_to_sex(gender_value: str | None) -> str:
     
     gender_str = str(gender_value).lower()
     # Whole words as well as the substrings: "F", "M", "Woman" and "Man" were
-    # left out of the filing with no issue, though config lists them.
-    words = set(re.findall(r"[a-z]+", gender_str))
+    # left out of the filing with no issue, though config lists them. Words of
+    # any alphabet: splitting on [a-z] cut "préfère" into "pr", "f", "re", and
+    # the stray "f" counted a declined answer as Female.
+    words = set(re.findall(r"[^\W\d_]+", gender_str))
 
     if "female" in gender_str or words & set(DEMOGRAPHIC_GENDER_KEYWORDS["female"]):
         return "Female"
@@ -630,10 +632,11 @@ def classify_races(value: str | None, keyword_map: dict) -> set:
     Each token is matched against keyword_map ({category: [keywords]}); blank and
     "Prefer not to say" tokens contribute nothing. A set is returned so a multi-race
     person counts once toward each of their categories and never twice toward one.
+    Punctuation reads as a space, so "African-American" matches 'african american'.
     """
     categories = set()
     for token in split_multi_value(value):
-        token_lower = token.lower()
+        token_lower = " ".join(re.sub(r"[^\w\s]|_", " ", token.lower()).split())
         if "prefer not" in token_lower:
             continue
         for category, keywords in keyword_map.items():
@@ -665,11 +668,17 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
     Categories may overlap: "Service Disabled Veteran" yields both the veteran and
     service-disabled-veteran keys (service-disabled veterans are a subset of all
     veterans). Blank, "No military service" and "Prefer not to say" yield an empty set.
+
+    A "Veteran Status" checkbox exports as Yes/No (true/false, 1/0): yes is a
+    veteran and no is no service, as map_military_status_to_xsd files them on
+    the counseling form. Training counted no veterans for it.
     """
     if is_empty(value):
         return set()
+    if is_affirmative(value):
+        return {"veteran"} & set(keyword_map)
     v = str(value).strip().lower()
-    if ("prefer not" in v or "no military" in v or v in {"none", "n/a", "na"}
+    if ("prefer not" in v or "no military" in v or v in {"none", "n/a", "na"} or is_negative(value)
             or _NEGATED_VETERAN.search(v)):
         return set()
     categories = set()

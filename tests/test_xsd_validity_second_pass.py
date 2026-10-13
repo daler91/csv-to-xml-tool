@@ -545,5 +545,59 @@ class IdentifierCharactersTest(_ValidityCase):
         self.assertEqual(len(self.issues("Member ID", "warning")), 1)
 
 
+class TrainingDemographicsTest(_ValidityCase):
+    """X.6: answers the training counts missed without a word -- a Veteran
+    Status checkbox, 'African-American', 'Alaskan Native' -- and accented
+    gender answers counted by their stray letters."""
+
+    converter_class = TrainingConverter
+
+    def trained(self, rows):
+        root = self.convert([_make_training_row(**row) for row in rows])
+        return {e.tag: e.text for e in root.find(".//NumberTrained") if len(e) == 0}
+
+    def test_a_veteran_status_checkbox_counts_veterans(self):
+        counts = self.trained([{"Veteran Status": "Yes"}, {"Veteran Status": "true"}, {"Veteran Status": "No"}])
+        self.assertEqual(counts.get("Veterans"), "2")
+        self.assertEqual(self.issues("Military Status"), [])
+
+    def test_hyphenated_and_alaskan_race_labels_are_counted(self):
+        root = self.convert([_make_training_row(Race="African-American"),
+                             _make_training_row(Race="Alaskan Native")])
+        race = root.find(".//NumberTrained/Race")
+        self.assertEqual({e.tag: e.text for e in race},
+                         {"BlackOrAfricanAmerican": "1", "NativeAmericanOrAlaskaNative": "1"})
+        self.assertEqual(root.findtext(".//NumberUnderservedTrained/Total"), "2")
+        self.assertEqual(self.issues("Race"), [])
+
+    def test_race_answers_no_count_takes_are_reported(self):
+        root = self.convert([_make_training_row(Race=race) for race in
+                             ("Two or More Races", "Multiracial", "Hispanic or Latino", "Decline to answer",
+                              "Two or More Races")])
+        self.assertIsNone(root.find(".//NumberTrained/Race"))
+        warning, = self.issues("Race", "warning")
+        self.assertEqual(warning["message"],
+                         "'Two or More Races', 'Multiracial', 'Hispanic or Latino' fit none of SBA's race "
+                         "counts, so 4 attendee answers were counted under no race category.")
+
+    def test_military_answers_no_count_takes_are_reported(self):
+        self.trained([{"Veteran Status": "Retired"}, {"Veteran Status": "Prefer not to say"}])
+        warning, = self.issues("Military Status", "warning")
+        self.assertIn("'Retired' fits none of SBA's military counts", warning["message"])
+
+    def test_accented_gender_answers_are_not_read_by_their_letters(self):
+        counts = self.trained([{"Gender": "Préfère ne pas répondre"}, {"Gender": "Más de uno"},
+                               {"Gender": "F"}])
+        self.assertEqual((counts.get("Female"), counts.get("Male")), ("1", None))
+
+    def test_counseling_reads_the_hyphenated_label_too(self):
+        self.converter = CounselingConverter(self.converter.logger, self.validator)
+        self.converter_class = CounselingConverter
+        root = self.convert_row(Race="African-American")
+        self.assertEqual([c.text for c in root.findall(".//ClientIntake/Race/Code")],
+                         ["Black or African American"])
+        self.assertEqual(self.issues("Race"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

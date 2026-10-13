@@ -532,6 +532,33 @@ class TrainingConverter(BaseConverter):
 
         return race_counts, hispanic, non_hispanic, minorities
 
+    def _report_uncounted(self, rows, race_col, military_col):
+        """One warning per event for the Race and Military Status answers no
+        count takes, naming them: "Two or More Races" or "Retired" left the
+        attendee out of every race or military count without a word. Answers
+        that decline the question, or say there was no military service,
+        belong in no count and are not reported."""
+        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
+        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
+        races = [label for row in rows if race_col
+                 for label in data_cleaning.split_multi_value(row.get(race_col))
+                 if not data_cleaning.classify_races(label, race_keywords)
+                 and data_cleaning.classify_race_label(label)[0] != data_cleaning.RACE_PREFER_NOT_TO_SAY]
+        statuses = [row.get(military_col).strip() for row in rows if military_col
+                    and not data_cleaning.is_empty(row.get(military_col))
+                    and not data_cleaning.classify_military(row.get(military_col), military_keywords)
+                    and not data_cleaning.map_military_status_to_xsd(row.get(military_col))]
+        event_id = str(self.validator.current_record_id)
+        for key, answers, counts in (('race', races, "race"), ('military_status', statuses, "military")):
+            if not answers:
+                continue
+            shown = ", ".join(f"'{answer}'" for answer in dict.fromkeys(answers))
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.INVALID_VALUE, self._header(key),
+                f"{shown} {'fits' if len(set(answers)) == 1 else 'fit'} none of SBA's {counts} counts, "
+                f"so {len(answers)} attendee answer{'s were' if len(answers) != 1 else ' was'} "
+                f"counted under no {counts} category.")
+
     def _calculate_demographics(self, rows):
         """Aggregate per-attendee rows for one event into demographic counts.
 
@@ -554,6 +581,7 @@ class TrainingConverter(BaseConverter):
             return key if rows and key in rows[0] else None
 
         business_col = column('business_status')
+        self._report_uncounted(rows, column('race'), column('military_status'))
         female, male = self._count_sex(rows, column('gender'))
         currently_in_business, not_in_business = self._count_business_status(rows, business_col)
         military_counts = self._count_military(rows, column('military_status'), military_keywords)

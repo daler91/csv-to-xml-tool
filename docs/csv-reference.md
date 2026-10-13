@@ -222,7 +222,11 @@ it every event is filed under the configured location code.
 
 **No total columns are needed.** Supply one row per attendee; the converter
 computes female/male, race, ethnicity, veteran, disability and business-status
-totals per event.
+totals per event. A `Veteran Status` checkbox (Yes/No, true/false, 1/0) counts
+as veteran or no service, as on the counseling form. A Race or Military Status
+answer no count takes — "Two or More Races", "Multiracial", "Hispanic or
+Latino" as a race, "Retired" — is counted under none and named in one warning
+per event; answers that decline the question are not reported.
 
 **Missing location.** If city, state and a 5-digit ZIP are not all present for an
 event, the whole `TrainingLocation` falls back to

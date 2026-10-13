@@ -561,11 +561,13 @@ EXPORT_COUNTRY_LOOKUP = {code.lower(): code for code in EXPORT_COUNTRY_CODES}
 # Race keywords, shared by the training converter's per-category counts and the
 # counseling converter's Race/Code mapping. Each keyword matches at the start
 # of a word (data_cleaning.classify_races), so 'middle east' still matches
-# "Middle Eastern" but 'asian' no longer matches inside "Caucasian".
+# "Middle Eastern" but 'asian' no longer matches inside "Caucasian". The
+# answer's punctuation reads as a space ("African-American").
 RACE_KEYWORDS = {
     "asian": ['asian'],
     "black": ['black', 'african american'],
-    "native_american": ['american indian', 'alaska native', 'native american'],
+    "native_american": ['american indian', 'alaska native', 'alaskan native', 'native alaskan',
+                        'native american'],
     "pacific_islander": ['hawaiian', 'pacific islander'],
     "white": ['white', 'caucasian'],
     "middle_eastern": ['middle east'],

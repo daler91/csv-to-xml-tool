@@ -8,6 +8,7 @@ from __future__ import annotations
 import codecs
 import csv
 import logging
+import math
 import re
 from collections import Counter
 from datetime import datetime
@@ -32,6 +33,9 @@ PHONE_NUMBER_DIGITS = 10
 PHONE_WITH_COUNTRY_CODE_DIGITS = 11
 PERCENTAGE_MIN = 0
 PERCENTAGE_MAX = 100
+# Largest power of ten clean_numeric reads (see there). Far above any count or
+# dollar amount SBA's schemas accept, so nothing real is refused.
+NUMERIC_MAX_EXPONENT = 30
 
 
 def is_empty(value: Any) -> bool:
@@ -250,17 +254,32 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
     if input_formats is None or not input_formats:
         input_formats = DEFAULT_DATE_FORMATS
 
-    for fmt in input_formats:
-        try:
-            dt_object = _two_digit_year_in_past(datetime.strptime(date_str, fmt), fmt)
-            result = dt_object.strftime('%Y-%m-%d')
-            _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
-            return result
-        except ValueError:
-            continue
+    for candidate in dict.fromkeys((date_str, date_part(date_str))):
+        for fmt in input_formats:
+            try:
+                dt_object = _two_digit_year_in_past(datetime.strptime(candidate, fmt), fmt)
+                result = dt_object.strftime('%Y-%m-%d')
+                _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
+                return result
+            except ValueError:
+                continue
 
     _logger.debug("Failed to parse date '%s' with any known format", date_str)
     return default_return
+
+
+# A time after the date, as Salesforce writes a Date/Time field: "1/15/2025
+# 10:30 AM" in a report export, "2025-01-15T14:30:00.000Z" from the API.
+_TRAILING_TIME = re.compile(
+    r"(?P<date>[^\sT]+)[ T]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:[AaPp]\.?[Mm]\.?)?"
+    r"\s*(?:Z|[+-]\d{2}:?\d{2})?")
+
+
+def date_part(date_str: str) -> str:
+    """`date_str` without a trailing time of day. The forms record a date, and
+    the date is the one written, whatever time zone the time was in."""
+    match = _TRAILING_TIME.fullmatch(date_str.strip())
+    return match.group("date") if match else date_str
 
 
 def _two_digit_year_in_past(parsed: datetime, fmt: str) -> datetime:
@@ -286,7 +305,7 @@ def is_ambiguous_date(date_str: str | None) -> bool:
     """
     if is_empty(date_str):
         return False
-    s = str(date_str).strip()
+    s = date_part(str(date_str).strip())
 
     def _try(formats):
         for fmt in formats:
@@ -564,6 +583,13 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
 # value can't be mapped, which the caller treats as "omit the element" (all
 # three are minOccurs="0") rather than emitting something invalid.
 
+def declines_to_answer(value: str | None) -> bool:
+    """True for an answer that declines a demographic question: "Decline to
+    answer", "Refused", "Unknown", "Not stated" -- the wordings Race files as
+    "Prefer not to say", the value SBA renamed "Unknown/Not Stated" to."""
+    return not is_empty(value) and bool(_RACE_REFUSAL.search(str(value).strip().lower()))
+
+
 def map_ethnicity_to_xsd(value: str | None) -> str:
     """Map an ethnicity value onto the XSD enumeration.
 
@@ -572,7 +598,7 @@ def map_ethnicity_to_xsd(value: str | None) -> str:
     """
     if is_empty(value):
         return ""
-    if "prefer not" in str(value).strip().lower():
+    if declines_to_answer(value):
         return "Prefer not to say"
     bucket = classify_ethnicity(value)
     if bucket == "hispanic":
@@ -586,7 +612,7 @@ def map_disability_to_xsd(value: str | None) -> str:
     """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to say)."""
     if is_empty(value):
         return ""
-    if "prefer not" in str(value).strip().lower():
+    if declines_to_answer(value):
         return "Prefer not to say"
     if is_affirmative(value):
         return "Yes"
@@ -731,6 +757,10 @@ def clean_numeric(value: str | int | float | None) -> str:
         return ""
     if not dec.is_finite():  # reject NaN / Infinity rather than emitting them
         return ""
+    # An exponent is only ever a few digits of real data ("1.5E+6"). "1e5000"
+    # is not an amount, and writing out "1E+99999999" in full never finishes.
+    if abs(dec.adjusted()) > NUMERIC_MAX_EXPONENT:
+        return ""
 
     # Integer check BEFORE normalize(): Decimal('100').normalize() is Decimal('1E+2'),
     # so take the integral branch first to keep whole numbers as plain integers.
@@ -752,6 +782,10 @@ def clean_percentage(value: str | int | float | None) -> str:
 
     try:
         float_val = float(value_str)
+        if math.isnan(float_val):
+            # max()/min() pass NaN through in one order and drop it in the
+            # other: "NaN%" came out as 100.
+            raise ValueError(value_str)
         # Ensure it's between 0 and 100
         float_val = float(max(PERCENTAGE_MIN, min(PERCENTAGE_MAX, float_val)))
 
@@ -761,6 +795,20 @@ def clean_percentage(value: str | int | float | None) -> str:
         return str(float_val)
     except (ValueError, TypeError):
         return "0"
+
+
+def is_percentage(value: str | int | float | None) -> bool:
+    """True when ``clean_percentage`` reads ``value`` as a number, rather than
+    falling back to 0 for text such as "N/A" or "Majority"."""
+    if is_empty(value):
+        return False
+    value_str = str(value).strip()
+    if value_str.endswith('%'):
+        value_str = value_str[:-1].strip()
+    try:
+        return not math.isnan(float(value_str))
+    except (ValueError, TypeError):
+        return False
 
 
 def percentage_was_clamped(value: str | int | float | None) -> bool:

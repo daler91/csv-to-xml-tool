@@ -17,6 +17,7 @@ DATE_INPUT_FORMATS = [
     '%m/%d/%y', '%d-%m-%Y',
     '%Y/%m/%d', '%y/%m/%d',
     '%m-%d-%y',
+    '%b %d, %Y', '%B %d, %Y',
 ]
 
 # Delimiter for Salesforce multi-select picklist exports (e.g. "Race", "Services

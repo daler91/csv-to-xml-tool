@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from .. import data_cleaning
 from ..config import ValidationCategory
-from ..schema_rules import schema_path
+from ..schema_rules import schema_path, strip_illegal_xml_chars
 from ..xml_utils import write_document
 from ..xml_validator import validate_against_xsd
 from ..xsd_error_mapping import errors_by_record
@@ -94,7 +94,7 @@ class BaseConverter(abc.ABC):
             with open(input_path, "rb") as csv_file:
                 text, encoding = data_cleaning.decode_csv_bytes(csv_file.read())
             reader = data_cleaning.NormalizedDictReader(io.StringIO(text))
-            rows = list(reader)
+            rows = [self._blank_unwritable_cells(row) for row in reader]
         except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
             self._file_error(ValidationCategory.FILE_ACCESS, f"Failed to read CSV file: {e}")
@@ -109,6 +109,20 @@ class BaseConverter(abc.ABC):
             self.validator.add_issue("file", "warning", ValidationCategory.INVALID_FORMAT, name,
                                      data_cleaning.duplicate_header_message(name, count))
         return reader.fieldnames, rows
+
+    @staticmethod
+    def _blank_unwritable_cells(row: dict) -> dict:
+        """Treat a cell holding only characters XML cannot carry as blank.
+
+        SchemaGuard strips those characters from what is written, which left
+        such a Contact ID as an empty <PartnerClientNumber/> -- valid XML that
+        names nobody -- where a blank one leaves the row out with an error.
+        Blanking the cell here gives every column its blank-cell handling.
+        """
+        for column, value in row.items():
+            if value and not value.isspace() and not strip_illegal_xml_chars(value).strip():
+                row[column] = ""
+        return row
 
     def _file_error(self, category: str, message: str) -> None:
         """Record an error about the input file as a whole."""

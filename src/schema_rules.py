@@ -23,16 +23,26 @@ applied to each finished record element by :class:`SchemaGuard`:
   error, and ``enforce`` returns the reasons so the converter leaves the record
   out of the XML rather than writing a file SBA would reject.
 * Repeats beyond the schema's ``maxOccurs`` are dropped, with a warning.
+
+Whether a value is valid is finally decided by libxml2, the validator the
+output is checked with, against the element's own simple type: XSD regexes are
+a different dialect from Python's (``\\d``, ``\\w``, ``^``/``$`` and character
+classes all differ), Python's backtracking engine hangs on SBA's email
+pattern, and Python's ``Decimal``/``date`` parsers accept forms ``xs:decimal``
+and ``xs:date`` don't. The Python checks before it only canonicalize values and
+explain, in the user's terms, what is wrong.
 """
 
 from __future__ import annotations
 
+import copy
 import datetime
 import functools
 import logging
 import os
 import re
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -78,9 +88,12 @@ _ILLEGAL_XML_CODEPOINTS = frozenset([
 # str.translate table mapping each of them to a space.
 _ILLEGAL_TO_SPACE = dict.fromkeys(_ILLEGAL_XML_CODEPOINTS, " ")
 
-# xs:decimal's lexical space. Python's Decimal also accepts exponents, NaN and
-# Infinity, none of which the schema allows.
-_DECIMAL_LEXICAL = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)")
+# xs:decimal's lexical space. Python's Decimal also accepts exponents, NaN,
+# Infinity and non-ASCII digits ("１９１５３"), none of which the schema allows.
+_DECIMAL_LEXICAL = re.compile(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)")
+# xs:date's lexical space for four-digit years; fromisoformat also accepts ISO
+# basic and week dates ("20250115", "2025-W03-3"), which xs:date does not.
+_DATE_LEXICAL = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})?")
 _INTEGER_BASES = {"integer", "int", "positiveInteger", "nonNegativeInteger", "long", "short"}
 _DECIMAL_BASES = {"decimal"} | _INTEGER_BASES
 
@@ -99,11 +112,64 @@ class ElementRule:
     max_length: int | None = None
     length: int | None = None
     enumeration: tuple[str, ...] = ()
-    patterns: tuple[re.Pattern, ...] = ()
+    patterns: tuple[str, ...] = ()   # as written in the XSD; only libxml2 runs them
     min_inclusive: Decimal | None = None
     max_inclusive: Decimal | None = None
     has_children: bool = False       # complex type: its own text is not checked
     max_occurs: int | None = 1       # None: unbounded
+    # The element's simple type, as libxml2 judges it (see _ValueChecker).
+    checker: _ValueChecker | None = field(default=None, compare=False, repr=False)
+    check_tag: str | None = None
+
+
+class _ValueChecker:
+    """Validates single values with libxml2 against the simple types of one XSD.
+
+    Built once per schema: a small schema holding a copy of every named
+    simpleType and one element per distinct element type (``v0`` typed
+    ``YesNoType``, ``v1`` with a copy of an inline restriction, ...). A value is
+    accepted exactly when ``<vN>value</vN>`` validates.
+    """
+
+    def __init__(self, schema_root) -> None:
+        # The source's own prefixes, so "xs:string" in a copied type and in
+        # a type reference resolves as it does there.
+        self._root = etree.Element(f"{_XS}schema", nsmap=schema_root.nsmap)
+        for simple_type in schema_root.findall(f"{_XS}simpleType"):
+            self._root.append(copy.deepcopy(simple_type))
+        self._tags: dict[str, str] = {}
+        self._schema: etree.XMLSchema | None = None
+        # One validation at a time: the worker converts in several threads,
+        # and an XMLSchema object's error log is shared by its callers.
+        self._lock = threading.Lock()
+        self.accepts = functools.lru_cache(maxsize=65536)(self._accepts)
+
+    def tag_for(self, type_ref: str, inline_simple) -> str:
+        """The element name standing for this type, declaring it on first use."""
+        key = type_ref or etree.tostring(inline_simple, encoding="unicode")
+        if key not in self._tags:
+            tag = self._tags[key] = f"v{len(self._tags)}"
+            declaration = etree.SubElement(self._root, f"{_XS}element", name=tag)
+            if type_ref:
+                declaration.set("type", type_ref)
+            else:
+                declaration.append(copy.deepcopy(inline_simple))
+        return self._tags[key]
+
+    def compile(self) -> None:
+        self._schema = etree.XMLSchema(self._root)
+
+    def _accepts(self, tag: str, text: str) -> bool:
+        element = etree.Element(tag)
+        element.text = text
+        with self._lock:
+            try:
+                return self._schema.validate(etree.ElementTree(element))
+            except etree.XMLSchemaValidateError:
+                # libxml2 gives up on a regex that backtracks too much -- an
+                # invalid email with a dozen dotted labels, after ~2 seconds.
+                # Not a value the schema accepts, and dropping it is safe.
+                return False
 
 
 def _local(tag: str) -> str:
@@ -130,7 +196,7 @@ def _merge_restriction(restriction, simple_types: dict, facets: dict) -> None:
         if name == "enumeration":
             enumeration.append(value)
         elif name == "pattern":
-            patterns.append(re.compile(value))
+            patterns.append(value)
         elif name in ("maxLength", "length"):
             facets[{"maxLength": "max_length", "length": "length"}[name]] = int(value)
         elif name in ("minInclusive", "maxInclusive"):
@@ -181,6 +247,7 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
     simple_types = {st.get("name"): st for st in schema.findall(f"{_XS}simpleType")}
     complex_types = {ct.get("name"): ct for ct in schema.findall(f"{_XS}complexType")}
     rules: dict[tuple[str, ...], ElementRule] = {}
+    checker = _ValueChecker(schema)
 
     def visit(element, parent_path: tuple[str, ...], stack: frozenset,
               repeated: bool = False) -> None:
@@ -190,20 +257,24 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
         complex_node = None
         if type_ref.startswith("xs:"):
             facets["base"] = type_ref[3:]
+            facets["check_tag"] = checker.tag_for(type_ref, None)
         elif type_ref in simple_types:
             facets["type_name"] = type_ref
             _merge_simple_type(simple_types[type_ref], simple_types, facets)
+            facets["check_tag"] = checker.tag_for(type_ref, None)
         elif type_ref in complex_types:
             complex_node = complex_types[type_ref]
         else:
             inline_simple = element.find(f"{_XS}simpleType")
             if inline_simple is not None:
                 _merge_simple_type(inline_simple, simple_types, facets)
+                facets["check_tag"] = checker.tag_for("", inline_simple)
             complex_node = element.find(f"{_XS}complexType")
         rules[path] = ElementRule(
             optional=element.get("minOccurs") == "0",
             has_children=complex_node is not None,
             max_occurs=_max_occurs(element, repeated),
+            checker=checker,
             **facets,
         )
         # `stack` holds the named complex types being expanded, so a type that
@@ -215,6 +286,13 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
 
     for top in schema.findall(f"{_XS}element"):
         visit(top, (), frozenset())
+    try:
+        checker.compile()
+    except etree.XMLSchemaParseError as exc:
+        # Values are then judged by the Python checks alone, and the XSD
+        # check of the finished file is the backstop for the rest.
+        logger.warning(f"Could not build the value checks for {xsd_path}: {exc}")
+        rules = {path: replace(rule, checker=None) for path, rule in rules.items()}
     return rules
 
 
@@ -284,9 +362,11 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
                 return text, "must be a whole number"
             # "12.0" -> "12": same value, integer lexical form. Only a fraction
             # is rewritten -- a leading zero is valid integer syntax, and FIPS
-            # codes like "01001" (every Alabama county) depend on it.
+            # codes like "01001" (every Alabama county) depend on it. Cut as
+            # text: int() refuses more than 4,300 digits.
             if "." in text:
-                text = str(int(number))
+                whole = text.split(".")[0]
+                text = whole if whole.lstrip("+-") else whole + "0"
         if rule.base == "positiveInteger" and number < 1:
             return text, "must be 1 or more"
         if rule.min_inclusive is not None and number < rule.min_inclusive:
@@ -295,14 +375,21 @@ def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
             return text, f"must be at most {_plain(rule.max_inclusive)}"
     elif rule.base == "date":
         try:
-            datetime.date.fromisoformat(text)
+            if not _DATE_LEXICAL.fullmatch(text):
+                raise ValueError
+            datetime.date.fromisoformat(text[:10])
         except ValueError:
             return text, "is not a valid date (YYYY-MM-DD)"
-    # Checked on the final text, after any rewrite above.
-    if rule.patterns and not any(p.fullmatch(text) for p in rule.patterns):
-        return text, "is not in the format SBA requires"
     if rule.length is not None and len(text) != rule.length:
         return text, f"must be exactly {_chars(rule.length)}"
+    # Only identifiers get here over length: everything else was truncated.
+    if rule.max_length is not None and len(text) > rule.max_length:
+        return text, f"is longer than the {_chars(rule.max_length)} SBA allows"
+    # The verdict, on the final text after any rewrite above.
+    if rule.checker is not None and rule.check_tag and not rule.checker.accepts(rule.check_tag, text):
+        if rule.patterns:
+            return text, "is not in the format SBA requires"
+        return text, "is not a value SBA's schema accepts"
     return text, None
 
 
@@ -435,8 +522,6 @@ class SchemaGuard:
             text = truncated
 
         text, problem = _check_value(text, rule)
-        if problem is None and rule.max_length is not None and len(text) > rule.max_length:
-            problem = f"is longer than the {_chars(rule.max_length)} SBA allows"
         if problem is None:
             element.text = text
             return

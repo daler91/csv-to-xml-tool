@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRequiredUser } from "@/lib/session";
-import { routeError } from "@/lib/api-errors";
+import { isUnauthorized, routeError } from "@/lib/api-errors";
 import { workerFetch, workerClientError } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import { decodeCsvBuffer } from "@/lib/csv-decode";
@@ -67,7 +67,18 @@ export async function GET(
       if (clientError) {
         return NextResponse.json({ error: clientError }, { status: 400 });
       }
-      throw error;
+      // Anything else is the deployment's problem, not the file's: the worker
+      // is down or unreachable, refused WORKER_AUTH_TOKEN (401/503), or failed
+      // (500). This used to rethrow into the generic 500 below, which logged
+      // nothing, so a failing preview left no trace of which it was.
+      console.error("Preview worker error:", jobId, error);
+      return NextResponse.json(
+        {
+          error:
+            "The conversion service couldn't generate a preview. Try again in a minute; if it keeps happening, the worker service needs checking.",
+        },
+        { status: 502 }
+      );
     }
 
     // Update job with row count and advance status to "previewed",
@@ -95,6 +106,9 @@ export async function GET(
 
     return NextResponse.json(preview);
   } catch (error) {
+    // Logged for the same reason: reading the upload or updating the job can
+    // fail too, and a bare 500 said nothing about which.
+    if (!isUnauthorized(error)) console.error("Preview error:", error);
     return routeError(error, "Failed to generate preview");
   }
 }

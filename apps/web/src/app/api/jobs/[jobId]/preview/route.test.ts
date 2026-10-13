@@ -106,10 +106,29 @@ describe("GET /api/jobs/[jobId]/preview — worker responses", () => {
     expect((await res.json()).error).toBe("CSV has no header row");
   });
 
-  it("still reports a worker outage as 500", async () => {
-    worker.mockRejectedValue(new Error("connect ECONNREFUSED"));
+  it.each([
+    ["an outage", new Error("connect ECONNREFUSED")],
+    ["a crash", new Error('Worker error 500: {"detail":"Internal preview error"}')],
+    ["a token mismatch", new Error('Worker error 401: {"detail":"Invalid or missing worker credentials"}')],
+  ])("reports %s as 502 and logs the cause", async (_label, error) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    worker.mockRejectedValue(error);
+    const res = await GET(new Request("http://localhost"), jobParams("j1"));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/conversion service/);
+    expect(log).toHaveBeenCalledWith("Preview worker error:", "j1", error);
+    expect(db.job.updateMany).not.toHaveBeenCalled();
+    log.mockRestore();
+  });
+
+  it("logs a failure outside the worker call before answering 500", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = new Error("ENOENT: no such file or directory");
+    readMock.mockRejectedValue(error);
     const res = await GET(new Request("http://localhost"), jobParams("j1"));
     expect(res.status).toBe(500);
+    expect(log).toHaveBeenCalledWith("Preview error:", error);
+    log.mockRestore();
   });
 
   it("decodes a cp1252 export before sending it to the worker", async () => {

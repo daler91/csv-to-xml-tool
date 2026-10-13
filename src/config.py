@@ -15,6 +15,10 @@ FISCAL_YEAR_START_MONTH = 10
 DATE_INPUT_FORMATS = [
     '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y',
     '%m/%d/%y', '%d-%m-%Y',
+    # Day-first after month-first, so 03/04/2025 still reads as March 4 (and
+    # is_ambiguous_date flags it), and before year-first: '%y/%m/%d' read
+    # 13/01/25 (13 January 2025) as 2013-01-25, and 15/01/2025 not at all.
+    '%d/%m/%Y', '%d/%m/%y',
     '%Y/%m/%d', '%y/%m/%d',
     '%m-%d-%y',
     '%b %d, %Y', '%B %d, %Y',

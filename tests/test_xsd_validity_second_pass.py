@@ -146,7 +146,7 @@ class DateTimeTest(_ValidityCase):
         self.assertTrue(data_cleaning.is_ambiguous_date("3/4/2025 9:05 pm"))
 
     def test_an_unreadable_optional_date_is_reported(self):
-        root = self.convert_row(**{"Client Signature - Date": "15/01/2025"})
+        root = self.convert_row(**{"Client Signature - Date": "15/31/2025"})
         self.assertIsNone(root.find(".//ClientSignature/Date"))
         warning, = self.issues("Client Signature - Date", "warning")
         self.assertIn("not a date", warning["message"])
@@ -659,6 +659,24 @@ class TrainingClientBlankColumnTest(_ValidityCase):
         text = ",".join(row) + "\n" + ",".join(row.values()) + "\n"
         checks = [c["key"] for c in read_csv_preview(text, "training-client")["data_quality"]["checks"]]
         self.assertNotIn("missing_class_event_id", checks)
+
+
+class DayFirstDateTest(_ValidityCase):
+    """X.9: a day-first date with a two-digit year and a day over 12 failed
+    month-first and was read year-first: 13/01/25 was filed as 2013-01-25."""
+
+    def test_day_first_dates_read_as_day_first(self):
+        for text, expected in (("13/01/25", "2025-01-13"), ("25/12/05", "2005-12-25"),
+                               ("15/01/2025", "2025-01-15"), ("03/04/2025", "2025-03-04"),
+                               ("99/12/31", "1999-12-31")):
+            with self.subTest(text=text):
+                self.assertEqual(data_cleaning.format_date(text), expected)
+        self.assertTrue(data_cleaning.is_ambiguous_date("03/04/2025"))
+
+    def test_an_optional_date(self):
+        root = self.convert_row(**{"Business Start Date": "13/01/25"})
+        self.assertEqual(root.findtext(".//BusinessStartDatePart3"), "2025-01-13")
+        self.assertEqual(self.issues("Business Start Date"), [])
 
 
 if __name__ == "__main__":

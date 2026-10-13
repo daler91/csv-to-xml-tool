@@ -128,6 +128,7 @@ _COUNSELING_ELEMENT_FIELDS = {
 # counted from.
 _TRAINING_ELEMENT_FIELDS = {
     "PartnerTrainingNumber": ("Class/Event ID", "Class/Event ID"),
+    "LocationCode": ("Location Code", "LocationCode"),
     "FundingSource": ("Funding Source", "Funding Source"),
     "DateTrainingStarted": ("Start Date", "Start Date"),
     "TrainingTitle": ("Class/Event Name", "Class/Event Name"),
@@ -138,6 +139,7 @@ _TRAINING_ELEMENT_FIELDS = {
     "City": ("City", "City"),
     "State": ("State/Province", "State/Province"),
     "ZipCode": ("Zip/Postal Code", "Zip/Postal Code"),
+    "Zip4Code": ("Zip/Postal Code (+4)", "Zip/Postal Code"),
     "NumberTrained/Female": ("Gender", "Gender"),
     "NumberTrained/Male": ("Gender", "Gender"),
     "NumberTrained/CurrentlyInBusiness": ("Currently in Business?", "Currently in Business?"),

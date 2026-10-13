@@ -13,11 +13,20 @@ from .. import data_cleaning
 from ..schema_rules import SchemaGuard
 from ..xml_utils import create_element
 
+# Cosponsor cells that say there was none.
+_NO_COSPONSOR = frozenset({'', 'n/a', 'na', 'none', '-', 'null', 'n/a.'})
+
 class TrainingConverter(BaseConverter):
     """
     Converter for Management Training Report data.
     """
     SCHEMA_TYPE = "training"
+
+    # Read when the CSV has them, but not offered on the mapping page (which
+    # lists TrainingConfig.COLUMN_MAPPING): optional, as on the counseling
+    # form. Without a LocationCode every event is filed under
+    # GeneralConfig.DEFAULT_LOCATION_CODE.
+    _UNLISTED_COLUMNS = {"location_code": "LocationCode"}
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
@@ -26,12 +35,13 @@ class TrainingConverter(BaseConverter):
         self._schema_guard = SchemaGuard(self.SCHEMA_TYPE, validator, logger)
         self._first_rows = {}
         self._current_record = None
+        self._headers = []
 
     def _get_column_value(self, record, key, default=''):
         """
         Gets a value from a row dict using the list of possible column names from config.
         """
-        possible_columns = self.config.COLUMN_MAPPING.get(key, [])
+        possible_columns = self.config.COLUMN_MAPPING.get(key) or self._UNLISTED_COLUMNS.get(key, [])
         if isinstance(possible_columns, str):
             possible_columns = [possible_columns]
 
@@ -39,6 +49,32 @@ class TrainingConverter(BaseConverter):
             if col in record and not data_cleaning.is_empty(record[col]):
                 return str(record[col])
         return default
+
+    def _event_value(self, event_id, rows, key):
+        """An event-level value: the first of the event's rows that gives one.
+
+        Every attendee row repeats the event's columns. Reading only the first
+        row dropped a Funding Source or Cosponsor that only a later row had,
+        and filed a fabricated default when the first row was blank. Rows that
+        disagree are reported; the first value is the one filed.
+        """
+        values = []
+        for row in rows:
+            value = (self._get_column_value(row, key) or '').strip()
+            if value and value.casefold() not in (v.casefold() for v in values):
+                values.append(value)
+        if len(values) > 1:
+            shown = ", ".join(f"'{v}'" for v in values[:3]) + (", ..." if len(values) > 3 else "")
+            self.validator.add_issue(
+                str(event_id), "warning", ValidationCategory.INVALID_VALUE, self._header(key),
+                f"The event's rows give different values for this column ({shown}); "
+                f"filed the first, '{values[0]}'.")
+        return values[0] if values else ''
+
+    def _header(self, key):
+        """The first CSV header configured for a COLUMN_MAPPING key."""
+        headers = self.config.COLUMN_MAPPING.get(key) or self._UNLISTED_COLUMNS.get(key, key)
+        return headers if isinstance(headers, str) else headers[0]
 
     def _read_and_validate_csv(self, input_path):
         """Read CSV, validate columns and rows. Returns (event_groups, event_id_col).
@@ -53,6 +89,7 @@ class TrainingConverter(BaseConverter):
         # which made a blank cell float('nan') -- truthy, and the direct cause
         # of training rows passing validation and then vanishing in groupby().
         headers, rows = self._read_csv(input_path)
+        self._headers = headers
 
         if not rows:
             # CONV-6: a headers-only / empty CSV must fail, not return silently.
@@ -117,6 +154,11 @@ class TrainingConverter(BaseConverter):
         """
         constants = [
             ('Location/LocationCode', self.general_config.DEFAULT_LOCATION_CODE),
+        ] if self._header('location_code') not in self._headers else [
+            ('Location/LocationCode', f"{self.general_config.DEFAULT_LOCATION_CODE} "
+                                      "(for events whose LocationCode cell is blank)"),
+        ]
+        constants += [
             ('NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS),
             ('TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS),
             ('TrainingPartners/Code', self.config.DEFAULT_TRAINING_PARTNER_CODE),
@@ -134,7 +176,6 @@ class TrainingConverter(BaseConverter):
     def _build_training_record(self, root, event_id, group_rows):
         """Build a single ManagementTrainingRecord element. Returns False when
         the record cannot be filed and was left out (see SchemaGuard.enforce)."""
-        first_record = group_rows[0]
         self.validator.set_current_record_id(str(event_id))
         self.validator.set_current_event_id(str(event_id))
 
@@ -144,18 +185,23 @@ class TrainingConverter(BaseConverter):
                                     "columns": {}})
         create_element(record, 'PartnerTrainingNumber', str(event_id))
 
-        funding_source = self._get_column_value(first_record, 'funding_source')
+        funding_source = self._event_value(event_id, group_rows, 'funding_source')
         if funding_source:
             valid_funding = self._resolve_funding_source(funding_source, event_id)
             if valid_funding:
                 create_element(record, 'FundingSource', valid_funding)
 
         location = create_element(record, 'Location')
-        create_element(location, 'LocationCode', self.general_config.DEFAULT_LOCATION_CODE)
+        # A LocationCode column is honoured, as the counseling forms do; the
+        # schema guard leaves the event out if it isn't a code SBA accepts.
+        create_element(location, 'LocationCode',
+                       self._event_value(event_id, group_rows, 'location_code')
+                       or self.general_config.DEFAULT_LOCATION_CODE)
 
-        date_val = self._get_column_value(first_record, "start_date")
-        formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS, self.config.DEFAULT_START_DATE)
-        if formatted_date == self.config.DEFAULT_START_DATE and str(date_val).strip() != self.config.DEFAULT_START_DATE:
+        date_val = self._event_value(event_id, group_rows, "start_date")
+        formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS)
+        if not formatted_date:
+            formatted_date = self.config.DEFAULT_START_DATE
             # A blank or unparseable date silently becomes a fixed past date,
             # which is the kind of substitution a reviewer has to know about.
             self._warn_fabricated_default(
@@ -175,17 +221,17 @@ class TrainingConverter(BaseConverter):
         create_element(record, 'NumberOfSessions', self.config.DEFAULT_TRAINING_SESSIONS)
         create_element(record, 'TotalTrainingHours', self.config.DEFAULT_TRAINING_HOURS)
 
-        title_val = self._get_column_value(first_record, "event_name")
+        title_val = self._event_value(event_id, group_rows, "event_name")
         if not title_val:
             title_val = f"{self.config.DEFAULT_TRAINING_EVENT_TITLE_PREFIX}{event_id}"
             self._warn_fabricated_default(event_id, 'Class/Event Name', title_val, 'TrainingTitle')
         create_element(record, 'TrainingTitle', title_val)
 
-        self._build_location_section(record, first_record)
+        self._build_location_section(record, group_rows)
         demographics = self._calculate_demographics(group_rows)
         self._build_demographics_section(record, demographics)
 
-        topic_val = self._get_column_value(first_record, "training_topic")
+        topic_val = self._event_value(event_id, group_rows, "training_topic")
         mapped_topic = self._resolve_training_topic(topic_val, event_id)
         training_topic_element = create_element(record, 'TrainingTopic')
         create_element(training_topic_element, 'Code', mapped_topic)
@@ -193,15 +239,19 @@ class TrainingConverter(BaseConverter):
         partners_element = create_element(record, 'TrainingPartners')
         create_element(partners_element, 'Code', self.config.DEFAULT_TRAINING_PARTNER_CODE)
 
-        format_val = self._get_column_value(first_record, "event_type")
+        format_val = self._event_value(event_id, group_rows, "event_type")
         create_element(record, 'ProgramFormatType', self._resolve_program_format(format_val, event_id))
 
         create_element(record, 'DollarAmountOfFees', self.config.DEFAULT_TRAINING_FEES)
         language_element = create_element(record, 'Language')
         create_element(language_element, 'Code', self.general_config.DEFAULT_LANGUAGE)
 
-        cosponsor_name = self._get_column_value(first_record, "cosponsor")
-        if cosponsor_name and cosponsor_name.lower() != 'n/a':
+        # "N/A", "None" or "-" in the column means there was no cosponsor.
+        cosponsor_rows = [row for row in group_rows
+                          if (self._get_column_value(row, "cosponsor") or '').strip().casefold()
+                          not in _NO_COSPONSOR]
+        cosponsor_name = self._event_value(event_id, cosponsor_rows, "cosponsor")
+        if cosponsor_name:
             create_element(record, 'CosponsorsName', cosponsor_name)
 
         # Last, on the finished record: lengths, enumerations, patterns and
@@ -266,22 +316,38 @@ class TrainingConverter(BaseConverter):
         self._write_valid_xml(root, output_path)
         self.logger.info(f"XML file successfully created at {output_path}")
 
-    def _build_location_section(self, parent, record):
+    def _location(self, row):
+        """(city, state, ZIP, ZIP+4 or '', the ZIP cell) from one row. The ZIP
+        must start the cell, as counseling's does: a 5-digit run taken from
+        anywhere filed a phone number's first digits as the ZIP."""
+        zip_raw = (self._get_column_value(row, 'zip') or '').strip()
+        zip_match = re.match(r'(\d{5})(?:[-\s]?(\d{4}))?(?!\d)', zip_raw)
+        return ((self._get_column_value(row, 'city') or '').strip(),
+                (self._get_column_value(row, 'state') or '').strip(),
+                zip_match.group(1) if zip_match else '',
+                (zip_match.group(2) or '') if zip_match else '',
+                zip_raw)
+
+    def _build_location_section(self, parent, rows):
         training_location = create_element(parent, 'TrainingLocation')
+        event_id = self.validator.current_record_id
 
-        city = self._get_column_value(record, 'city')
-        state = self._get_column_value(record, 'state')
-        zip_code_raw = self._get_column_value(record, 'zip')
-
-        zip_match = re.search(r'\d{5}', zip_code_raw)
-        zip_code = zip_match.group(0) if zip_match else ''
+        # The first row with a complete city, state and ZIP; reading only the
+        # first row filed a default when it alone was incomplete.
+        locations = [self._location(row) for row in rows]
+        city, state, zip_code, zip4, zip_raw = next(
+            (loc for loc in locations if all(loc[:3])), locations[0])
+        if zip_raw and not zip_code:
+            self.validator.add_issue(
+                str(event_id), "warning", ValidationCategory.INVALID_FORMAT, self._header('zip'),
+                f"Could not read a 5-digit ZIP from '{zip_raw}'.")
 
         if not (city and state and zip_code):
-            event_id = self.validator.current_record_id
             self.logger.info(f"Using default location for event {event_id}")
             city = self.config.DEFAULT_LOCATION['city']
             state = self.config.DEFAULT_LOCATION['state']
             zip_code = self.config.DEFAULT_LOCATION['zip']
+            zip4 = ''
             self._warn_fabricated_default(
                 event_id, 'Class/Event Location', f"{city}, {state} {zip_code}",
                 'TrainingLocation; the CSV did not supply a complete city/state/ZIP')
@@ -289,6 +355,8 @@ class TrainingConverter(BaseConverter):
         create_element(training_location, 'City', city)
         create_element(training_location, 'State', data_cleaning.standardize_state_name(state))
         create_element(training_location, 'ZipCode', zip_code)
+        if zip4:
+            create_element(training_location, 'Zip4Code', zip4)
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 
@@ -298,6 +366,15 @@ class TrainingConverter(BaseConverter):
         if isinstance(possible, str):
             possible = [possible]
         return next((c for c in possible if any(c in row for row in rows)), None)
+
+    def _demographic_rows(self, rows):
+        """Each row's demographic answers under one key per COLUMN_MAPPING key,
+        from the first of the key's columns that is filled *in that row*: with
+        both "Gender" and "Sex" columns, a row with only "Sex" filled used to be
+        counted from its blank "Gender"."""
+        keys = ('business_status', 'gender', 'disability', 'military_status', 'race', 'ethnicity')
+        present = {key for key in keys if self._resolve_column(rows, key)}
+        return [{key: self._get_column_value(row, key) for key in present} for row in rows]
 
     def _resolve_funding_source(self, funding_source, event_id):
         """Return the funding source iff it is a valid XSD enumeration value, else None.
@@ -462,27 +539,25 @@ class TrainingConverter(BaseConverter):
         """
         race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
         military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
+        rows = self._demographic_rows(rows)
 
-        business_col = self._resolve_column(rows, 'business_status')
-        female, male = self._count_sex(rows, self._resolve_column(rows, 'gender'))
+        # Keyed by COLUMN_MAPPING key now; None where no column is present.
+        def column(key):
+            return key if rows and key in rows[0] else None
+
+        business_col = column('business_status')
+        female, male = self._count_sex(rows, column('gender'))
         currently_in_business, not_in_business = self._count_business_status(rows, business_col)
-        military_counts = self._count_military(
-            rows, self._resolve_column(rows, 'military_status'), military_keywords
-        )
+        military_counts = self._count_military(rows, column('military_status'), military_keywords)
         race_counts, hispanic, non_hispanic, minorities = self._count_race_ethnicity(
-            rows,
-            self._resolve_column(rows, 'race'),
-            self._resolve_column(rows, 'ethnicity'),
-            race_keywords,
+            rows, column('race'), column('ethnicity'), race_keywords,
         )
 
         demographics = {
             'total': max(len(rows), 1),  # XSD requires Total >= 1
             'female': female,
             'male': male,
-            'disabilities': self._count_disabilities(
-                rows, self._resolve_column(rows, 'disability')
-            ),
+            'disabilities': self._count_disabilities(rows, column('disability')),
             'active_duty': military_counts.get('active_duty', 0),
             'veterans': military_counts.get('veteran', 0),
             'service_disabled_veterans': military_counts.get('service_disabled_veteran', 0),

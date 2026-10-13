@@ -164,7 +164,7 @@ class GeneratedInputTest(unittest.TestCase):
         self.check(TrainingClientConverter, "training-client")
 
     def test_training(self):
-        self.check(TrainingConverter, "training")
+        self.check(TrainingConverter, "training", ("LocationCode",))
 
 
 if __name__ == "__main__":

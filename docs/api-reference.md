@@ -172,7 +172,9 @@ converter reads, so export-only columns (`Member Status`, `Related Record ID`, �
 are neither expected nor reported missing.
 
 `400` with the worker's own message when the worker rejects the CSV content
-(malformed file); `410` if the file has been purged; `413` if it exceeds the cap.
+(malformed file); `410` if the file has been purged; `413` if it exceeds the cap;
+`502` when the worker is unreachable, refuses `WORKER_AUTH_TOKEN` or fails, with
+the cause in the web log as `Preview worker error: <jobId> …`.
 
 The file is decoded as strict UTF-8 (BOM preserved) with a fallback to
 Windows-1252 for Excel's "CSV (Comma delimited)" exports — the same decoding

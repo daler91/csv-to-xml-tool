@@ -1,6 +1,7 @@
 """Wraps existing CSV-to-XML converters for use by the FastAPI service."""
 
 import csv
+import io
 import logging
 import os
 import sys
@@ -18,6 +19,7 @@ from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.base_converter import EmptyCSVError  # noqa: F401  (re-exported: routes/convert.py imports it from here)
 from src.validation_report import ValidationTracker
 from src.logging_util import ConversionLogger
+from src.data_cleaning import decode_csv_bytes, encoding_warning, normalize_header
 from src.xml_validator import validate_against_xsd
 from src.xsd_error_mapping import build_error_details
 from src.config import ValidationCategory
@@ -123,21 +125,31 @@ def run_conversion(
     # Apply column mapping if provided (rename CSV columns before conversion)
     actual_csv_path = csv_path
     tmp_mapped = None
+    unmatched: dict[str, str] = {}
+    source_encoding = None
     if column_mapping:
-        # utf-8-sig so a BOM on the first header can't desync this rename from the
-        # converter's own utf-8-sig read of the temp file written below (every
-        # other CSV read path strips the BOM; this one was the lone exception).
         safe_mapping = _sanitize_column_mapping(column_mapping, converter_type)
-        with open(csv_path, "r", encoding="utf-8-sig", newline="") as source:
-            # Rows as lists, renaming only the header: a dict per row kept one
-            # column of each duplicated header, so the converter never saw the
-            # duplicate to report it, and a blank later "Date" erased the first.
-            reader = csv.reader(source)
-            header = next(reader, [])
-            fieldnames = [safe_mapping.get(name, name) for name in header]
-            # Materialized before opening the writer so a malformed CSV fails
-            # before a half-written temp file exists.
-            data_rows = list(reader)
+        # Both sides by normalize_header: the mapping page keys the mapping by
+        # the preview's normalized headers, so a raw header "Co-sponsor " was
+        # never renamed by {"Co-sponsor": "Cosponsor"} and its column was
+        # silently not read.
+        by_header = {normalize_header(name): target for name, target in safe_mapping.items()}
+        # Decoded as the converter decodes (a BOM dropped, Windows-1252 when
+        # it isn't UTF-8): a strict UTF-8 read raised on the first accented
+        # name of a file the converter itself reads. The copy is UTF-8.
+        with open(csv_path, "rb") as source:
+            text, source_encoding = decode_csv_bytes(source.read())
+        # Rows as lists, renaming only the header: a dict per row kept one
+        # column of each duplicated header, so the converter never saw the
+        # duplicate to report it, and a blank later "Date" erased the first.
+        reader = csv.reader(io.StringIO(text))
+        header = next(reader, [])
+        fieldnames = [by_header.get(normalize_header(name), name) for name in header]
+        present = {normalize_header(name) for name in header}
+        unmatched = {name: target for name, target in by_header.items() if name not in present}
+        # Materialized before opening the writer so a malformed CSV fails
+        # before a half-written temp file exists.
+        data_rows = list(reader)
         tmp_mapped = tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, dir=os.path.dirname(csv_path)
         )
@@ -169,6 +181,16 @@ def run_conversion(
             log_to_file=False,
         )
         tracker = ValidationTracker()
+        # The converter reads the UTF-8 copy the mapping wrote, so it can't
+        # tell how the upload had to be decoded; say it here.
+        message = encoding_warning(source_encoding) if source_encoding else None
+        if message:
+            tracker.add_issue("file", "warning", ValidationCategory.FILE_ACCESS, "input_file", message)
+        for name, target in unmatched.items():
+            tracker.add_issue(
+                "file", "warning", ValidationCategory.MISSING_FIELD, name,
+                f"The column mapping renames '{name}' to '{target}', but the CSV has no '{name}' "
+                "column, so nothing was renamed.")
 
         # CONV-1: validate the (post-mapping) header set before converting. A missing
         # required column hard-fails the job; missing conditional / fabrication-risk

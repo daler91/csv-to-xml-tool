@@ -13,16 +13,20 @@ absent.
 2. **The file is decoded as strict UTF-8, falling back to Windows-1252.** An
    Excel "CSV UTF-8" export (with its BOM) and a plain "CSV (Comma delimited)"
    export from Windows Excel (the system code page, cp1252) both decode
-   correctly; a UTF-16 "Unicode Text" export is recognised by its BOM. The
-   worker then reads the text as `utf-8-sig`, so a BOM never turns the first
-   header into `﻿Contact ID`. Before the fallback existed, every accented
+   correctly; a UTF-16 "Unicode Text" export is recognised by its BOM. Every
+   read in the worker and the converters decodes the same way
+   (`src/data_cleaning.decode_csv_bytes`, which drops a BOM), so a BOM never
+   turns the first header into `﻿Contact ID`. Before the fallback existed, every accented
    character in a cp1252 export became `�` silently. The command line
    (`run.py`, `src/main.py`) decodes the same way
    (`src/data_cleaning.decode_csv_bytes`) and records a file-level warning when
    it falls back to Windows-1252; it used to stop at the first accented name.
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
-   column name it no longer uses.
+   column name it no longer uses. The mapping is matched against the headers
+   as normalized in step 1, as the mapping page shows them, so a header with a
+   stray space is still renamed; a mapping entry for a column the CSV doesn't
+   have is reported as a warning.
 4. **Mapping entries whose target is not an expected column are dropped.** A
    mapping that renamed a real header to an internal key (`{"Class/Event ID":
    "event_id"}`) would rename the column out from under the converter, so such

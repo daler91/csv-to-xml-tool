@@ -50,7 +50,7 @@ docs/
 ├── architecture.md          Components, pipeline, job lifecycle, data flow
 ├── converters.md            The three converters, cleaning rules, fabricated defaults
 ├── csv-reference.md         Expected columns and requirement tiers per converter
-├── cli.md                   run.py, src.main, fix_sba_xml, path confinement
+├── cli.md                   run.py, src.main, fix_sba_xml, xml_validator, path confinement
 ├── api-reference.md         Web API and worker API, with status codes
 ├── configuration.md         Every env var, defaults, failure modes
 ├── deployment.md            Compose, Railway, images, migrations, checklist

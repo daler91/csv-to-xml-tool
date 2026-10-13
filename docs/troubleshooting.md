@@ -91,7 +91,10 @@ Expected, and useful. The results page lists each schema error mapped back to a
 and use **Re-upload** to compare the two runs.
 
 If the errors are about element *order* rather than values, the file may have
-been produced elsewhere; `/validate` → auto-fix reorders counseling-format XML.
+been produced elsewhere; `/validate` → auto-fix reorders counseling-format XML
+(and `python -m src.fix_sba_xml` either form) to the schema's order. If an
+element is still "not expected" after that, it is missing, repeated, or under
+the wrong parent, which reordering can't fix.
 
 ### The progress bar sits at 0%
 

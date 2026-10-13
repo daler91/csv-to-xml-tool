@@ -1,12 +1,13 @@
 # CLI reference
 
-Three entry points, all running the same conversion core as the web app.
+Four entry points, all running the same conversion core as the web app.
 
 | Entry point | For |
 |---|---|
 | `run.py` (`run.bat`) | Interactive; no flags to remember |
 | `python -m src.main` | Scripted conversions |
 | `python -m src.fix_sba_xml` | Repairing element order in existing XML |
+| `python -m src.xml_validator` | Validating existing XML, and repairing it with `--fix` |
 
 ## Setup
 
@@ -164,9 +165,10 @@ SBA_OUTPUT_BASE=/srv/sba-output python -m src.main convert counseling \
 
 ## `python -m src.fix_sba_xml` — repair element order
 
-Reorders elements in an existing counseling-format XML file to match the schema's
-`xs:sequence`. It never invents data — if an element is missing, it stays
-missing; only ordering changes.
+Puts the elements of an existing XML file in the order its schema's
+`xs:sequence`s require — every one of them, read from the XSD itself — then
+checks the result against that XSD. It never invents data: if an element is
+missing, it stays missing; only the order changes.
 
 ```bash
 python -m src.fix_sba_xml --file invalid.xml --output fixed.xml
@@ -183,12 +185,49 @@ python -m src.fix_sba_xml --file invalid.xml --output fixed.xml
 | `--log-level` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `--log-file` | Also write the log to a file |
 
-This is what fixes `cvc-complex-type.2.4.a` errors — the schema complaining that
-an element appeared where a different one was expected. It understands
-**counseling-format XML only** (Form 641, which `training-client` output also
-uses). Form 888 training XML is not supported.
+This is what fixes `cvc-complex-type.2.4.a` errors ("This element is not
+expected") that come from order alone. The schema is chosen by the root
+element: `CounselingInformation` is Form 641 (which `training-client` output
+also uses), `ManagementTrainingReport` is Form 888. A file with any other root
+is refused, as is one whose DOCTYPE declares entities ("DTD/entity
+declarations are not supported").
 
-The web app exposes the same thing at `/validate` → auto-fix.
+The file is read and written the way the validator reads it, so comments,
+processing instructions, the DOCTYPE and a carriage return written as `&#13;`
+come through unchanged. A file already in order is not rewritten (with
+`--output`, it is copied as it is).
+
+**Exit codes:** `0` only when every file now passes its schema. `1` when a file
+could not be read or fixed, or still fails the schema — its remaining errors are
+listed, since reordering cannot fix a wrong value or a missing element. In
+directory mode the summary counts the files that pass, still fail, and could
+not be fixed, and names each one that did not pass.
+
+The web app exposes the same thing, for counseling-format XML, at `/validate` →
+auto-fix.
+
+---
+
+## `python -m src.xml_validator` — validate, and optionally fix
+
+```bash
+python -m src.xml_validator --xmlfile report.xml --xsd schemas/SBA_NEXUS_Counseling-2-14.xsd
+python -m src.xml_validator --xmlfile report.xml --output fixed.xml --fix
+```
+
+| Flag | Meaning |
+|---|---|
+| `--xmlfile` | A single XML file |
+| `--directory` | A directory of XML files (mutually exclusive with `--xmlfile`), with `--recursive` and `--pattern` as above |
+| `--xsd` | The schema to validate against, and with `--fix` to order by (default with `--fix`: the root element's schema) |
+| `--output` | Where `--fix` writes (file, or directory with `--directory`); default in place |
+| `--fix` | Repair the order as `fix_sba_xml` does, then re-validate the result |
+| `--add-missing` | With `--fix`: add a missing `CurrentlyInBusiness` to `ClientIntake` as `Undetermined`, with a warning naming each record. Other missing required elements (`Race`) are reported, not added — no answer would be true for every client |
+| `--log-level` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+
+**Exit codes:** `0` when the file (with `--fix`, the fixed file) passes the
+schema, or when there was nothing to check. `1` when it fails, or could not be
+fixed; in directory mode, when any file did.
 
 ---
 

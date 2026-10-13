@@ -66,7 +66,11 @@ Uploaded CSVs and generated XML are removed from disk after `RETENTION_DAYS`
 ### Input handling
 
 - **XXE is closed**: `defusedxml` for all ElementTree parsing and
-  `resolve_entities=False` on every lxml parse.
+  `resolve_entities=False` on every lxml parse. XML a user hands the tool (the
+  validator, `/validate-xsd`, `/fix-xml` and the fixer CLIs) is parsed with lxml
+  only, entities never expanded and nothing fetched, and a document whose
+  DOCTYPE declares entities is refused ("DTD/entity declarations are not
+  supported"), as defusedxml refused it before.
 - **Path traversal is closed on both sides**: `realpath` plus a `DATA_DIR` prefix
   check with a trailing separator (`lib/paths.ts`), which defeats symlink escapes
   and the `/data-evil` prefix trick alike; `src/path_safety.py` does the same for

@@ -208,7 +208,7 @@ finishes its current phase first.
 | Any user → any resource | Every owned resource is read with `findFirst({ where: { id, userId } })` and mutated with a `userId`-scoped `updateMany` |
 | Download path | `realpath` + `DATA_DIR` prefix check with a separator suffix (`lib/paths.ts`), defeating symlink and `/data-evil` escapes |
 | CLI output path | The same confinement in `src/path_safety.py`, widened only by `SBA_OUTPUT_BASE` |
-| XML parsing | `defusedxml` everywhere, `resolve_entities=False` on every lxml parse — XXE is closed |
+| XML parsing | `defusedxml` for ElementTree, `resolve_entities=False` on every lxml parse, and a document that declares entities refused by the validator and the fixer — XXE is closed |
 | Response headers | CSP with `frame-ancestors 'none'`, HSTS, nosniff, Permissions-Policy (`next.config.ts`) |
 
 Details and the reporting process are in [SECURITY.md](./SECURITY.md).
@@ -247,7 +247,7 @@ Details and the reporting process are in [SECURITY.md](./SECURITY.md).
 | `data_validation.py` | Per-row validation and the preview data-quality report |
 | `validation_report.py` | Issue tracking; CSV and HTML reports |
 | `xml_utils.py` | `create_element` / `emit_optional` |
-| `xml_validator.py` | XSD validation and element-order repair |
+| `xml_validator.py` | XSD validation, and element-order repair read from the XSD itself |
 | `xsd_error_mapping.py` | Maps schema errors back to CSV rows and column names |
 | `fix_sba_xml.py` | CLI wrapper around the order repair |
 | `path_safety.py` | Output-path confinement |

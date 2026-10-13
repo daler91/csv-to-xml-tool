@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import abc
 import contextlib
+import copy
 import csv
 import io
 import logging
@@ -20,9 +21,9 @@ from typing import TYPE_CHECKING, Callable, Optional
 from .. import data_cleaning
 from ..config import ValidationCategory
 from ..schema_rules import schema_path, strip_illegal_xml_chars
-from ..xml_utils import write_document
-from ..xml_validator import validate_against_xsd
-from ..xsd_error_mapping import errors_by_record
+from ..xml_utils import ET, write_document
+from ..xml_validator import validate_against_xsd, validate_xml_content
+from ..xsd_error_mapping import build_error_details, errors_by_record
 
 if TYPE_CHECKING:
     from ..validation_report import ValidationTracker
@@ -100,6 +101,11 @@ class BaseConverter(abc.ABC):
             self._file_error(ValidationCategory.FILE_ACCESS, f"Failed to read CSV file: {e}")
             raise
         self.logger.info(f"Successfully read CSV file with {len(rows)} records")
+        if encoding == data_cleaning.UTF16_DAMAGED:
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.FILE_ACCESS, "input_file",
+                "The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
+                "an emoji); they were replaced with '\ufffd'. Check the values around them.")
         if encoding == "windows-1252":
             self.validator.add_issue(
                 "file", "warning", ValidationCategory.FILE_ACCESS, "input_file",
@@ -167,29 +173,64 @@ class BaseConverter(abc.ABC):
         xsd = schema_path(self.SCHEMA_TYPE)
         if not os.path.exists(xsd):
             return 0
-        result = validate_against_xsd(output_path, xsd)
-        if result["is_valid"]:
-            return 0
-        failing = errors_by_record(output_path, result["errors"], self.SCHEMA_TYPE,
-                                   self.record_sources)
-        # Anything outside every record can't be fixed by leaving records out;
-        # the worker's own validation reports it.
-        if failing:
-            total = len(root)
+        total, left_out = len(root), 0
+        # Each pass leaves out at least one record or returns, and the file
+        # is checked again after every rewrite.
+        while True:
+            result = validate_against_xsd(output_path, xsd)
+            if result["is_valid"]:
+                return left_out
+            failing = errors_by_record(output_path, result["errors"], self.SCHEMA_TYPE,
+                                       self.record_sources)
+            if sum(map(len, failing.values())) < len(result["errors"]):
+                # An error no record can be blamed for by its line: libxml2
+                # giving up on a value, which also hides every other error in
+                # the file. Each record is then checked on its own.
+                failing = self._failing_records(root, xsd)
+            if not failing:
+                # Leaving records out can't fix it, so say so: the CLI shows
+                # only this report.
+                self._file_error(
+                    ValidationCategory.PROCESSING_ERROR,
+                    "The XML fails SBA's schema, and no record on its own does: "
+                    + "; ".join(result["errors"][:3]))
+                return left_out
             self._leave_out_failing(root, failing)
+            left_out += len(failing)
             if len(root) == 0:
                 with contextlib.suppress(OSError):
                     os.remove(output_path)
                 raise self._nothing_converted(f"{total} record(s)")
             write_document(root, output_path)
-        return len(failing)
+
+    def _failing_records(self, root, xsd: str) -> dict[int, list[dict]]:
+        """errors_by_record's result, found by validating each record alone
+        in a copy of the root."""
+        failing: dict[int, list[dict]] = {}
+        for position, record in enumerate(root, 1):
+            single = ET.Element(root.tag, root.attrib)
+            single.append(copy.deepcopy(record))
+            ET.indent(single, space="  ")
+            content = ET.tostring(single, encoding="unicode")
+            result = validate_xml_content(content.encode("utf-8"), xsd)
+            if result["is_valid"]:
+                continue
+            sources = self.record_sources[position - 1:position]
+            details = build_error_details(content, result["errors"], self.SCHEMA_TYPE, sources)
+            row = sources[0].get("row") if sources else position
+            for detail in details:
+                if detail["row_number"] is None:  # no line to place it by
+                    detail["row_number"] = row
+                    detail["record_id"] = (record[0].text or "").strip() if len(record) else None
+                    detail["friendly_message"] = f"Row {row}: {detail['message']}"
+            failing[position] = details
+        return failing
 
     def _leave_out_failing(self, root, failing: dict[int, list[dict]]) -> None:
         """Leave out the records errors_by_record found failing, recording an
         error per XSD message against the row each came from."""
         self.logger.error(f"Left out {len(failing)} record(s) that failed XSD validation")
-        # The root holds only records, in the order errors_by_record counts;
-        # both lists are copied before _leave_out shortens them.
+        # The root holds only records, in the order errors_by_record counts.
         records, sources = list(root), list(self.record_sources)
         for position in sorted(failing):
             event = sources[position - 1].get("event", "") if position <= len(sources) else ""
@@ -201,8 +242,13 @@ class BaseConverter(abc.ABC):
                     f"{detail['friendly_message']} SBA's schema rejects this, so the record was "
                     "left out of the XML; correct the value in the CSV and convert again.",
                     event_id=event)
-            self._leave_out(root, records[position - 1], failing[position][0]["friendly_message"])
+            self.left_out_reasons.append(failing[position][0]["friendly_message"])
             self.validator.record_left_out()
+        # In one pass: _leave_out per record made 20,000 failing records take
+        # 45 seconds.
+        root[:] = [record for position, record in enumerate(records, 1) if position not in failing]
+        self.record_sources[:] = [source for position, source in enumerate(sources, 1)
+                                  if position not in failing]
 
     def _report_progress(self, processed: int, total: int) -> None:
         """Report progress to the callback if one is set. No-op otherwise."""

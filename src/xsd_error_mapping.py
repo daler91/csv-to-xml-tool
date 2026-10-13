@@ -227,15 +227,17 @@ def _enumerate_records(xml_source: str, record_tag: str, id_tag: str) -> list[tu
     return records
 
 
-def _record_for_line(records: list[tuple], line: int | None):
+def _record_for_line(records: list[tuple], line: int | None, starts: list[int] | None = None):
     """The record whose subtree contains the given line, or None.
 
     Records are in document order, so a line belongs to the last record that
     starts at or before it; a line before the first record is unmappable.
+    `starts` is the records' start lines, when the caller has them already.
     """
     if line is None or not records:
         return None
-    starts = [start for start, _, _, _ in records]
+    if starts is None:
+        starts = [start for start, _, _, _ in records]
     index = bisect.bisect_right(starts, line) - 1
     return records[index] if index >= 0 else None
 
@@ -403,6 +405,7 @@ def _details(xml_source: str, errors: list[str], schema_type: str,
     shape = _RECORD_SHAPES.get(schema_type)
     element_fields = _ELEMENT_FIELD_MAPS.get(schema_type, {})
     records = _enumerate_records(xml_source, shape[0], shape[1]) if shape else []
+    starts = [start for start, _, _, _ in records]
     id_kind = shape[2] if shape else "Record"
 
     for raw in errors:
@@ -416,7 +419,7 @@ def _details(xml_source: str, errors: list[str], schema_type: str,
         element_match = _ELEMENT_RE.match(message)
         element = element_match.group(1) if element_match else None
 
-        record = _record_for_line(records, line)
+        record = _record_for_line(records, line, starts)
         row_number, record_id, parent_tag, columns = _locate(
             record, record_sources, element, line)
         field_label, csv_column = _resolve_field(element, parent_tag, element_fields,

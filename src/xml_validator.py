@@ -3,6 +3,7 @@ XML validator and fixer utility for SBA Counseling Information forms.
 This module helps validate and fix common XML structure issues.
 """
 
+import functools
 import os
 import xml.etree.ElementTree as UnsafeET
 import defusedxml.ElementTree as ET
@@ -63,6 +64,36 @@ def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
     return xml_file, xsd_file
 
 
+# What validate_against_xsd reports when libxml2 gives up on the document
+# (an invalid email its pattern engine backtracks on too long): no line, and
+# every other error in the file goes unreported with it.
+VALIDATOR_GAVE_UP = "SBA's schema validator could not finish checking this"
+
+
+def _validate(xmlschema, xml_doc):
+    try:
+        is_valid = xmlschema.validate(xml_doc)
+    except etree.XMLSchemaValidateError as e:
+        return {"is_valid": False, "errors": [f"{VALIDATOR_GAVE_UP} ({e})."]}
+    errors = [] if is_valid else [f"Line {error.line}: {error.message}" for error in xmlschema.error_log]
+    return {"is_valid": is_valid, "errors": errors}
+
+
+def validate_xml_content(content: bytes, xsd_file):
+    """validate_against_xsd for a document held in memory, against a schema
+    compiled once per path: the converters check records one at a time."""
+    parser = etree.XMLParser(resolve_entities=False)
+    try:
+        return _validate(_compiled_schema(xsd_file), etree.fromstring(content, parser).getroottree())
+    except etree.XMLSyntaxError as e:
+        return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
+
+
+@functools.lru_cache(maxsize=8)
+def _compiled_schema(xsd_file):
+    return etree.XMLSchema(etree.parse(xsd_file, etree.XMLParser(resolve_entities=False)))
+
+
 def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
     """
     Validate XML against an XSD schema.
@@ -86,13 +117,7 @@ def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
         xmlschema = etree.XMLSchema(xmlschema_doc)
         xml_doc = etree.parse(xml_file, parser=parser)
 
-        is_valid = xmlschema.validate(xml_doc)
-        errors = []
-        if not is_valid:
-            for error in xmlschema.error_log:
-                errors.append(f"Line {error.line}: {error.message}")
-
-        return {"is_valid": is_valid, "errors": errors}
+        return _validate(xmlschema, xml_doc)
     except etree.XMLSyntaxError as e:
         # Unparseable XML is a validation *result*, not an internal error:
         # surface the parse message so callers (e.g. the worker's /validate-xsd

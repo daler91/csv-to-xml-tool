@@ -401,6 +401,10 @@ codecs.register_error(
 )
 
 
+# decode_csv_bytes' encoding for a UTF-16 file with bytes that aren't text.
+UTF16_DAMAGED = "utf-16 (damaged)"
+
+
 def decode_csv_bytes(data: bytes) -> tuple[str, str]:
     """Decode a CSV the way spreadsheet tools write it; returns (text, encoding).
 
@@ -411,7 +415,12 @@ def decode_csv_bytes(data: bytes) -> tuple[str, str]:
     normalized to "\n", as reading the file in text mode did.
     """
     if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        text, encoding = data.decode("utf-16"), "utf-16"
+        try:
+            text, encoding = data.decode("utf-16"), "utf-16"
+        except UnicodeDecodeError:
+            # A stray byte or half an emoji: replaced with U+FFFD, as the web's
+            # TextDecoder does, rather than failing the whole file.
+            text, encoding = data.decode("utf-16", errors="replace"), UTF16_DAMAGED
     else:
         try:
             text, encoding = data.decode("utf-8-sig"), "utf-8"

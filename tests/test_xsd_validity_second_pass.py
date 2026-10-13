@@ -4,15 +4,17 @@ conversion, or change a value without a word, and checks the file validates
 against the schema SBA supplied, plus what was filed and reported.
 """
 
+import codecs
 import os
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from src import data_cleaning
 from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.training_converter import TrainingConverter
-from src.schema_rules import _check_value, load_rules, schema_path
+from src.schema_rules import SchemaGuard, _check_value, load_rules, schema_path
 
 from tests.test_integration_xsd import _make_counseling_row, _make_training_client_row, _make_training_row
 from tests.test_xsd_validity import _ValidityCase
@@ -299,6 +301,52 @@ class TrainingEventValuesTest(_ValidityCase):
         root = self.convert(rows)
         trained = root.find(".//NumberTrained")
         self.assertEqual((trained.findtext("Female"), trained.findtext("Male")), ("1", "1"))
+
+
+class SafetyNetWithoutLinesTest(_ValidityCase):
+    """W.7: the final XSD check left records out only by the line of each
+    error. libxml2 giving up on a value reports no line -- and no other
+    error in the file -- so the file stayed invalid and nothing was recorded;
+    the command line reported a clean conversion."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(SchemaGuard, "enforce", return_value=[])
+        patcher.start()  # a gap in the guard, so the values reach the file
+        self.addCleanup(patcher.stop)
+
+    def test_records_are_checked_one_by_one(self):
+        root = self.convert([
+            _make_counseling_row(**{"Contact ID": "KEEP"}),
+            _make_counseling_row(**{"Contact ID": "GAVE-UP", "Email": "a@b" + ".aaaa" * 14 + "!"}),
+            _make_counseling_row(**{"Contact ID": "BAD", "Email": "bad@"}),
+        ])
+        self.assertEqual([r.findtext("PartnerClientNumber") for r in root], ["KEEP"])
+        left_out = {e["record_id"] for e in self.issues(severity="error")
+                    if "left out of the XML" in e["message"]}
+        self.assertEqual(left_out, {"GAVE-UP", "BAD"})
+
+    def test_a_failure_no_record_explains_is_reported(self):
+        gave_up = {"is_valid": False, "errors": ["SBA's schema validator could not finish checking this (x)."]}
+        with mock.patch("src.converters.base_converter.validate_against_xsd", return_value=gave_up):
+            self.converter.convert(self.write_csv([_make_counseling_row()]), self.xml_path)
+        error, = self.issues(severity="error")
+        self.assertEqual(error["record_id"], "file")
+        self.assertIn("no record on its own does", error["message"])
+
+
+class DamagedUtf16Test(_ValidityCase):
+    """A UTF-16 export with a stray byte stopped the command line with a
+    UnicodeDecodeError; the web read the same bytes."""
+
+    def test_it_converts_with_a_warning(self):
+        csv_path = self.write_csv([_make_counseling_row()])
+        with open(csv_path, "rb") as f:
+            text = f.read().decode("utf-8")
+        with open(csv_path, "wb") as f:
+            f.write(codecs.BOM_UTF16_LE + text.encode("utf-16-le") + b"\n")
+        self.converter.convert(csv_path, self.xml_path)
+        self.assertEqual(len(self.issues("input_file", "warning")), 1)
 
 
 if __name__ == "__main__":

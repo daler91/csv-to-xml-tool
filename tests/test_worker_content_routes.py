@@ -560,3 +560,68 @@ def test_fix_xml_requires_worker_token(monkeypatch):
     result = json.loads(body)
     assert result["is_valid"] is False  # <a/> is well-formed but violates the XSD
     assert result["changed"] is False
+
+
+# --- /fix-xml and /validate-xsd: what the fixer moves and what it reports ---
+
+
+def _golden_counseling():
+    with open(os.path.join(_REPO_ROOT, "tests", "golden", "sample_counseling.xml"), encoding="utf-8") as f:
+        return f.read()
+
+
+def test_fix_xml_reorders_outside_client_intake(monkeypatch):
+    """Only ClientIntake's children used to be reordered: an element out of
+    place anywhere else came back changed=false, and the page then said the
+    problem was in the data."""
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    root = ET.fromstring(_golden_counseling())
+    counselor = root.find("CounselingRecord/CounselorRecord")
+    language = counselor.find("Language")
+    counselor.remove(language)
+    counselor.append(language)
+
+    result = _fix(ET.tostring(root, encoding="unicode"))
+
+    assert (result["changed"], result["is_valid"]) == (True, True), result["errors"]
+    assert result["fix_error"] is None
+    fixed = ET.fromstring(result["fixed_xml_content"]).find("CounselingRecord/CounselorRecord")
+    assert [child.tag for child in fixed][-1] == "CounselingHours"
+
+
+def test_fix_xml_returns_the_text_sent_when_nothing_moved(monkeypatch):
+    """`changed` compared two reserializations: a CR given as &#13; survived
+    one parse but not two, so it read as a change though nothing had moved,
+    and the CR came back as LF with the comment gone."""
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    content = _golden_counseling().replace(
+        "</CounselorRecord>",
+        "<CounselorNotes>Discussed loan options.&#13;\nFollow up in March.</CounselorNotes></CounselorRecord>",
+        1,
+    ).replace("<CounselingInformation>", "<CounselingInformation><!-- reviewed by J. Smith -->", 1)
+
+    result = _fix(content)
+
+    assert (result["changed"], result["is_valid"]) == (False, True), result["errors"]
+    assert result["fixed_xml_content"] == content
+
+
+def test_entity_declarations_get_a_clear_answer_from_both_routes(monkeypatch):
+    """An entity came back from /validate-xsd as an opaque error, and /fix-xml
+    refused it without a reason, which the page blamed on 'the data'."""
+    from src.xml_validator import ENTITIES_NOT_SUPPORTED
+
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    body = _golden_counseling().split("?>", 1)[1].replace(
+        "<CounselorName>Pat Smith</CounselorName>", "<CounselorName>&counselor;</CounselorName>")
+    content = '<!DOCTYPE CounselingInformation [<!ENTITY counselor "Pat Smith">]>' + body
+
+    validated = _validate(content)
+    fixed = _fix(content)
+
+    assert validated["is_valid"] is False
+    assert validated["errors"][0].startswith(ENTITIES_NOT_SUPPORTED), validated["errors"]
+    assert fixed["changed"] is False
+    assert fixed["fix_error"].startswith(ENTITIES_NOT_SUPPORTED), fixed
+    assert fixed["fixed_xml_content"] == content

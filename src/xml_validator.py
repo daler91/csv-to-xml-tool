@@ -1,27 +1,33 @@
 """
-XML validator and fixer utility for SBA Counseling Information forms.
-This module helps validate and fix common XML structure issues.
+XML validator and fixer utility for SBA Counseling (Form 641) and Training
+(Form 888) XML. This module validates files against SBA's XSDs and puts their
+elements back in the order the schema requires.
 """
 
 import functools
 import os
-import xml.etree.ElementTree as UnsafeET
-import defusedxml.ElementTree as ET
-from defusedxml import DefusedXmlException
+import shutil
+import sys
+from dataclasses import dataclass, field
+
 from lxml import etree
 
 import logging
 import re
 
 try:
-    from .config import CounselingConfig
-except ImportError:
-    from config import CounselingConfig
-
-try:
     from .path_safety import output_base, resolve_within
 except ImportError:
     from path_safety import output_base, resolve_within
+
+try:
+    from .schema_rules import load_rules, schema_path
+except ImportError:
+    # Imported as a top-level module, with src/ on sys.path (fix_sba_xml and
+    # the tests do this): schema_rules imports its siblings relative to the
+    # package, so it is reached through the package.
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.schema_rules import load_rules, schema_path
 
 
 # Logger will be instantiated in main() using ConversionLogger,
@@ -30,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 def _setup_sys_path():
     """Ensure the script can be run standalone by adding its directory to sys.path."""
-    import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ConversionLogger is imported lazily in main() to avoid breaking package imports
@@ -69,8 +74,52 @@ def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
 # every other error in the file goes unreported with it.
 VALIDATOR_GAVE_UP = "SBA's schema validator could not finish checking this"
 
+# What the validator and the fixer say about a document whose DOCTYPE
+# declares (or that uses) entities.
+ENTITIES_NOT_SUPPORTED = "DTD/entity declarations are not supported"
+
+
+def _parser():
+    """The parser for every document the tool is given to check or fix.
+
+    Entities are never expanded and nothing is fetched (no XXE, no billion
+    laughs), and DTD attribute defaults are not applied, so the validator and
+    the fixer see the same document. CDATA sections are kept so the fixer
+    writes back what it read.
+    """
+    return etree.XMLParser(resolve_entities=False, no_network=True, strip_cdata=False)
+
+
+def _entity_problem(tree):
+    """Why this document's entities stop it being checked or fixed, or None.
+
+    Expanding entities is how an XML file reads files off the server or grows
+    to gigabytes, so the tool never does; the fixer used defusedxml, which
+    refuses any entity declaration, for the same reason. Left unexpanded, an
+    entity reference stops libxml2's schema check with an "internal error".
+    So a file with them is refused with what to change, by both routes alike.
+    """
+    if not tree.docinfo.doctype:
+        return None  # no DOCTYPE: an undeclared entity is already a parse error
+    dtd = tree.docinfo.internalDTD
+    names = [entity.name for entity in dtd.iterentities()] if dtd is not None else []
+    if not names:
+        # Used, but declared in an external DTD the parser never reads.
+        names = sorted({node.name for node in tree.iter(etree.Entity)})
+    if not names:
+        return None
+    shown = ", ".join(f"&{name};" for name in names[:3])
+    if len(names) > 3:
+        shown += f" and {len(names) - 3} more"
+    noun = "entity" if len(names) == 1 else "entities"
+    return (f"{ENTITIES_NOT_SUPPORTED}: this file's DOCTYPE declares or uses the {noun} {shown}. "
+            "Write each value out in full, remove the DOCTYPE, and try again.")
+
 
 def _validate(xmlschema, xml_doc):
+    problem = _entity_problem(xml_doc)
+    if problem:
+        return {"is_valid": False, "errors": [problem]}
     try:
         is_valid = xmlschema.validate(xml_doc)
     except etree.XMLSchemaValidateError as e:
@@ -82,9 +131,8 @@ def _validate(xmlschema, xml_doc):
 def validate_xml_content(content: bytes, xsd_file):
     """validate_against_xsd for a document held in memory, against a schema
     compiled once per path: the converters check records one at a time."""
-    parser = etree.XMLParser(resolve_entities=False)
     try:
-        return _validate(_compiled_schema(xsd_file), etree.fromstring(content, parser).getroottree())
+        return _validate(_compiled_schema(xsd_file), etree.fromstring(content, _parser()).getroottree())
     except etree.XMLSyntaxError as e:
         return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
 
@@ -112,10 +160,9 @@ def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
             return path_result
         xml_file, xsd_file = path_result
 
-        parser = etree.XMLParser(resolve_entities=False)
-        xmlschema_doc = etree.parse(xsd_file, parser=parser)
+        xmlschema_doc = etree.parse(xsd_file, parser=etree.XMLParser(resolve_entities=False))
         xmlschema = etree.XMLSchema(xmlschema_doc)
-        xml_doc = etree.parse(xml_file, parser=parser)
+        xml_doc = etree.parse(xml_file, parser=_parser())
 
         return _validate(xmlschema, xml_doc)
     except etree.XMLSyntaxError as e:
@@ -146,13 +193,14 @@ def extract_validation_details(error_message):
 
     return invalid_element, expected_elements
 
+
 def add_missing_required_elements(client_intake, record_id):
     """
     Add any missing required elements to ClientIntake.
     (Function moved from fix-sba-xml.py)
 
     Args:
-        client_intake: ClientIntake element
+        client_intake: ClientIntake element (lxml or ElementTree)
         record_id: ID of the counseling record (for logging)
     """
     # Define required elements and their default values
@@ -166,105 +214,206 @@ def add_missing_required_elements(client_intake, record_id):
     for tag, default_value in required_elements.items():
         if client_intake.find(tag) is None:
             logger.info(f"Record {record_id}: Adding missing required element '{tag}' with default '{default_value}'")
-            # UnsafeET, not ET: defusedxml.ElementTree exports only the parsing
-            # entry points (parse, fromstring, XMLParser, ...) and deliberately
-            # not the tree-*building* API, so `ET.SubElement` raised
-            # AttributeError -- and it escaped the caller's
-            # `except (OSError, ET.ParseError)`, so --add-missing crashed
-            # outright. Constructing an element on an already-parsed tree is a
-            # write, not a parse, so the hardened parser is not what's wanted
-            # here; the document was already parsed safely by defusedxml above.
-            UnsafeET.SubElement(client_intake, tag).text = default_value
+            # makeelement + append rather than SubElement: the element may be
+            # lxml's (the fixer's) or ElementTree's, and each library's
+            # SubElement takes only its own kind of parent.
+            element = client_intake.makeelement(tag, {})
+            element.text = default_value
+            client_intake.append(element)
             elements_added = True
     return elements_added
 
-def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elements_flag=False):
+
+# The schema a file is fixed by, from its root element, unless one is named.
+_SCHEMA_FOR_ROOT = {
+    "CounselingInformation": "counseling",      # Form 641, and training-client output
+    "ManagementTrainingReport": "training",     # Form 888
+}
+
+
+@dataclass
+class FixResult:
+    """What fix_element_order did with one file."""
+
+    ok: bool                       # False: nothing was written, and `error` says why
+    error: str | None = None
+    xsd_file: str | None = None    # the schema whose order was applied
+    reordered: int = 0             # elements whose children were put back in order
+    added: list[str] = field(default_factory=list)    # what --add-missing filled in
+
+    @property
+    def changed(self) -> bool:
+        """Whether any element moved or was added: nothing else is changed."""
+        return bool(self.reordered or self.added)
+
+
+@functools.lru_cache(maxsize=8)
+def _child_order(xsd_file):
+    """Each element path's children, ranked in the order the schema lists them.
+
+    load_rules walks the schema depth-first and inserts each element's path
+    before its children's, so a parent's child paths appear in it in schema
+    order. SBA's schemas repeat single elements but never a whole sequence,
+    so sorting children into this order is always the order they require.
     """
-    Fix the order of elements in the ClientIntake section according to the XSD schema.
-    Optionally adds missing required elements.
+    order = {}
+    for path in load_rules(xsd_file):
+        if len(path) > 1:
+            siblings = order.setdefault(path[:-1], {})
+            siblings.setdefault(path[-1], len(siblings))
+    return order
+
+
+def _sort_children(parent, rank):
+    """Stable-sort parent's child elements by `rank` (tag -> position).
+
+    Tags the rank doesn't know go last, and repeated elements keep their
+    order. A comment or processing instruction travels with the element after
+    it, and the whitespace between children stays where it was, so the file's
+    indentation doesn't change. Returns True when an element moved.
+    """
+    groups, pending = [], []
+    for node in parent:
+        pending.append(node)
+        if isinstance(node.tag, str):  # an element, not a comment or PI
+            groups.append(pending)
+            pending = []
+    unknown = len(rank)
+    ordered = sorted(groups, key=lambda group: rank.get(group[-1].tag, unknown))
+    if all(a is b for a, b in zip(ordered, groups, strict=True)):
+        return False
+    tails = [node.tail for node in parent]
+    parent[:] = [node for group in ordered for node in group] + pending
+    for node, tail in zip(parent, tails, strict=True):
+        node.tail = tail
+    return True
+
+
+def _reorder_tree(root, order):
+    """Sort the children of every element the schema knows; returns how many
+    elements had a child moved."""
+    reordered = 0
+    stack = [(root, (root.tag,))]
+    while stack:
+        element, path = stack.pop()
+        rank = order.get(path)
+        if rank is None:
+            continue  # not in the schema, so neither are its children
+        if _sort_children(element, rank):
+            reordered += 1
+        stack.extend((child, path + (child.tag,)) for child in element if isinstance(child.tag, str))
+    return reordered
+
+
+def _add_missing(root, result):
+    """--add-missing: fill what add_missing_required_elements can in each ClientIntake."""
+    for position, record in enumerate(root.findall("CounselingRecord"), 1):
+        record_id = (record.findtext("PartnerClientNumber") or "").strip() or f"#{position}"
+        client_intake = record.find("ClientIntake")
+        if client_intake is None:
+            continue
+        had = {child.tag for child in client_intake}
+        if add_missing_required_elements(client_intake, record_id):
+            result.added += [f"Record {record_id}: {child.tag}" for child in client_intake
+                             if isinstance(child.tag, str) and child.tag not in had]
+
+
+def _not_fixed(reason):
+    return FixResult(ok=False, error=reason)
+
+
+def _same_file(a, b):
+    return os.path.realpath(a) == os.path.realpath(b)
+
+
+def fix_element_order(xml_file, output_file=None, add_missing_elements_flag=False, xsd_file=None):
+    """
+    Put every element's children in the order SBA's schema lists them.
+
+    The order is read from the schema itself: the one the root element belongs
+    to (CounselingInformation: Form 641, ManagementTrainingReport: Form 888),
+    unless xsd_file names one. The file is read the way validate_against_xsd
+    reads it and written with the same library, so comments, processing
+    instructions, the DOCTYPE and characters such as a CR written as &#13;
+    come through as they were. Nothing but the order changes, unless
+    add_missing_elements_flag adds what add_missing_required_elements can.
 
     Args:
         xml_file: Path to the XML file
         output_file: Path to save the fixed XML file (if None, will modify the original)
-        add_missing_elements_flag: If True, add missing required elements.
+        add_missing_elements_flag: If True, add missing required ClientIntake elements.
+        xsd_file: The schema to order by (default: from the root element)
 
     Returns:
-        Boolean indicating success
+        A FixResult. Nothing is written when it is not ok.
     """
     if output_file is None:
         output_file = xml_file
-
     try:
-        # Parse the XML file
-        tree = ET.parse(xml_file)
-        root = tree.getroot()
+        tree = etree.parse(xml_file, _parser())
+    except etree.XMLSyntaxError as e:
+        return _not_fixed(f"XML parse error: {e}")
+    except OSError as e:
+        return _not_fixed(f"Could not read the file: {e}")
+    problem = _entity_problem(tree)
+    if problem:
+        return _not_fixed(problem)
 
-        client_intake_order = CounselingConfig.CLIENT_INTAKE_ELEMENT_ORDER
+    root = tree.getroot()
+    if xsd_file is None:
+        if root.tag not in _SCHEMA_FOR_ROOT:
+            return _not_fixed((
+                f"The root element is <{root.tag}>, not <CounselingInformation> (Form 641) or "
+                "<ManagementTrainingReport> (Form 888), so there is no SBA schema to order it by."))
+        xsd_file = schema_path(_SCHEMA_FOR_ROOT[root.tag])
+    try:
+        order = _child_order(xsd_file)
+    except (OSError, etree.XMLSyntaxError) as e:
+        return _not_fixed(f"Could not read the schema {xsd_file}: {e}")
+    if (root.tag,) not in order:
+        return _not_fixed(f"<{root.tag}> is not the root element of {os.path.basename(xsd_file)}.")
 
-        # Process each CounselingRecord
-        for counseling_record in root.findall('CounselingRecord'):
-            record_id_element = counseling_record.find('PartnerClientNumber')
-            record_id = (record_id_element.text or "UNKNOWN_RECORD") if record_id_element is not None else "UNKNOWN_RECORD"
+    result = FixResult(ok=True, xsd_file=xsd_file)
+    if add_missing_elements_flag:
+        _add_missing(root, result)
+    result.reordered = _reorder_tree(root, order)
+    try:
+        if result.changed:
+            tree.write(output_file, encoding="utf-8", xml_declaration=True)
+        elif not _same_file(xml_file, output_file):
+            # Nothing moved: the output is the input, byte for byte.
+            shutil.copyfile(xml_file, output_file)
+    except OSError as e:
+        return _not_fixed(f"Could not write {output_file}: {e}")
+    return result
 
-            client_intake = counseling_record.find('ClientIntake')
-            if client_intake is not None:
-                if add_missing_elements_flag:
-                    add_missing_required_elements(client_intake, record_id)
-                # Reorder elements in ClientIntake
-                reorder_elements(client_intake, client_intake_order)
 
-        # Save the fixed XML
-        tree.write(output_file, encoding='utf-8', xml_declaration=True)
-        return True
-    except (OSError, ET.ParseError, DefusedXmlException):
-        # DefusedXmlException: an entity or DTD declaration defusedxml refuses
-        # to process. It is a ValueError, not a ParseError, so it used to
-        # escape here -- a 500 from /fix-xml and a traceback from the CLI.
-        logger.exception("Error fixing XML file")
-        return False
+def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elements_flag=False):
+    """
+    fix_element_order's success alone, for callers written when the fixer
+    knew only ClientIntake's order. Every sequence is put in order now.
 
-def _collect_elements_by_tag(parent):
-    """Remove all children from parent and return a dict mapping tag -> element or list of elements."""
-    elements = {}
-    children = list(parent)
-    for child in children:
-        tag = child.tag
-        if tag in elements:
-            if isinstance(elements[tag], list):
-                elements[tag].append(child)
-            else:
-                elements[tag] = [elements[tag], child]
-        else:
-            elements[tag] = child
-        parent.remove(child)
-    return elements
+    Returns:
+        Boolean indicating the file was read and written
+    """
+    result = fix_element_order(xml_file, output_file, add_missing_elements_flag)
+    if not result.ok:
+        logger.error(f"Could not fix {xml_file}: {result.error}")
+    return result.ok
 
-def _append_elements(parent, elements, tag):
-    """Append element(s) for the given tag to parent, handling both single and list values."""
-    item = elements[tag]
-    if isinstance(item, list):
-        for element in item:
-            parent.append(element)
-    else:
-        parent.append(item)
 
 def reorder_elements(parent, element_order):
     """
     Reorder child elements according to the specified order.
 
     Args:
-        parent: Parent element
+        parent: Parent element (lxml or ElementTree)
         element_order: List of element names in the correct order
+
+    Returns:
+        True when an element moved.
     """
-    elements = _collect_elements_by_tag(parent)
-
-    for tag in element_order:
-        if tag in elements:
-            _append_elements(parent, elements, tag)
-
-    for tag in elements:
-        if tag not in element_order:
-            _append_elements(parent, elements, tag)
+    return _sort_children(parent, {tag: position for position, tag in enumerate(element_order)})
 
 def _resolve_output_path(file_path, input_dir, output_dir):
     """Compute the output path for a file, creating directories as needed."""

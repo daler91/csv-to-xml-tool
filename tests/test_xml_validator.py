@@ -192,7 +192,7 @@ class TestProcessDirectory(unittest.TestCase):
 
 class TestFixClientIntakeElementOrder(unittest.TestCase):
 
-    @patch('xml_validator.ET.parse')
+    @patch('xml_validator.etree.parse')
     @patch('xml_validator.logger.error')
     def test_fix_client_intake_element_order_exception(self, mock_logger, mock_parse):
         """Test the exception path for fix_client_intake_element_order."""
@@ -201,15 +201,15 @@ class TestFixClientIntakeElementOrder(unittest.TestCase):
         result = xml_validator.fix_client_intake_element_order("dummy.xml")
 
         self.assertFalse(result)
-        # Now logged via logger.exception(...), i.e. error(msg, exc_info=True).
-        mock_logger.assert_called_once_with("Error fixing XML file", exc_info=True)
+        mock_logger.assert_called_once_with("Could not fix dummy.xml: Could not read the file: Test exception")
 
 
     def test_fix_client_intake_element_order_success(self):
         """Test the success path for fix_client_intake_element_order."""
-        # Create a temporary dummy XML file to test order
+        # Create a temporary dummy XML file to test order. The root is SBA's:
+        # the order now comes from the schema that root element belongs to.
         xml_content = """<?xml version="1.0" encoding="utf-8"?>
-<Root>
+<CounselingInformation>
     <CounselingRecord>
         <PartnerClientNumber>12345</PartnerClientNumber>
         <ClientIntake>
@@ -220,7 +220,7 @@ class TestFixClientIntakeElementOrder(unittest.TestCase):
             <Sex>Male</Sex>
         </ClientIntake>
     </CounselingRecord>
-</Root>
+</CounselingInformation>
 """
         with tempfile.NamedTemporaryFile('w', delete=False, suffix='.xml') as f:
             f.write(xml_content)
@@ -232,7 +232,7 @@ class TestFixClientIntakeElementOrder(unittest.TestCase):
             self.assertTrue(result)
 
             # Now parse it back to check order
-            tree = xml_validator.ET.parse(temp_file)
+            tree = xml_validator.etree.parse(temp_file)
             root = tree.getroot()
             client_intake = root.find('.//ClientIntake')
 
@@ -244,6 +244,215 @@ class TestFixClientIntakeElementOrder(unittest.TestCase):
         finally:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+_GOLDEN_COUNSELING = os.path.join(_REPO_ROOT, 'tests', 'golden', 'sample_counseling.xml')
+_GOLDEN_TRAINING = os.path.join(_REPO_ROOT, 'tests', 'golden', 'sample_training.xml')
+_COUNSELING_XSD = os.path.join(_REPO_ROOT, 'schemas', 'SBA_NEXUS_Counseling-2-14.xsd')
+_TRAINING_XSD = os.path.join(_REPO_ROOT, 'schemas', 'SBA_NEXUS_Training-2-25-2025.xsd')
+
+
+def _move_to_end(parent, tag):
+    child = parent.find(tag)
+    parent.remove(child)
+    parent.append(child)
+
+
+class _FixerCase(unittest.TestCase):
+    """Writes a mutated golden file to a temp dir for the fixer."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def golden(self, path=_GOLDEN_COUNSELING):
+        return xml_validator.etree.parse(path)
+
+    def write(self, content, name='in.xml'):
+        path = os.path.join(self.tmp, name)
+        if isinstance(content, str):
+            with open(path, 'w', encoding='utf-8', newline='') as f:
+                f.write(content)
+        else:
+            content.write(path, encoding='utf-8', xml_declaration=True)
+        return path
+
+    def read(self, path):
+        with open(path, encoding='utf-8', newline='') as f:
+            return f.read()
+
+    def golden_body(self):
+        """The golden counseling file without its XML declaration."""
+        return self.read(_GOLDEN_COUNSELING).split('?>', 1)[1]
+
+    def misordered_body(self):
+        """golden_body with Race moved to the end of the first ClientIntake."""
+        tree = self.golden()
+        _move_to_end(tree.getroot().find('CounselingRecord/ClientIntake'), 'Race')
+        return xml_validator.etree.tostring(tree.getroot(), encoding='unicode')
+
+
+class TestFixEveryElementOrder(_FixerCase):
+    """The fixer reordered ClientIntake's children only, from a hand-kept list:
+    an element out of place anywhere else stayed there, and the file failed."""
+
+    def test_orders_every_sequence_not_just_client_intake(self):
+        tree = self.golden()
+        record = tree.getroot().find('CounselingRecord')
+        _move_to_end(record.find('CounselorRecord'), 'Language')
+        _move_to_end(record, 'ClientRequest')            # the record's own sequence
+        _move_to_end(record, 'PartnerClientNumber')
+        race = record.find('ClientIntake/Race')
+        described = race.makeelement('SelfDescribedRace', {})
+        described.text = 'Two or More Races'
+        race.insert(0, described)                        # a nested one
+        source = self.write(tree)
+        self.assertFalse(xml_validator.validate_against_xsd(source, _COUNSELING_XSD)['is_valid'])
+
+        output = os.path.join(self.tmp, 'out.xml')
+        self.assertTrue(xml_validator.fix_client_intake_element_order(source, output))
+
+        self.assertEqual(xml_validator.validate_against_xsd(output, _COUNSELING_XSD),
+                         {'is_valid': True, 'errors': []})
+
+    def test_orders_training_xml_by_its_own_schema(self):
+        tree = self.golden(_GOLDEN_TRAINING)
+        _move_to_end(tree.getroot().find('ManagementTrainingRecord'), 'Location')
+        source = self.write(tree)
+
+        output = os.path.join(self.tmp, 'out.xml')
+
+        result = xml_validator.fix_element_order(source, output)
+
+        self.assertEqual((result.ok, result.reordered), (True, 1))
+        self.assertEqual(os.path.basename(result.xsd_file), os.path.basename(_TRAINING_XSD))
+        self.assertEqual(xml_validator.validate_against_xsd(output, _TRAINING_XSD), {'is_valid': True, 'errors': []})
+
+    def test_repeats_keep_their_order_and_unknown_tags_go_last(self):
+        parent = xml_validator.etree.fromstring('<p><B/><X n="1"/><A n="1"/><A n="2"/><X n="2"/></p>')
+
+        self.assertTrue(xml_validator.reorder_elements(parent, ['A', 'B']))
+
+        self.assertEqual([(c.tag, c.get('n')) for c in parent],
+                         [('A', '1'), ('A', '2'), ('B', None), ('X', '1'), ('X', '2')])
+        self.assertFalse(xml_validator.reorder_elements(parent, ['A', 'B']))
+
+    def test_whitespace_stays_put_and_comments_move_with_their_element(self):
+        parent = xml_validator.etree.fromstring('<p>\n  <B/>\n  <!-- about A -->\n  <A/>\n</p>')
+
+        xml_validator.reorder_elements(parent, ['A', 'B'])
+
+        self.assertEqual(xml_validator.etree.tostring(parent, encoding='unicode'),
+                         '<p>\n  <!-- about A -->\n  <A/>\n  <B/>\n</p>')
+
+    def test_a_file_with_no_sba_root_is_refused(self):
+        source = self.write('<Root><CounselingRecord/></Root>')
+        output = os.path.join(self.tmp, 'out.xml')
+
+        result = xml_validator.fix_element_order(source, output)
+
+        self.assertFalse(result.ok)
+        self.assertIn('The root element is <Root>', result.error)
+        self.assertFalse(os.path.exists(output))
+
+
+class TestFixChangesOnlyTheOrder(_FixerCase):
+    """The fixer read with defusedxml/expat and wrote with ElementTree, unlike
+    the validator (lxml): it applied DTD attribute defaults, wrote a CR given
+    as &#13; back raw (so every reader then saw LF), and dropped comments,
+    processing instructions and the DOCTYPE."""
+
+    def test_dtd_attribute_defaults_are_not_made_real(self):
+        source = self.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                            '<!DOCTYPE CounselingInformation [\n'
+                            '  <!ATTLIST CounselingRecord foo CDATA "bar">\n]>' + self.misordered_body())
+        output = os.path.join(self.tmp, 'out.xml')
+
+        self.assertTrue(xml_validator.fix_client_intake_element_order(source, output))
+
+        self.assertEqual(xml_validator.validate_against_xsd(output, _COUNSELING_XSD),
+                         {'is_valid': True, 'errors': []})
+        fixed = self.read(output)
+        self.assertNotIn('foo="bar"', fixed)
+        self.assertIn('<!ATTLIST CounselingRecord foo CDATA "bar">', fixed)
+
+    def test_carriage_returns_comments_and_pis_come_through(self):
+        notes = '<CounselorNotes>Discussed loan options.&#13;\nFollow up in March.</CounselorNotes>'
+        body = self.misordered_body().replace('</CounselorRecord>', notes + '</CounselorRecord>', 1)
+        body = body.replace('<CounselingRecord>', '<!-- reviewed by J. Smith --><?review ok?><CounselingRecord>', 1)
+        source = self.write('<?xml version="1.0" encoding="UTF-8"?>\n' + body)
+        output = os.path.join(self.tmp, 'out.xml')
+
+        self.assertTrue(xml_validator.fix_client_intake_element_order(source, output))
+
+        self.assertTrue(xml_validator.validate_against_xsd(output, _COUNSELING_XSD)['is_valid'])
+        fixed = self.read(output)
+        self.assertIn('Discussed loan options.&#13;\nFollow up in March.', fixed)
+        self.assertIn('<!-- reviewed by J. Smith --><?review ok?>', fixed)
+
+    def test_a_file_already_in_order_is_left_alone(self):
+        source = self.write(self.read(_GOLDEN_COUNSELING).replace('<CounselingRecord>', '<!-- kept --><CounselingRecord>'))
+        os.utime(source, ns=(0, 0))
+        output = os.path.join(self.tmp, 'out.xml')
+
+        self.assertTrue(xml_validator.fix_client_intake_element_order(source))
+        self.assertTrue(xml_validator.fix_client_intake_element_order(source, output))
+
+        self.assertEqual(os.stat(source).st_mtime_ns, 0)  # not rewritten
+        self.assertEqual(self.read(output), self.read(source))
+        self.assertFalse(xml_validator.fix_element_order(source).changed)
+
+
+class TestEntityDeclarations(_FixerCase):
+    """An internal entity came back from the validator as an opaque error, and
+    the fixer refused a declared one without saying so to the web."""
+
+    def with_doctype(self, subset, body):
+        return f'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE CounselingInformation [{subset}]>{body}'
+
+    def test_validator_says_entities_are_not_supported(self):
+        body = self.golden_body().replace('<CounselorName>Pat Smith</CounselorName>',
+                                          '<CounselorName>&counselor;</CounselorName>')
+        source = self.write(self.with_doctype('<!ENTITY counselor "Pat Smith">', body))
+
+        result = xml_validator.validate_against_xsd(source, _COUNSELING_XSD)
+
+        self.assertFalse(result['is_valid'])
+        self.assertEqual(len(result['errors']), 1)
+        self.assertTrue(result['errors'][0].startswith(xml_validator.ENTITIES_NOT_SUPPORTED), result['errors'])
+        self.assertIn('&counselor;', result['errors'][0])
+
+    def test_fixer_refuses_a_declared_entity_and_says_why(self):
+        source = self.write(self.with_doctype('<!ENTITY nbsp "&#160;">', self.misordered_body()))
+        output = os.path.join(self.tmp, 'out.xml')
+
+        result = xml_validator.fix_element_order(source, output)
+
+        self.assertFalse(result.ok)
+        self.assertTrue(result.error.startswith(xml_validator.ENTITIES_NOT_SUPPORTED), result.error)
+        self.assertFalse(os.path.exists(output))
+
+    def test_entity_expansion_and_external_entities_stay_refused(self):
+        # What defusedxml guarded the fixer against: a billion laughs, and an
+        # external entity reading a local file.
+        laughs = '<!ENTITY lol "lol">' + ''.join(
+            f'<!ENTITY lol{i} "{("&lol%d;" % (i - 1) if i > 1 else "&lol;") * 10}">' for i in range(1, 10))
+        cases = {
+            'billion laughs': self.with_doctype(laughs, '<CounselingInformation>&lol9;</CounselingInformation>'),
+            'external entity': self.with_doctype(f'<!ENTITY x SYSTEM "file://{_GOLDEN_COUNSELING}">',
+                                                 '<CounselingInformation>&x;</CounselingInformation>'),
+        }
+        for name, content in cases.items():
+            with self.subTest(name):
+                source = self.write(content)
+                output = os.path.join(self.tmp, 'out.xml')
+                result = xml_validator.fix_element_order(source, output)
+                self.assertFalse(result.ok)
+                self.assertFalse(os.path.exists(output))
+                validation = xml_validator.validate_against_xsd(source, _COUNSELING_XSD)
+                self.assertFalse(validation['is_valid'])
+                self.assertNotIn('PartnerClientNumber', ' '.join(validation['errors']))
+
 
 if __name__ == '__main__':
     unittest.main()

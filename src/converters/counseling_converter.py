@@ -34,6 +34,7 @@ class CounselingConverter(BaseConverter):
     # Which schema's facets SchemaGuard enforces, and whose CSV column names
     # its issues use (training-client overrides this).
     SCHEMA_TYPE = "counseling"
+    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID')
     # The column PartnerSessionNumber is read from, which a blank session
     # number is reported against, and how that warning starts.
     SESSION_NUMBER_FIELD = 'Activity ID'
@@ -345,6 +346,7 @@ class CounselingConverter(BaseConverter):
         reason recorded."""
         csv_row = row
         row = self._preprocess_row(row)
+        cleaned_ids = self._clean_identifiers(row)
         contact_id = row.get('Contact ID')
         if contact_id is not None:
             # A whitespace-only id was written to the filing as "   ";
@@ -366,6 +368,7 @@ class CounselingConverter(BaseConverter):
             # are the difference from "Successful".
             self.validator.record_processed(success=False)
             return False
+        self._report_cleaned_identifiers(cleaned_ids, record_id)
 
         counseling_record = create_element(root, 'CounselingRecord')
         self._record_columns = {}

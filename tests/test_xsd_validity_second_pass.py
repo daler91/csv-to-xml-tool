@@ -511,5 +511,39 @@ class InvisibleCellTest(_ValidityCase):
         self.assertEqual(root.findtext(".//PartnerClientNumber"), "C-001")
 
 
+class IdentifierCharactersTest(_ValidityCase):
+    """X.5: an ID's invisible or control characters made a different ID from
+    the one shown: a Contact ID with a zero-width space was filed with it, and
+    'EVT-001' with a control character became a second event that the guard
+    then wrote as 'EVT-001' too."""
+
+    def test_an_invisible_character_is_taken_out_of_a_contact_id(self):
+        root = self.convert_row(**{"Contact ID": "003XX000004TMM1AAA​", "Activity ID": "‎A-1"})
+        self.assertEqual(root.findtext("CounselingRecord/PartnerClientNumber"), "003XX000004TMM1AAA")
+        self.assertEqual(root.findtext(".//PartnerSessionNumber"), "A-1")
+        warning, = self.issues("Contact ID", "warning")
+        self.assertIn("(U+200B)", warning["message"])
+        self.assertIn("filed as '003XX000004TMM1AAA'", warning["message"])
+        self.assertEqual(len(self.issues("Activity ID", "warning")), 1)
+
+    def test_event_ids_the_xml_writes_alike_are_one_event(self):
+        self.converter_class = TrainingConverter
+        self.converter = TrainingConverter(self.converter.logger, self.validator)
+        root = self.convert([_make_training_row(), _make_training_row(),
+                             _make_training_row(**{"Class/Event ID": "EVT-001\x01"}),
+                             _make_training_row(**{"Class/Event ID": "EVT-001\x01"})])
+        self.assertEqual([(r.findtext("PartnerTrainingNumber"), r.findtext("NumberTrained/Total"))
+                          for r in root], [("EVT-001", "4")])
+        warning, = self.issues("Class/Event ID", "warning")
+        self.assertIn("(U+0001)", warning["message"])
+
+    def test_a_training_client_member_id(self):
+        self.converter_class = TrainingClientConverter
+        self.converter = TrainingClientConverter(self.converter.logger, self.validator)
+        root = self.convert([_make_training_client_row(**{"Member ID": "00vPe00000Pn89L﻿"})])
+        self.assertEqual(root.findtext(".//PartnerSessionNumber"), "00vPe00000Pn89L")
+        self.assertEqual(len(self.issues("Member ID", "warning")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

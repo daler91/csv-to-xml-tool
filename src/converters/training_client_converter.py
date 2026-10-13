@@ -22,6 +22,8 @@ class TrainingClientConverter(CounselingConverter):
     for fields not collected on the shorter training client form.
     """
     SCHEMA_TYPE = "training-client"
+    # After the rename: 'Activity ID' is the CSV's Class/Event ID.
+    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID', 'Member ID')
     SESSION_NUMBER_FIELD = 'Member ID'
     SESSION_NUMBER_BLANK = "No Member ID or Class/Event ID"
 

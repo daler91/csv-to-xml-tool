@@ -21,6 +21,7 @@ class TrainingConverter(BaseConverter):
     Converter for Management Training Report data.
     """
     SCHEMA_TYPE = "training"
+    IDENTIFIER_COLUMNS = (TrainingConfig.COLUMN_MAPPING["event_id"],)
 
     # Read when the CSV has them, but not offered on the mapping page (which
     # lists TrainingConfig.COLUMN_MAPPING): optional, as on the counseling
@@ -103,8 +104,15 @@ class TrainingConverter(BaseConverter):
             raise EmptyCSVError(f"Required column '{event_id_col}' is missing from the CSV.")
 
         # 1-based, like the counseling converter's Row_N ids and row numbers.
-        valid_rows = [(index, row) for index, row in enumerate(rows, 1)
-                      if data_validation.validate_training_record(row, index, self.validator)]
+        valid_rows = []
+        for index, row in enumerate(rows, 1):
+            # Before grouping: an ID the XML would write the same way as
+            # another one is the same event.
+            cleaned_ids = self._clean_identifiers(row)
+            if data_validation.validate_training_record(row, index, self.validator):
+                event_id = str(row[event_id_col]).strip()
+                self._report_cleaned_identifiers(cleaned_ids, event_id, event_id=event_id)
+                valid_rows.append((index, row))
         if not valid_rows:
             # Must raise, not return: a silent return left convert() writing no
             # file at all while main.py still logged "Conversion process

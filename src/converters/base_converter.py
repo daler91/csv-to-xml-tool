@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from .. import data_cleaning
 from ..config import ValidationCategory
-from ..schema_rules import schema_path
+from ..schema_rules import clean_identifier, identifier_noise, schema_path
 from ..xml_utils import ET, write_document
 from ..xml_validator import validate_against_xsd, validate_xml_content
 from ..xsd_error_mapping import build_error_details, errors_by_record
@@ -54,6 +54,9 @@ class BaseConverter(abc.ABC):
     # The schema the output is filed against: "counseling", "training" or
     # "training-client" (see schema_rules.XSD_FILES).
     SCHEMA_TYPE = ""
+    # The columns holding identifiers, cleaned as they are read (see
+    # _clean_identifiers); the first is the one that names the record.
+    IDENTIFIER_COLUMNS: tuple[str, ...] = ()
 
     def __init__(self, logger: logging.Logger, validator: ValidationTracker) -> None:
         """
@@ -80,6 +83,9 @@ class BaseConverter(abc.ABC):
         self.record_sources: list[dict] = []
         # Why each record left out of the file was (see _leave_out), in order.
         self.left_out_reasons: list[str] = []
+        # (record, column, cell) for each identifier change already reported,
+        # so an event's thirty attendee rows give one warning, not thirty.
+        self._cleaned_identifiers: set[tuple[str, str, str]] = set()
 
     def _read_csv(self, input_path: str) -> tuple[list[str], list[dict]]:
         """Read the input CSV as (normalized headers, rows).
@@ -171,6 +177,41 @@ class BaseConverter(abc.ABC):
                     excel_errors.append((number, column, value.strip()))
                 row[column] = ""
         return row
+
+    def _clean_identifiers(self, row: dict) -> list[tuple[str, str]]:
+        """Clean the row's IDENTIFIER_COLUMNS in place to the form they are
+        written in (schema_rules.clean_identifier); returns (column, the cell
+        as written) for each one that changed, for _report_cleaned_identifiers
+        once the row is known to be a record.
+
+        A zero-width space at the end of a Contact ID was filed as part of it,
+        and training grouped events on the raw ID, so 'EVT-001' with a control
+        character was a second event that the schema guard then wrote as
+        'EVT-001' too.
+        """
+        changed = []
+        for column in self.IDENTIFIER_COLUMNS:
+            raw = row.get(column)
+            if raw and clean_identifier(raw) != raw.strip():
+                row[column] = clean_identifier(raw)
+                changed.append((column, raw))
+        return changed
+
+    def _report_cleaned_identifiers(self, changed: list[tuple[str, str]], record_id: str,
+                                    event_id: str | None = None) -> None:
+        """One warning per identifier _clean_identifiers changed, naming what it took out."""
+        for column, raw in changed:
+            if (record_id, column, raw) in self._cleaned_identifiers:
+                continue
+            self._cleaned_identifiers.add((record_id, column, raw))
+            codes = identifier_noise(raw)
+            what = "an invisible or control character" if len(codes) == 1 else \
+                f"{len(codes)} invisible or control characters"
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.STANDARDIZED_VALUE, column,
+                f"The {column} had {what} in it ({', '.join(codes)}), which would make it a different "
+                f"ID from the one it looks like; filed as '{clean_identifier(raw)}'.",
+                event_id=event_id)
 
     def _file_error(self, category: str, message: str) -> None:
         """Record an error about the input file as a whole."""

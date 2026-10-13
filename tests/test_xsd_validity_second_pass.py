@@ -1,0 +1,305 @@
+"""The second pass over SBA XSD validity (docs/reviews/XSD_VALIDITY_ANALYSIS.md,
+"Second pass"). Each test converts a CSV that used to cost a record, hang the
+conversion, or change a value without a word, and checks the file validates
+against the schema SBA supplied, plus what was filed and reported.
+"""
+
+import os
+import tempfile
+import time
+import unittest
+
+from src import data_cleaning
+from src.converters.training_client_converter import TrainingClientConverter
+from src.converters.training_converter import TrainingConverter
+from src.schema_rules import _check_value, load_rules, schema_path
+
+from tests.test_integration_xsd import _make_counseling_row, _make_training_client_row, _make_training_row
+from tests.test_xsd_validity import _ValidityCase
+
+# What base_converter._write_valid_xml says when the final XSD check had to
+# leave a record out: the schema guard should have handled the value itself.
+SAFETY_NET = "SBA's schema rejects this"
+
+
+def _rule(schema_type, *suffix):
+    rules = load_rules(schema_path(schema_type))
+    return next(rule for path, rule in rules.items() if path[-len(suffix):] == suffix)
+
+
+class GuardAgreesWithLibxml2Test(_ValidityCase):
+    """W.1: the guard judged values with Python's re, Decimal and
+    date.fromisoformat, which accept things libxml2 rejects. The final XSD
+    check then left the whole record out for an optional value."""
+
+    def assert_dropped_not_left_out(self, field, element, **overrides):
+        root = self.convert_row(**overrides)
+        self.assertEqual(len(root), 1)
+        self.assertIsNone(root.find(f".//{element}"))
+        self.assertEqual([i for i in self.validator.issues if SAFETY_NET in i["message"]], [])
+        self.assertTrue([i for i in self.issues(field, "warning") if "omitted" in i["message"]])
+
+    def test_fullwidth_digits_in_an_integer(self):
+        self.assert_dropped_not_left_out("FIPS_Code", "FIPS_Code", Rural_vs_Urban="Rural",
+                                         FIPS_Code="１９１５３")
+
+    def test_digits_libxml2_does_not_count_as_digits(self):
+        # Python's \d knows the Tamil digits; the XSD's \d, as libxml2 has it, doesn't.
+        self.assert_dropped_not_left_out("Mailing Zip/Postal Code", "AddressPart1/ZipCode",
+                                         **{"Mailing Zip/Postal Code": "௫௦௩௦௯"})
+
+    def test_a_huge_whole_number_written_with_a_fraction(self):
+        self.assert_dropped_not_left_out("FIPS_Code", "FIPS_Code", Rural_vs_Urban="Rural",
+                                         FIPS_Code="1" * 4400 + ".0")
+
+    def test_an_email_that_made_the_pattern_backtrack_forever(self):
+        started = time.monotonic()
+        self.assert_dropped_not_left_out("Email", "ClientRequest/Email",
+                                         Email="a@b" + ".aaaa" * 14 + "!")
+        # Python's regex engine took ~47 s for this one and never finished at
+        # 90 characters; libxml2 gives up after about 2 s and the result is cached.
+        self.assertLess(time.monotonic() - started, 15)
+
+    def test_iso_basic_and_week_dates_are_not_xs_date(self):
+        rule = _rule("counseling", "CounselorRecord", "DateCounseled")
+        for text in ("20250115", "2025-W03-3", "2025-W03", "0000-01-01"):
+            with self.subTest(text=text):
+                self.assertIsNotNone(_check_value(text, rule)[1])
+        self.assertIsNone(_check_value("2025-01-15", rule)[1])
+
+    def test_patterns_are_judged_in_the_xsd_dialect(self):
+        # ^ and $ are literal characters in an XSD pattern, and \p{..} is a
+        # class Python's re can't compile; a schema update using either used
+        # to file invalid values or stop every conversion at start-up.
+        xsd = os.path.join(tempfile.mkdtemp(), "patterns.xsd")
+        with open(xsd, "w", encoding="utf-8") as f:
+            f.write(
+                '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="R">'
+                '<xs:complexType><xs:sequence>'
+                '<xs:element name="Anchored"><xs:simpleType><xs:restriction base="xs:string">'
+                '<xs:pattern value="^[0-9]{10}$"/></xs:restriction></xs:simpleType></xs:element>'
+                '<xs:element name="Letters"><xs:simpleType><xs:restriction base="xs:string">'
+                '<xs:pattern value="\\p{L}+"/></xs:restriction></xs:simpleType></xs:element>'
+                '</xs:sequence></xs:complexType></xs:element></xs:schema>')
+        rules = load_rules(xsd)
+        self.assertIsNotNone(_check_value("5155551234", rules[("R", "Anchored")])[1])
+        self.assertIsNone(_check_value("^5155551234$", rules[("R", "Anchored")])[1])
+        self.assertIsNone(_check_value("José", rules[("R", "Letters")])[1])
+        self.assertIsNotNone(_check_value("José1", rules[("R", "Letters")])[1])
+
+
+class ExponentTest(_ValidityCase):
+    """W.2: clean_numeric wrote out an exponent in full -- '1e5000' raised and
+    cost the record, '1E+99999999' never finished."""
+
+    def test_clean_numeric_refuses_absurd_exponents_at_once(self):
+        started = time.monotonic()
+        for text in ("1e5000", "1E+99999999", "1e-99999999"):
+            self.assertEqual(data_cleaning.clean_numeric(text), "")
+        self.assertLess(time.monotonic() - started, 1)
+        self.assertEqual(data_cleaning.clean_numeric("1.5E+6"), "1500000")
+
+    def test_the_record_is_kept_and_the_value_reported(self):
+        root = self.convert_row(**{"Gross Revenues/Sales": "1e5000"})
+        self.assertEqual(root.findtext(".//ClientAnnualIncomePart2/GrossRevenues"), "0")
+        warning, = self.issues("Gross Revenues/Sales", "warning")
+        self.assertIn("'1e5000' could not be used", warning["message"])
+
+
+class UnwritableCellTest(_ValidityCase):
+    """W.3: a cell of characters XML can't carry was stripped to an empty
+    <PartnerClientNumber/> -- valid, but naming nobody."""
+
+    def test_a_contact_id_of_control_characters_is_a_blank_contact_id(self):
+        root = self.convert([_make_counseling_row(**{"Contact ID": "KEEP"}),
+                             _make_counseling_row(**{"Contact ID": "\x01\x02"})])
+        self.assertEqual([r.findtext("PartnerClientNumber") for r in root], ["KEEP"])
+        self.assertTrue([e for e in self.issues(severity="error")
+                         if e["message"] == "Missing required Contact ID."])
+
+    def test_text_around_control_characters_is_kept(self):
+        root = self.convert_row(**{"Mailing City": "Des\x0bMoines"})
+        self.assertEqual(root.findtext(".//AddressPart1/City"), "Des Moines")
+
+
+class DateTimeTest(_ValidityCase):
+    """W.4: a Salesforce Date/Time export ("1/15/2025 10:30 AM") wasn't read,
+    so the session was filed without its date."""
+
+    def test_session_dates_with_a_time(self):
+        for text, expected in (("1/15/2025 10:30 AM", "2025-01-15"),
+                               ("2025-01-15T14:30:00.000Z", "2025-01-15"),
+                               ("2025-01-15 14:30:00", "2025-01-15"),
+                               ("Jan 15, 2025", "2025-01-15")):
+            with self.subTest(text=text):
+                self.setUp()
+                root = self.convert_row(Date=text)
+                self.assertEqual(root.findtext(".//DateCounseled"), expected)
+
+    def test_an_ambiguous_date_with_a_time_is_still_flagged(self):
+        self.assertTrue(data_cleaning.is_ambiguous_date("3/4/2025 9:05 pm"))
+
+    def test_an_unreadable_optional_date_is_reported(self):
+        root = self.convert_row(**{"Client Signature - Date": "15/01/2025"})
+        self.assertIsNone(root.find(".//ClientSignature/Date"))
+        warning, = self.issues("Client Signature - Date", "warning")
+        self.assertIn("not a date", warning["message"])
+
+
+class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
+    """W.5: values the converter itself dropped, or filled in, before the
+    schema guard could report them."""
+
+    def test_unmapped_demographic_answers(self):
+        root = self.convert_row(Gender="Non-binary", Disability="Sometimes")
+        self.assertIsNone(root.find(".//ClientIntake/Sex"))
+        self.assertIsNone(root.find(".//ClientIntake/Disability"))
+        self.assertEqual(len(self.issues("Gender", "warning")), 1)
+        self.assertEqual(len(self.issues("Disability", "warning")), 1)
+
+    def test_declining_ethnicity_or_disability_is_prefer_not_to_say(self):
+        root = self.convert_row(**{"Ethnicity:": "Decline to answer", "Disability": "Unknown"})
+        self.assertEqual(root.findtext(".//ClientIntake/Ethnicity"), "Prefer not to say")
+        self.assertEqual(root.findtext(".//ClientIntake/Disability"), "Prefer not to say")
+
+    def test_a_branch_of_prefer_not_to_say_is_filed(self):
+        root = self.convert_row(**{"Veteran Status": "Veteran", "Branch Of Service": "Prefer not to say"})
+        self.assertEqual(root.findtext(".//ClientIntake/BranchOfService"), "Prefer not to say")
+        self.assertEqual(self.issues(severity="error"), [])
+
+    def test_a_branch_without_military_service_is_reported(self):
+        root = self.convert_row(**{"Veteran Status": "No", "Branch Of Service": "Army"})
+        self.assertIsNone(root.find(".//ClientIntake/BranchOfService"))
+        warning, = self.issues("Branch Of Service", "warning")
+        self.assertIn("'Army' was left out", warning["message"])
+
+    def test_a_legal_entity_for_a_client_not_in_business_is_reported(self):
+        root = self.convert_row(**{"Currently In Business?": "No", "Legal Entity of Business": "LLC"})
+        self.assertIsNone(root.find(".//ClientIntake/LegalEntity"))
+        self.assertEqual(len(self.issues("Legal Entity of Business", "warning")), 1)
+
+    def test_a_fips_code_without_rural_or_urban_is_reported(self):
+        root = self.convert_row(Rural_vs_Urban="Undetermined", FIPS_Code="19153")
+        self.assertIsNone(root.find(".//ClientIntake/FIPS_Code"))
+        self.assertEqual(len(self.issues("FIPS_Code", "warning")), 1)
+
+    def test_unreadable_numbers_are_reported(self):
+        root = self.convert_row(**{"Total Number of Employees": "10-20", "Prep Hours": "1:30"})
+        self.assertIsNone(root.find(".//ClientIntake/TotalNumberOfEmployees"))
+        self.assertIsNone(root.find(".//CounselingHours/Prepare"))
+        self.assertEqual(len(self.issues("Total Number of Employees", "warning")), 1)
+        self.assertEqual(len(self.issues("Prep Hours", "warning")), 1)
+
+    def test_a_negative_exporting_headcount_reaches_the_guard(self):
+        root = self.convert_row(**{"Are you currently exporting?(old)": "Yes",
+                                   "Number of Employees in Exporting Business": "-3"})
+        self.assertIsNone(root.find(".//NumberOfEmployeesInExportingBusiness"))
+        self.assertTrue(self.issues("Number of Employees in Exporting Business", "warning"))
+
+    def test_an_unrecognised_on_file_answer(self):
+        root = self.convert_row(**{"Client Signature(On File)": "Signed"})
+        self.assertEqual(root.findtext(".//ClientSignature/OnFile"), "No")
+        warning, = self.issues("Client Signature(On File)", "warning")
+        self.assertIn("'Signed' is not Yes or No", warning["message"])
+
+    def test_an_unrecognised_employee_owned_answer(self):
+        root = self.convert_row(**{"Employee Owned": "Partially"})
+        self.assertIsNone(root.find(".//Employee_Owned"))
+        self.assertEqual(len(self.issues("Employee Owned", "warning")), 1)
+
+    def test_an_unreadable_female_share(self):
+        for text, filed in (("N/A", "0"), ("NaN%", "0")):
+            with self.subTest(text=text):
+                self.setUp()
+                root = self.convert_row(**{"Business Ownership - % Female(old)": text})
+                self.assertEqual(root.findtext(".//BusinessOwnership/Female"), filed)
+                warning, = self.issues("Business Ownership - % Female(old)", "warning")
+                self.assertIn(f"'{text}' could not be used", warning["message"])
+
+    def test_a_code_filed_for_other_text_is_reported(self):
+        root = self.convert_row(**{"Other Certifications": "State MBE",
+                                   "Other (Referred Client to)": "Local bank"})
+        self.assertEqual(root.findtext(".//Certifications/Code"), "Other")
+        self.assertEqual(root.findtext(".//ReferredClient/Code"), "Other")
+        for column in ("Certifications (SDB, HUBZONE, etc)", "Referred Client to"):
+            warning, = self.issues(column, "warning")
+            self.assertIn("filed as 'Other'", warning["message"])
+
+
+class TrainingClientContactHoursTest(_ValidityCase):
+    converter_class = TrainingClientConverter
+
+    def test_invented_contact_hours_are_reported_on_the_row(self):
+        root = self.convert([_make_training_client_row(**{"Type of Session": "Online"})])
+        self.assertEqual(root.findtext(".//CounselingHours/Contact"), "0.5")
+        warning, = self.issues("Duration (hours)", "warning")
+        self.assertIn("0.5", warning["message"])
+
+
+class TrainingEventValuesTest(_ValidityCase):
+    """W.6: the training form read every event value from its first
+    attendee row."""
+
+    converter_class = TrainingConverter
+
+    def test_a_value_only_a_later_row_has_is_filed(self):
+        root = self.convert([
+            _make_training_row(**{"Start Date": "", "Funding Source": "", "Cosponsor": ""}),
+            _make_training_row(**{"Start Date": "2/14/2025", "Funding Source": "2023 Portable Assistance - PA2023",
+                                  "Cosponsor": "Iowa Economic Development"}),
+        ])
+        record = root.find("ManagementTrainingRecord")
+        self.assertEqual(record.findtext("DateTrainingStarted"), "2025-02-14")
+        self.assertEqual(record.findtext("FundingSource"), "2023 Portable Assistance - PA2023")
+        self.assertEqual(record.findtext("CosponsorsName"), "Iowa Economic Development")
+        self.assertEqual([i for i in self.validator.issues if i["category"] == "fabricated_default"
+                          and i["field_name"] == "Start Date"], [])
+
+    def test_rows_that_disagree_are_reported(self):
+        root = self.convert([_make_training_row(**{"Start Date": "2/20/2025"}),
+                             _make_training_row(**{"Start Date": "2/13/2025"})])
+        self.assertEqual(root.findtext(".//DateTrainingStarted"), "2025-02-20")
+        warning, = self.issues("Start Date", "warning")
+        self.assertIn("different values", warning["message"])
+
+    def test_a_start_date_equal_to_the_default_is_not_called_unparseable(self):
+        self.convert([_make_training_row(**{"Start Date": "12/12/2023"})])
+        self.assertEqual(self.issues("Start Date"), [])
+
+    def test_a_placeholder_cosponsor_is_no_cosponsor(self):
+        root = self.convert([_make_training_row(Cosponsor="N/A ")])
+        self.assertIsNone(root.find(".//CosponsorsName"))
+
+    def test_a_location_code_column_is_honoured(self):
+        root = self.convert([_make_training_row(LocationCode="250009")])
+        self.assertEqual(root.findtext(".//Location/LocationCode"), "250009")
+
+    def test_a_bad_location_code_leaves_the_event_out(self):
+        root = self.convert([_make_training_row(**{"Class/Event ID": "KEEP"}),
+                             _make_training_row(**{"Class/Event ID": "BAD", "LocationCode": "24900X"})])
+        self.assertEqual([r.findtext("PartnerTrainingNumber") for r in root], ["KEEP"])
+        error, = self.issues(severity="error")
+        self.assertEqual(error["field_name"], "LocationCode")
+
+    def test_zip_plus_four_and_a_zip_that_is_not_one(self):
+        root = self.convert([_make_training_row(**{"Zip/Postal Code": "50309-1234"})])
+        self.assertEqual(root.findtext(".//TrainingLocation/ZipCode"), "50309")
+        self.assertEqual(root.findtext(".//TrainingLocation/Zip4Code"), "1234")
+        self.setUp()
+        root = self.convert([_make_training_row(**{"Zip/Postal Code": "5155550101"})])
+        self.assertNotEqual(root.findtext(".//TrainingLocation/ZipCode"), "51555")
+        self.assertTrue(self.issues("Zip/Postal Code", "warning"))
+
+    def test_a_later_complete_address_beats_the_default(self):
+        root = self.convert([_make_training_row(City=""), _make_training_row(City="Ames")])
+        self.assertEqual(root.findtext(".//TrainingLocation/City"), "Ames")
+
+    def test_demographics_read_the_alias_each_row_fills(self):
+        rows = [_make_training_row(Gender="", Sex="Male"), _make_training_row(Gender="Female", Sex="")]
+        root = self.convert(rows)
+        trained = root.find(".//NumberTrained")
+        self.assertEqual((trained.findtext("Female"), trained.findtext("Male")), ("1", "1"))
+
+
+if __name__ == "__main__":
+    unittest.main()

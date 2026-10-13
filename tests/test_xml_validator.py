@@ -11,6 +11,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 # Import xml_validator module
 import xml_validator
 
+
+def _fixed(valid):
+    """A fix_and_revalidate result for a file it reordered."""
+    return xml_validator.FixResult(ok=True, xsd_file="dummy.xsd", reordered=1, valid=valid,
+                                   errors=[] if valid else ["error"])
+
 class TestValidateAgainstXsd(unittest.TestCase):
 
     def test_validate_against_xsd_exception(self):
@@ -64,99 +70,120 @@ class TestProcessDirectory(unittest.TestCase):
 
     def test_process_directory_basic(self):
         """Test processing a directory without recursive search, output_dir, or fixing."""
-        processed_count = xml_validator.process_directory(self.test_dir, recursive=False)
-        self.assertEqual(processed_count, 2)  # file1.xml and file2.xml
+        summary = xml_validator.process_directory(self.test_dir, recursive=False)
+        self.assertEqual(sorted(summary.files), [self.file1_path, self.file2_path])
+        # Nothing was checked, so nothing failed.
+        self.assertTrue(summary.ok)
+        self.assertEqual((summary.valid, summary.invalid, summary.failed), ([], [], []))
 
     def test_process_directory_recursive(self):
         """Test processing a directory with recursive search enabled."""
-        processed_count = xml_validator.process_directory(self.test_dir, recursive=True)
-        self.assertEqual(processed_count, 3)  # file1.xml, file2.xml, and subdir/file4.xml
+        summary = xml_validator.process_directory(self.test_dir, recursive=True)
+        self.assertEqual(len(summary.files), 3)  # file1.xml, file2.xml, and subdir/file4.xml
 
-    @patch('xml_validator.fix_client_intake_element_order')
+    @patch('xml_validator.fix_and_revalidate')
     def test_process_directory_with_output_dir(self, mock_fix):
         """Test processing a directory and saving to an output directory."""
         # By default process_directory does not copy files if fix=False!
         # It only calculates current_output_path.
         # But if fix=True, it will try to fix the files to the output dir.
-        mock_fix.return_value = True
+        mock_fix.return_value = _fixed(valid=True)
         output_dir = os.path.join(self.test_dir, "output")
 
-        processed_count = xml_validator.process_directory(self.test_dir, output_dir=output_dir, fix=True, recursive=False)
+        summary = xml_validator.process_directory(self.test_dir, output_dir=output_dir, fix=True, recursive=False)
 
-        self.assertEqual(processed_count, 2)
+        # The fixed files are the ones that pass.
+        self.assertEqual(sorted(summary.valid),
+                         [os.path.join(output_dir, "file1.xml"), os.path.join(output_dir, "file2.xml")])
         # Verify output directory was created
         self.assertTrue(os.path.exists(output_dir))
 
         # Verify fix was called with correct output path mapping
-        mock_fix.assert_any_call(self.file1_path, os.path.join(output_dir, "file1.xml"), False)
-        mock_fix.assert_any_call(self.file2_path, os.path.join(output_dir, "file2.xml"), False)
+        mock_fix.assert_any_call(self.file1_path, os.path.join(output_dir, "file1.xml"), False, None)
+        mock_fix.assert_any_call(self.file2_path, os.path.join(output_dir, "file2.xml"), False, None)
 
-    @patch('xml_validator.fix_client_intake_element_order')
+    @patch('xml_validator.fix_and_revalidate')
     def test_process_directory_recursive_with_output_dir(self, mock_fix):
         """Test recursive processing with an output directory preserves structure."""
-        mock_fix.return_value = True
+        mock_fix.return_value = _fixed(valid=True)
         output_dir = os.path.join(self.test_dir, "output_recursive")
-        processed_count = xml_validator.process_directory(self.test_dir, output_dir=output_dir, fix=True, recursive=True)
+        summary = xml_validator.process_directory(self.test_dir, output_dir=output_dir, fix=True, recursive=True)
 
-        self.assertEqual(processed_count, 3)
+        self.assertEqual(len(summary.valid), 3)
         self.assertTrue(os.path.exists(output_dir))
 
         # Output sub-directory is created BEFORE fix is called
         self.assertTrue(os.path.exists(os.path.join(output_dir, "subdir")))
 
-        mock_fix.assert_any_call(self.file4_path, os.path.join(output_dir, "subdir", "file4.xml"), False)
+        mock_fix.assert_any_call(self.file4_path, os.path.join(output_dir, "subdir", "file4.xml"), False, None)
 
     @patch('xml_validator.validate_against_xsd')
     def test_process_directory_with_xsd_validation(self, mock_validate):
-        """Test processing with XSD validation enabled."""
-        mock_validate.return_value = {"is_valid": True, "errors": []}
+        """Validating without fixing counts each file as valid or not.
+
+        It used to count nothing at all when an XSD was given without --fix,
+        valid or not, and the command line exited 0 either way.
+        """
+        mock_validate.side_effect = [{"is_valid": True, "errors": []}, {"is_valid": False, "errors": ["error"]}]
         xsd_file = os.path.join(self.test_dir, "dummy.xsd")
         with open(xsd_file, "w") as f:
             f.write("<schema></schema>")
 
-        # process_directory counts files differently if validation is done but no fix
-        # Ah! Note in the code:
-        # elif not xsd_file: processed_count += 1
-        # If xsd_file is provided but fix is False, processed_count stays 0!
-        processed_count = xml_validator.process_directory(self.test_dir, xsd_file=xsd_file, recursive=False)
+        summary = xml_validator.process_directory(self.test_dir, xsd_file=xsd_file, recursive=False)
 
-        self.assertEqual(processed_count, 0)
+        self.assertEqual((len(summary.valid), len(summary.invalid)), (1, 1))
+        self.assertFalse(summary.ok)
         self.assertEqual(mock_validate.call_count, 2)
 
-    @patch('xml_validator.fix_client_intake_element_order')
+    @patch('xml_validator.fix_and_revalidate')
     def test_process_directory_with_fix(self, mock_fix):
         """Test processing with fix flag enabled."""
-        mock_fix.return_value = True
+        mock_fix.return_value = _fixed(valid=True)
 
-        processed_count = xml_validator.process_directory(self.test_dir, fix=True, recursive=False)
+        summary = xml_validator.process_directory(self.test_dir, fix=True, recursive=False)
 
-        self.assertEqual(processed_count, 2)
+        self.assertEqual(len(summary.valid), 2)
         self.assertEqual(mock_fix.call_count, 2)
 
         # Verify fix was called with correct arguments
-        mock_fix.assert_any_call(self.file1_path, self.file1_path, False)
+        mock_fix.assert_any_call(self.file1_path, self.file1_path, False, None)
 
-    @patch('xml_validator.fix_client_intake_element_order')
+    @patch('xml_validator.fix_element_order')
     @patch('xml_validator.validate_against_xsd')
     def test_process_directory_fix_and_validate(self, mock_validate, mock_fix):
-        """Test processing with fix and XSD validation."""
-        mock_validate.side_effect = [{"is_valid": False, "errors": ["error"]}, {"is_valid": True, "errors": []}, {"is_valid": False, "errors": ["error"]}, {"is_valid": True, "errors": []}] # Original then fixed for both files
-        mock_fix.return_value = True
+        """A fixed file that still fails the schema is counted as failing.
+
+        It used to count as "processed successfully" once it was rewritten.
+        """
+        # Original then fixed, for each file: the second still fails once fixed.
+        mock_validate.side_effect = [{"is_valid": False, "errors": ["error"]}, {"is_valid": True, "errors": []},
+                                     {"is_valid": False, "errors": ["error"]}, {"is_valid": False, "errors": ["error"]}]
+        mock_fix.return_value = xml_validator.FixResult(ok=True, xsd_file="dummy.xsd", reordered=1)
 
         xsd_file = os.path.join(self.test_dir, "dummy.xsd")
 
-        processed_count = xml_validator.process_directory(self.test_dir, xsd_file=xsd_file, fix=True, recursive=False)
+        summary = xml_validator.process_directory(self.test_dir, xsd_file=xsd_file, fix=True, recursive=False)
 
-        self.assertEqual(processed_count, 2)
+        self.assertEqual((len(summary.valid), len(summary.invalid), len(summary.failed)), (1, 1, 0))
+        self.assertFalse(summary.ok)
         # Validate should be called 4 times total (before and after fix for each file)
         self.assertEqual(mock_validate.call_count, 4)
         self.assertEqual(mock_fix.call_count, 2)
 
+    def test_process_directory_counts_files_it_could_not_fix(self):
+        """These files have no SBA root element, so there is no schema to fix them by."""
+        summary = xml_validator.process_directory(self.test_dir, fix=True, recursive=False)
+
+        self.assertEqual(sorted(summary.failed), [self.file1_path, self.file2_path])
+        self.assertFalse(summary.ok)
+        self.assertIn("2 could not be fixed", summary.describe())
+
     def test_process_empty_directory(self):
-        """Test processing an empty directory returns 0."""
+        """Test processing an empty directory finds nothing."""
         empty_dir = tempfile.mkdtemp(dir=self.test_dir)
-        processed_count = xml_validator.process_directory(empty_dir)
-        self.assertEqual(processed_count, 0)
+        summary = xml_validator.process_directory(empty_dir)
+        self.assertEqual(summary.files, [])
+        self.assertTrue(summary.ok)
 
     def test_process_directory_refuses_input_outside_base(self):
         """--directory is confined to SBA_OUTPUT_BASE like --output (CWE-22)."""
@@ -183,11 +210,11 @@ class TestProcessDirectory(unittest.TestCase):
             with open(os.path.join(outside, "escape.xml"), "w") as f:
                 f.write("<CounselingRecord/>")
             os.symlink(os.path.join(outside, "escape.xml"), os.path.join(self.sub_dir, "link.xml"))
-            processed_count = xml_validator.process_directory(self.sub_dir)
+            summary = xml_validator.process_directory(self.sub_dir)
         finally:
             shutil.rmtree(outside)
         # file4.xml is listed; the escaping link is not.
-        self.assertEqual(processed_count, 1)
+        self.assertEqual(summary.files, [self.file4_path])
 
 
 class TestFixClientIntakeElementOrder(unittest.TestCase):
@@ -452,6 +479,99 @@ class TestEntityDeclarations(_FixerCase):
                 validation = xml_validator.validate_against_xsd(source, _COUNSELING_XSD)
                 self.assertFalse(validation['is_valid'])
                 self.assertNotIn('PartnerClientNumber', ' '.join(validation['errors']))
+
+
+class TestAddMissing(_FixerCase):
+    """--add-missing filed CurrentlyInBusiness as 'No', an answer the client
+    never gave, at INFO; and it knew nothing of Race, so a ClientIntake without
+    it stayed invalid while the command line said it had fixed the file."""
+
+    def legacy_file(self):
+        tree = self.golden()
+        intake = tree.getroot().find('CounselingRecord/ClientIntake')
+        intake.remove(intake.find('Race'))
+        intake.remove(intake.find('CurrentlyInBusiness'))
+        return self.write(tree)
+
+    def test_currently_in_business_is_undetermined_with_a_warning(self):
+        output = os.path.join(self.tmp, 'out.xml')
+
+        with self.assertLogs(xml_validator.logger, 'WARNING') as logs:
+            result = xml_validator.fix_and_revalidate(self.legacy_file(), output, add_missing_elements_flag=True)
+
+        added = xml_validator.etree.parse(output).getroot().find(
+            'CounselingRecord/ClientIntake/CurrentlyInBusiness')
+        self.assertEqual(added.text, 'Undetermined')
+        self.assertEqual(result.added, ['Record 003XX000004TMM1: CurrentlyInBusiness'])
+        self.assertTrue(any('003XX000004TMM1' in line and "added 'Undetermined'" in line for line in logs.output),
+                        logs.output)
+
+    def test_race_is_reported_not_invented(self):
+        output = os.path.join(self.tmp, 'out.xml')
+
+        with self.assertLogs(xml_validator.logger, 'WARNING'):
+            result = xml_validator.fix_and_revalidate(self.legacy_file(), output, add_missing_elements_flag=True)
+
+        self.assertEqual(len(result.missing), 1)
+        self.assertIn('ClientIntake has no Race', result.missing[0])
+        first_intake = xml_validator.etree.parse(output).getroot().find('CounselingRecord/ClientIntake')
+        self.assertIsNone(first_intake.find('Race'))
+        self.assertFalse(result.valid)
+
+
+class TestCommandLineExitStatus(_FixerCase):
+    """Both command lines exited 0 whatever they found: the validator for a
+    file that failed the schema, and the fixers for output that still did."""
+
+    def run_module(self, module, *args):
+        import subprocess
+        env = dict(os.environ, SBA_OUTPUT_BASE=self.tmp)
+        return subprocess.run([sys.executable, '-m', module, *args], cwd=_REPO_ROOT, env=env,
+                              capture_output=True, text=True)
+
+    def bad_date_file(self):
+        tree = self.golden()
+        tree.getroot().find('CounselingRecord/CounselorRecord/DateCounseled').text = '2025-13-45'
+        return self.write(tree, 'bad.xml')
+
+    def test_validate_only(self):
+        bad = self.run_module('src.xml_validator', '--xmlfile', self.bad_date_file(), '--xsd', _COUNSELING_XSD)
+        good = self.run_module('src.xml_validator', '--xmlfile', _GOLDEN_COUNSELING, '--xsd', _COUNSELING_XSD)
+
+        self.assertEqual((bad.returncode, good.returncode), (1, 0), bad.stderr + good.stderr)
+
+    def test_fix_reports_output_that_still_fails(self):
+        output = os.path.join(self.tmp, 'fixed.xml')
+        validator = self.run_module('src.xml_validator', '--xmlfile', self.bad_date_file(),
+                                    '--output', output, '--fix')
+        fixer = self.run_module('src.fix_sba_xml', '--file', self.bad_date_file(), '--output', output)
+
+        for proc in (validator, fixer):
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("still fails SBA's schema", proc.stderr)
+            self.assertNotIn('fixed successfully', proc.stderr)
+            self.assertNotIn('Successfully fixed', proc.stderr)
+
+    def test_fix_succeeds_when_the_output_passes(self):
+        tree = self.golden()
+        _move_to_end(tree.getroot().find('CounselingRecord/CounselorRecord'), 'Language')
+        source = self.write(tree)
+
+        proc = self.run_module('src.fix_sba_xml', '--file', source, '--no-backup')
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(xml_validator.validate_against_xsd(source, _COUNSELING_XSD)['is_valid'], True)
+
+    def test_directory_counts_valid_and_invalid_apart(self):
+        folder = os.path.join(self.tmp, 'in')
+        os.makedirs(folder)
+        shutil.copy(_GOLDEN_COUNSELING, os.path.join(folder, 'good.xml'))
+        shutil.copy(self.bad_date_file(), os.path.join(folder, 'bad.xml'))
+
+        proc = self.run_module('src.fix_sba_xml', '--directory', folder, '--output', os.path.join(self.tmp, 'out'))
+
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("2 file(s): 1 pass SBA's schema, 1 still fail it, 0 could not be fixed.", proc.stderr)
 
 
 if __name__ == '__main__':

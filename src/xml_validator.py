@@ -194,33 +194,46 @@ def extract_validation_details(error_message):
     return invalid_element, expected_elements
 
 
+# The required ClientIntake elements --add-missing fills, each with the one
+# answer that claims nothing about the client. It used to file
+# CurrentlyInBusiness as 'No', an answer the client never gave. Race has no
+# such answer ('Prefer not to say' is the client's own choice), so a missing
+# Race is reported, not filled.
+_UNDETERMINED_ANSWERS = {"CurrentlyInBusiness": "Undetermined"}
+
+
 def add_missing_required_elements(client_intake, record_id):
     """
-    Add any missing required elements to ClientIntake.
-    (Function moved from fix-sba-xml.py)
+    Add the required ClientIntake elements _UNDETERMINED_ANSWERS can fill.
+
+    Each one is still an answer the file did not give, so each is a warning
+    naming the record.
 
     Args:
         client_intake: ClientIntake element (lxml or ElementTree)
         record_id: ID of the counseling record (for logging)
-    """
-    # Define required elements and their default values
-    # This list might need to be configurable or expanded later.
-    required_elements = {
-        'CurrentlyInBusiness': 'No',
-        # Add other known required elements for ClientIntake here if they have simple defaults
-    }
 
+    Returns:
+        True when an element was added.
+    """
     elements_added = False
-    for tag, default_value in required_elements.items():
-        if client_intake.find(tag) is None:
-            logger.info(f"Record {record_id}: Adding missing required element '{tag}' with default '{default_value}'")
-            # makeelement + append rather than SubElement: the element may be
-            # lxml's (the fixer's) or ElementTree's, and each library's
-            # SubElement takes only its own kind of parent.
-            element = client_intake.makeelement(tag, {})
-            element.text = default_value
-            client_intake.append(element)
-            elements_added = True
+    for tag, answer in _UNDETERMINED_ANSWERS.items():
+        if client_intake.find(tag) is not None:
+            continue
+        # makeelement + append rather than SubElement: the element may be
+        # lxml's (the fixer's) or ElementTree's, and each library's
+        # SubElement takes only its own kind of parent.
+        element = client_intake.makeelement(tag, {})
+        element.text = answer
+        if len(client_intake):
+            # Take the last child's place in the indentation.
+            last = client_intake[-1]
+            element.tail = last.tail
+            last.tail = client_intake[-2].tail if len(client_intake) > 1 else client_intake.text
+        client_intake.append(element)
+        logger.warning(f"Record {record_id}: ClientIntake had no {tag}, which SBA requires; "
+                       f"added '{answer}'. Change it to Yes or No if the client said.")
+        elements_added = True
     return elements_added
 
 
@@ -233,13 +246,17 @@ _SCHEMA_FOR_ROOT = {
 
 @dataclass
 class FixResult:
-    """What fix_element_order did with one file."""
+    """What fix_element_order did with one file (and, after
+    fix_and_revalidate, whether what it wrote passes the schema)."""
 
     ok: bool                       # False: nothing was written, and `error` says why
     error: str | None = None
     xsd_file: str | None = None    # the schema whose order was applied
     reordered: int = 0             # elements whose children were put back in order
     added: list[str] = field(default_factory=list)    # what --add-missing filled in
+    missing: list[str] = field(default_factory=list)  # required elements it could not
+    valid: bool | None = None      # set by fix_and_revalidate
+    errors: list[str] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
@@ -305,17 +322,26 @@ def _reorder_tree(root, order):
     return reordered
 
 
-def _add_missing(root, result):
-    """--add-missing: fill what add_missing_required_elements can in each ClientIntake."""
+def _add_missing(root, rules, result):
+    """--add-missing: fill what add_missing_required_elements can in each
+    ClientIntake, and report the required elements it can't."""
+    intake_path = (root.tag, "CounselingRecord", "ClientIntake")
+    required = [path[-1] for path, rule in rules.items() if path[:-1] == intake_path and not rule.optional]
     for position, record in enumerate(root.findall("CounselingRecord"), 1):
         record_id = (record.findtext("PartnerClientNumber") or "").strip() or f"#{position}"
         client_intake = record.find("ClientIntake")
         if client_intake is None:
-            continue
+            continue  # the schema check reports it; there is nothing to add to
         had = {child.tag for child in client_intake}
         if add_missing_required_elements(client_intake, record_id):
             result.added += [f"Record {record_id}: {child.tag}" for child in client_intake
                              if isinstance(child.tag, str) and child.tag not in had]
+        for tag in required:
+            if client_intake.find(tag) is None:
+                message = (f"Record {record_id}: ClientIntake has no {tag}, which SBA requires; "
+                           "--add-missing can't supply it, so add it at the source.")
+                logger.warning(message)
+                result.missing.append(message)
 
 
 def _not_fixed(reason):
@@ -375,7 +401,7 @@ def fix_element_order(xml_file, output_file=None, add_missing_elements_flag=Fals
 
     result = FixResult(ok=True, xsd_file=xsd_file)
     if add_missing_elements_flag:
-        _add_missing(root, result)
+        _add_missing(root, load_rules(xsd_file), result)
     result.reordered = _reorder_tree(root, order)
     try:
         if result.changed:
@@ -386,6 +412,47 @@ def fix_element_order(xml_file, output_file=None, add_missing_elements_flag=Fals
     except OSError as e:
         return _not_fixed(f"Could not write {output_file}: {e}")
     return result
+
+
+def fix_and_revalidate(xml_file, output_file=None, add_missing_elements_flag=False, xsd_file=None):
+    """fix_element_order, then check what it wrote against the same schema.
+
+    Reordering can't fix a wrong value or a missing element, so a fixed file
+    is not a valid one until this says so.
+    """
+    output_file = output_file or xml_file
+    result = fix_element_order(xml_file, output_file, add_missing_elements_flag, xsd_file)
+    if result.ok:
+        outcome = validate_against_xsd(output_file, result.xsd_file)
+        result.valid, result.errors = outcome["is_valid"], outcome["errors"]
+    return result
+
+
+def log_fix_result(result, xml_file, output_file=None, log=None):
+    """Say what fix_and_revalidate did and whether the file now passes.
+
+    Returns True only when it does.
+    """
+    log = log or logger
+    output_file = output_file or xml_file
+    if not result.ok:
+        log.error(f"Could not fix {xml_file}: {result.error}")
+        return False
+    if result.reordered:
+        log.info(f"Put the children of {result.reordered} element(s) in the order "
+                 f"{os.path.basename(result.xsd_file)} lists them; saved to {output_file}")
+    elif not result.changed and _same_file(xml_file, output_file):
+        log.info(f"No element was out of order; {xml_file} is unchanged.")
+    else:
+        log.info(f"No element was out of order; saved to {output_file}")
+    if result.valid:
+        log.info(f"{output_file} passes SBA's schema.")
+        return True
+    log.error(f"{output_file} still fails SBA's schema with {len(result.errors)} error(s), "
+              "which reordering can't fix:")
+    for i, error_msg in enumerate(result.errors, 1):
+        log.error(f"Error {i}: {error_msg}")
+    return False
 
 
 def fix_client_intake_element_order(xml_file, output_file=None, add_missing_elements_flag=False):
@@ -438,18 +505,6 @@ def _validate_and_log(file_path, xsd_file, label=""):
         log_fn(f"{label.capitalize() if label else ''}File {file_path} is NOT valid. Errors: {errors}")
     return is_valid, errors
 
-def _fix_and_revalidate(file_path, output_path, xsd_file, add_missing):
-    """Fix XML file and optionally re-validate. Returns True if fix succeeded."""
-    logger.info(f"Attempting to fix {file_path} -> {output_path}")
-    fix_success = fix_client_intake_element_order(file_path, output_path, add_missing)
-    if not fix_success:
-        logger.error(f"Failed to fix {file_path}")
-        return False
-    logger.info(f"Successfully fixed {file_path}, saved to {output_path}")
-    if xsd_file:
-        _validate_and_log(output_path, xsd_file, "fixed ")
-    return True
-
 def _files_within(files, input_dir):
     """Drop glob results that resolve outside ``input_dir``.
 
@@ -466,6 +521,27 @@ def _files_within(files, input_dir):
     return kept
 
 
+@dataclass
+class DirectorySummary:
+    """What process_directory found. A file counts as valid or invalid only
+    when it was checked: with fix (after fixing) or with an XSD."""
+
+    files: list[str] = field(default_factory=list)
+    valid: list[str] = field(default_factory=list)
+    invalid: list[str] = field(default_factory=list)   # the output that still fails
+    failed: list[str] = field(default_factory=list)    # could not be read or fixed
+
+    @property
+    def ok(self) -> bool:
+        return not self.invalid and not self.failed
+
+    def describe(self) -> str:
+        if not (self.valid or self.invalid or self.failed):
+            return f"{len(self.files)} file(s) found; none checked (no fix requested, no XSD)."
+        return (f"{len(self.files)} file(s): {len(self.valid)} pass SBA's schema, "
+                f"{len(self.invalid)} still fail it, {len(self.failed)} could not be fixed.")
+
+
 def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xml", xsd_file=None, fix=False, add_missing_elements_flag=False):
     """
     Process all XML files in a directory.
@@ -476,12 +552,14 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
         output_dir: Output directory for fixed files (default: same as input, overwrites if fix is True)
         recursive: Whether to recursively process subdirectories
         pattern: File pattern to match
-        xsd_file: Path to XSD schema for validation (optional)
+        xsd_file: Path to XSD schema for validation (optional; with fix, the
+                  schema of each file's root element is used)
         fix: Boolean, if True, fix the XML files.
         add_missing_elements_flag: Boolean, if True and fix is True, add missing elements.
 
     Returns:
-        Number of files processed successfully.
+        A DirectorySummary: the files found, and which pass the schema, still
+        fail it, or could not be fixed.
     """
     import glob
 
@@ -514,30 +592,43 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
     files = _files_within(glob.glob(search_pattern, recursive=recursive), input_dir)
     logger.info(f"Found {len(files)} XML files to process.")
 
-    processed_count = 0
+    summary = DirectorySummary()
     for file_path in files:
         logger.info(f"--- Processing file: {file_path} ---")
+        summary.files.append(file_path)
         current_output_path = _resolve_output_path(file_path, input_dir, output_dir)
 
+        is_valid, checked_path = None, file_path
         if xsd_file:
-            _validate_and_log(file_path, xsd_file, "original ")
+            is_valid, _ = _validate_and_log(file_path, xsd_file, "original ")
 
         if fix:
-            if _fix_and_revalidate(file_path, current_output_path, xsd_file, add_missing_elements_flag):
-                processed_count += 1
-        elif not xsd_file:
-            logger.info(f"File {file_path} found (no fix requested, no XSD for validation).")
-            processed_count += 1
+            logger.info(f"Attempting to fix {file_path} -> {current_output_path}")
+            result = fix_and_revalidate(file_path, current_output_path, add_missing_elements_flag, xsd_file)
+            log_fix_result(result, file_path, current_output_path)
+            if not result.ok:
+                summary.failed.append(file_path)
+                continue
+            # A file used to count as "processed successfully" once it was
+            # rewritten, however it then validated.
+            is_valid, checked_path = result.valid, current_output_path
 
-    logger.info(f"Finished processing directory. {processed_count} files processed successfully (or listed).")
-    return processed_count
+        if is_valid is None:
+            logger.info(f"File {file_path} found (no fix requested, no XSD for validation).")
+        elif is_valid:
+            summary.valid.append(checked_path)
+        else:
+            summary.invalid.append(checked_path)
+
+    logger.info(f"Finished processing directory. {summary.describe()}")
+    return summary
 
 
 def parse_arguments():
     """Parse command line arguments."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='XML Validator and Fixer for SBA Counseling Information.')
+    parser = argparse.ArgumentParser(description='XML Validator and Fixer for SBA Counseling and Training XML.')
 
     # Input: single file or directory
     input_group = parser.add_mutually_exclusive_group(required=True)
@@ -545,7 +636,7 @@ def parse_arguments():
     input_group.add_argument('--directory', help='Path to a directory of XML files to process.')
 
     # XSD for validation
-    parser.add_argument('--xsd', help='Path to the XSD schema file for validation.')
+    parser.add_argument('--xsd', help='Path to the XSD schema file for validation (and, with --fix, the order to fix by).')
 
     # Output options
     parser.add_argument('--output', help='Path to save the fixed XML file (for single file mode) or output directory (for directory mode).')
@@ -555,8 +646,10 @@ def parse_arguments():
     parser.add_argument('--pattern', default="*.xml", help='File pattern for XML files (default: *.xml, used with --directory).')
 
     # Fixing options
-    parser.add_argument('--fix', action='store_true', help='Enable fixing of XML files (currently fixes ClientIntake element order).')
-    parser.add_argument('--add-missing', action='store_true', help='When fixing, also add missing required elements in ClientIntake (e.g., CurrentlyInBusiness).')
+    parser.add_argument('--fix', action='store_true', help='Put elements in the order the schema requires, then re-validate the result.')
+    parser.add_argument('--add-missing', action='store_true',
+                        help="When fixing, also add a missing CurrentlyInBusiness to ClientIntake as 'Undetermined' "
+                             "(a warning per record). Other missing required elements are reported, not added.")
 
     # Logging options
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
@@ -565,13 +658,13 @@ def parse_arguments():
     return parser.parse_args()
 
 def _validate_and_report(xml_file, xsd_file, logger):
-    """Validate XML against XSD and log detailed error information."""
+    """Validate XML against XSD and log detailed error information. Returns True when valid."""
     logger.info(f"Validating {xml_file} against {xsd_file}...")
     result = validate_against_xsd(xml_file, xsd_file)
     is_valid, errors = result["is_valid"], result["errors"]
     if is_valid:
         logger.info("XML is valid!")
-        return
+        return True
     logger.error(f"XML is not valid. Found {len(errors)} errors:")
     for i, error_msg in enumerate(errors, 1):
         logger.error(f"Error {i}: {error_msg}")
@@ -580,35 +673,36 @@ def _validate_and_report(xml_file, xsd_file, logger):
             logger.info(f"  Invalid element: '{invalid_element}'")
         if expected_elements:
             logger.info(f"  Expected elements: {', '.join(expected_elements)}")
+    return False
 
 def _fix_single_file(args, logger):
-    """Fix a single XML file and optionally re-validate."""
+    """Fix a single XML file and re-validate it. Returns True when the fixed file is valid."""
     output_file_path = args.output if args.output else args.xmlfile
     logger.info(f"Fixing XML file '{args.xmlfile}' and saving to '{output_file_path}'...")
-    fix_success = fix_client_intake_element_order(
-        args.xmlfile, output_file_path, add_missing_elements_flag=args.add_missing
-    )
-    if not fix_success:
-        logger.error(f"Failed to fix XML file '{args.xmlfile}'.")
-        return
-    logger.info("XML file fixed successfully!")
-    if args.xsd:
-        _validate_and_log(output_file_path, args.xsd, "fixed ")
+    result = fix_and_revalidate(args.xmlfile, output_file_path, args.add_missing, args.xsd)
+    return log_fix_result(result, args.xmlfile, output_file_path, logger)
 
 def process_single_file(args, logger):
-    """Process a single XML file for validation and/or fixing."""
+    """Process a single XML file for validation and/or fixing.
+
+    Returns the exit status: 1 when the file (with --fix, the fixed file)
+    fails the schema or could not be fixed.
+    """
     logger.info(f"Mode: Processing single file '{args.xmlfile}'")
 
+    passes = True
     if args.xsd:
-        _validate_and_report(args.xmlfile, args.xsd, logger)
+        passes = _validate_and_report(args.xmlfile, args.xsd, logger)
 
     if args.fix:
-        _fix_single_file(args, logger)
+        passes = _fix_single_file(args, logger)
     elif not args.xsd:
         logger.info(f"XML file '{args.xmlfile}' processed (no fix requested, no XSD for validation).")
+    return 0 if passes else 1
 
 def main():
-    """Main entry point for the script."""
+    """Main entry point for the script. Returns the exit status: 0 only when
+    every file checked passes the schema."""
     _setup_sys_path()
     from logging_util import ConversionLogger
 
@@ -616,9 +710,11 @@ def main():
 
     # Setup logger using ConversionLogger
     log_level_val = getattr(logging, args.log_level.upper(), logging.INFO)
-    # For xml-validator, default to console-only logging unless a --log-file arg is added later
+    # For xml-validator, default to console-only logging unless a --log-file arg is added later.
+    # The module's own logger, so what process_directory and the fixer log
+    # reaches the console too: it has no handler otherwise.
     logger = ConversionLogger(
-        logger_name="XMLValidator",
+        logger_name=__name__,
         log_level=log_level_val,
         log_to_file=False
     ).logger # Get the actual logger instance
@@ -628,7 +724,7 @@ def main():
         logger.info(f"Mode: Processing directory '{args.directory}'")
         output_dir_for_process = args.output # If None, process_directory handles it (in-place if fix is True)
 
-        process_directory(
+        summary = process_directory(
             input_dir=args.directory,
             output_dir=output_dir_for_process,
             recursive=args.recursive,
@@ -637,11 +733,13 @@ def main():
             fix=args.fix,
             add_missing_elements_flag=args.add_missing
         )
+        return 0 if summary.ok else 1
     elif args.xmlfile:
-        process_single_file(args, logger)
+        return process_single_file(args, logger)
     else:
         # Should not happen due to mutually_exclusive_group
         logger.error("No input specified. Use --xmlfile or --directory.")
+        return 2
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

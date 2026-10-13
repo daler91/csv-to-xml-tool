@@ -599,5 +599,35 @@ class TrainingDemographicsTest(_ValidityCase):
         self.assertEqual(self.issues("Race"), [])
 
 
+class Part3FallbackTest(_ValidityCase):
+    """X.7: a Part 3 "(Meeting)" cell that didn't parse still won over its
+    intake column: 'n/a' filed Part 3 revenue as 0 beside a good intake
+    figure, and an unreadable Business Start Date hid Date Started (Meeting)."""
+
+    def test_an_unreadable_meeting_amount_falls_back_to_the_intake_amount(self):
+        root = self.convert_row(**{"Gross Revenues/Sales": "100000", "Gross Revenues/Sales (Meeting)": "n/a",
+                                   "Profits/Losses": "5000", "Profit & Loss (Meeting)": "TBD"})
+        self.assertEqual(root.findtext(".//ClientAnnualIncomePart3/GrossRevenues"), "100000")
+        self.assertEqual(root.findtext(".//ClientAnnualIncomePart3/ProfitLoss"), "5000")
+        warning, = self.issues("Gross Revenues/Sales (Meeting)", "warning")
+        self.assertEqual(warning["message"], "'n/a' is not a number, so 'Gross Revenues/Sales' was used instead.")
+        self.assertEqual(len(self.issues("Profit & Loss (Meeting)", "warning")), 1)
+
+    def test_an_unreadable_meeting_amount_with_nothing_to_fall_back_on(self):
+        root = self.convert_row(**{"Gross Revenues/Sales (Meeting)": "n/a"})
+        self.assertEqual(root.findtext(".//ClientAnnualIncomePart3/GrossRevenues"), "0")
+        warning, = self.issues("Gross Revenues/Sales (Meeting)", "warning")
+        self.assertIn("'n/a' could not be used and was replaced with '0'", warning["message"])
+
+    def test_an_unreadable_date_or_headcount_falls_back(self):
+        root = self.convert_row(**{"Business Start Date": "sometime", "Date Started (Meeting)": "2020-05-01",
+                                   "Total No. of Employees (Meeting)": "several", "Total Number of Employees": "7"})
+        self.assertEqual(root.findtext(".//BusinessStartDatePart3"), "2020-05-01")
+        self.assertEqual(root.findtext(".//CounselorRecord/TotalNumberOfEmployees"), "7")
+        self.assertIn("so 'Date Started (Meeting)' was used instead",
+                      self.issues("Business Start Date", "warning")[0]["message"])
+        self.assertEqual(len(self.issues("Total No. of Employees (Meeting)", "warning")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

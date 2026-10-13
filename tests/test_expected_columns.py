@@ -44,7 +44,8 @@ def _headers_read_by_converter() -> set[str]:
       still public API and callable with bare literals.
     * ``self._yes_no(row, 'Header', default, ...)`` and
       ``self._phone(row, 'Header', ...)`` — the Yes/No and phone columns.
-    * ``self._mapped(row, 'key')`` — resolved through
+    * ``self._mapped(row, 'key')``, and its ``_mapped_parsed`` and
+      ``_part3_amount`` variants — resolved through
       ``CounselingConfig.COLUMN_MAPPING``. The four Part 3 impact fields are
       reachable *only* this way, so a scan that stopped at literals would report
       five real headers as unread and fail in the opposite direction.
@@ -66,7 +67,7 @@ def _headers_read_by_converter() -> set[str]:
             for arg in node.args[1:]:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     headers.add(arg.value)
-        elif node.func.attr == "_mapped" and len(node.args) >= 2:
+        elif node.func.attr in ("_mapped", "_mapped_parsed", "_part3_amount") and len(node.args) >= 2:
             key = node.args[1]
             if isinstance(key, ast.Constant) and isinstance(key.value, str):
                 assert key.value in CounselingConfig.COLUMN_MAPPING, (

@@ -70,9 +70,13 @@ What it handles that hand-built XML usually gets wrong:
   | `Phone` | 10 |
   | `PartnerClientNumber`, `PartnerSessionNumber` | 20 |
 
-- **Part 3 impact fallbacks.** `Date Started (Meeting)`,
-  `Total No. of Employees (Meeting)`, `Gross Revenues/Sales (Meeting)` and
-  `Profit & Loss (Meeting)` fall back to their intake counterparts when blank.
+- **Part 3 impact fallbacks.** `Total No. of Employees (Meeting)`,
+  `Gross Revenues/Sales (Meeting)` and `Profit & Loss (Meeting)` fall back to
+  their intake counterparts, and `Business Start Date` to
+  `Date Started (Meeting)`, when blank — or when the cell isn't a number or a
+  date this tool can read, with a warning naming the cell passed over. With
+  nothing to fall back on, an unreadable revenue or profit cell is reported as
+  replaced with the `0` Part 3 files.
   Note that `Total Number of Employees`, `Gross Revenues/Sales` and
   `Profits/Losses` are *also* read on their own — they are fallback sources, not
   aliases. (Treating them as aliases is exactly the bug that once dropped three

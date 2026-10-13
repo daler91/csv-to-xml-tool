@@ -64,13 +64,14 @@ class TrainingClientConverter(CounselingConverter):
         ]
         renamed = set(cfg.COLUMN_MAPPING.values())
         for column, value in cfg.DEFAULTS.items():
+            if not value:
+                continue
             # A column the CSV supplies (directly or via the rename) is the
-            # user's own data, not a constant.
-            if value and column not in headers and column not in renamed:
-                label = column
-                if column == 'Services Provided':
-                    label += " (for attendees whose event has no Training Topic)"
-                constants.append((label, value))
+            # user's own data; the default fills only its blank cells.
+            when = ["where the CSV's cell is blank"] if column in headers or column in renamed else []
+            if column == 'Services Provided':
+                when.append("for attendees whose event has no Training Topic")
+            constants.append((f"{column} ({' and '.join(when)})" if when else column, value))
         self.validator.add_issue(
             "file", "warning", ValidationCategory.FABRICATED_DEFAULT, "configured_defaults",
             "Emitted from configuration for every record (the training form has no column for "
@@ -79,15 +80,23 @@ class TrainingClientConverter(CounselingConverter):
             event_id="",
         )
 
+    def _check_renamed_columns(self, headers):
+        """Warn once for each training column whose counseling name the CSV
+        also has ('Start Date' and 'Date'): both are read as one column, and
+        which value a row files depends on which is filled."""
+        for column, target in self.training_client_config.COLUMN_MAPPING.items():
+            if column != target and column in headers and target in headers:
+                self.validator.add_issue(
+                    "file", "warning", ValidationCategory.INVALID_FORMAT, column,
+                    f"The CSV has both '{column}' and '{target}', which this form reads as the same "
+                    "column. Each row uses the last of them that has a value; check that this is the "
+                    "column you meant.", event_id="")
+
     def _preprocess_row(self, row):
         """Remap training client CSV columns to counseling-format columns."""
-        # Start with defaults for all absent counseling columns
-        remapped = dict(self.training_client_config.DEFAULTS)
-
-        # Map each CSV column to its counseling equivalent (or pass through as-is)
-        for csv_col, csv_val in row.items():
-            target_col = self.training_client_config.COLUMN_MAPPING.get(csv_col, csv_col)
-            remapped[target_col] = csv_val
+        # Over the defaults for all absent counseling columns, which a blank
+        # cell doesn't erase.
+        remapped = self.training_client_config.rename_columns(row, self.training_client_config.DEFAULTS)
 
         # The event's Training Topic is what the attendee sought and received;
         # an explicit counseling-format column in the CSV still wins.

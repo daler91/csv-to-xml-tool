@@ -290,11 +290,16 @@ literally, so reproduce them exactly or map them.
 | `Start Date` | `Date` |
 | `Currently in Business?` | `Currently In Business?` |
 
+A blank cell never erases a value already there: with both `Start Date` and
+`Date`, a row whose `Date` is blank keeps its start date, and each row uses the
+last of the two that has a value. A file with both gets one warning naming them.
+
 Everything the counseling schema needs but a training export does not carry is
 supplied from `TrainingClientConfig.DEFAULTS` — mostly empty strings, plus
 `Type of Session: Training`, `Language(s) Used: English`,
 `Services Provided: Business Start-up/Preplanning`, and zeroed hours and loan
-amounts.
+amounts. A default also fills the blank cells of such a column when the CSV has
+one; the file-level warning listing the defaults says so for that column.
 
 ---
 

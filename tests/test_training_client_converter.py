@@ -376,9 +376,11 @@ class TestTrainingClientConverter(unittest.TestCase):
         for constant in ("TrainingSession/HoursTrained='1.5'", "TrainingSession/EmployeesTrained='1'",
                          "Type of Session='Training'", "Language(s) Used='English'"):
             self.assertIn(constant, message)
-        # A column the CSV supplies is the user's data, not a constant.
-        self.assertNotIn("Agree to Impact Survey", self._file_defaults(
-            [self._make_valid_row(**{'Agree to Impact Survey': 'Yes'})]))
+        # A column the CSV supplies is the user's data; the default fills only
+        # its blank cells, which a blank cell no longer erases.
+        message = self._file_defaults([self._make_valid_row(**{'Agree to Impact Survey': 'Yes'})])
+        self.assertIn("Agree to Impact Survey (where the CSV's cell is blank)='No'", message)
+        self.assertNotIn("Agree to Impact Survey='No'", message)
 
     def _file_defaults(self, rows):
         self.validator = ValidationTracker()

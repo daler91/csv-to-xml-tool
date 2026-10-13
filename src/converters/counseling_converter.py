@@ -98,6 +98,10 @@ class CounselingConverter(BaseConverter):
         (see TrainingClientConverter). Nothing to report for counseling, whose
         defaults are per-row FABRICATED_DEFAULT warnings."""
 
+    def _check_renamed_columns(self, headers):
+        """Hook for converters that rename columns (see TrainingClientConverter);
+        counseling reads its columns as they are named."""
+
     def _preprocess_row(self, row):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
@@ -317,6 +321,7 @@ class CounselingConverter(BaseConverter):
             raise EmptyCSVError("CSV has no data rows to convert.")
 
         self._warn_constant_defaults(set(rows[0]))
+        self._check_renamed_columns(set(rows[0]))
         self._check_session_column(set(rows[0]))
 
         root = ET.Element('CounselingInformation')

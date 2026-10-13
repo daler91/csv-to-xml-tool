@@ -720,6 +720,22 @@ class TrainingClientConfig:
     }
 
     @classmethod
+    def rename_columns(cls, row: dict, defaults: dict | None = None) -> dict:
+        """`row` with its columns renamed by COLUMN_MAPPING (others pass
+        through), over `defaults`. A blank cell never overwrites a value
+        already there: a blank 'Date' column erased the Start Date renamed to
+        it, and a blank 'Type of Session' the 'Training' default, which then
+        invented 0.5 contact hours. When both are filled the later column
+        wins, as data_cleaning.NormalizedDictReader resolves a repeated header.
+        """
+        renamed = dict(defaults or {})
+        for column, value in row.items():
+            target = cls.COLUMN_MAPPING.get(column, column)
+            if str(value).strip() or not str(renamed.get(target) or '').strip():
+                renamed[target] = value
+        return renamed
+
+    @classmethod
     def reverse_column_mapping(cls) -> dict[str, str]:
         """Counseling column name -> the training-client CSV header it came from.
 

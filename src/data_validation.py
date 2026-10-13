@@ -356,7 +356,7 @@ def analyze_training_client_quality(headers: list[str], csv_rows: list[dict[str,
     mapping = TrainingClientConfig.COLUMN_MAPPING
     reverse_mapping = {counseling: tc for tc, counseling in mapping.items()}
     mapped_headers = [mapping.get(h, h) for h in headers]
-    mapped_rows = [{mapping.get(k, k): v for k, v in row.items()} for row in csv_rows]
+    mapped_rows = [TrainingClientConfig.rename_columns(row) for row in csv_rows]
 
     event_id_target = mapping['Class/Event ID']  # 'Activity ID' after the rename
     missing_event = sum(1 for row in mapped_rows if is_empty(row.get(event_id_target)))

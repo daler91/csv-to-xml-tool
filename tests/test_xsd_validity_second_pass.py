@@ -629,5 +629,37 @@ class Part3FallbackTest(_ValidityCase):
         self.assertEqual(len(self.issues("Total No. of Employees (Meeting)", "warning")), 1)
 
 
+class TrainingClientBlankColumnTest(_ValidityCase):
+    """X.8: training-client renamed its columns to counseling names, and a
+    blank cell of a column with the counseling name erased the value: a blank
+    'Date' erased the Start Date, a blank 'Type of Session' the 'Training'
+    default, which then invented 0.5 contact hours."""
+
+    converter_class = TrainingClientConverter
+
+    def test_a_blank_column_does_not_erase_the_renamed_value(self):
+        root = self.convert([_make_training_client_row(**{"Date": "", "Activity ID": "", "Contact: Phone": ""})])
+        self.assertEqual(root.findtext(".//TrainingSession/DateTrainingStarted"), "2025-04-08")
+        self.assertEqual(root.findtext(".//TrainingSession/PartnerTrainingNumber"), "701Pe00000vtCVy")
+        self.assertEqual(root.findtext(".//PhonePart1/Primary"), "5155551234")
+        both = {i["field_name"] for i in self.issues(severity="warning") if "both" in i["message"]}
+        self.assertEqual(both, {"Start Date", "Class/Event ID", "Phone"})
+
+    def test_a_blank_column_does_not_erase_a_default(self):
+        root = self.convert([_make_training_client_row(**{"Type of Session": ""})])
+        self.assertEqual(root.findtext(".//SessionType"), "Training")
+        self.assertEqual(root.findtext(".//CounselingHours/Contact"), "0")
+        self.assertEqual(self.issues("Duration (hours)"), [])
+        defaults, = self.issues("configured_defaults")
+        self.assertIn("Type of Session (where the CSV's cell is blank)='Training'", defaults["message"])
+
+    def test_the_preview_renames_the_same_way(self):
+        from app.services.preview_service import read_csv_preview
+        row = _make_training_client_row(**{"Activity ID": ""})
+        text = ",".join(row) + "\n" + ",".join(row.values()) + "\n"
+        checks = [c["key"] for c in read_csv_preview(text, "training-client")["data_quality"]["checks"]]
+        self.assertNotIn("missing_class_event_id", checks)
+
+
 if __name__ == "__main__":
     unittest.main()

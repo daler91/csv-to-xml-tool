@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from .. import data_cleaning
 from ..config import ValidationCategory
-from ..schema_rules import schema_path, strip_illegal_xml_chars
+from ..schema_rules import schema_path
 from ..xml_utils import ET, write_document
 from ..xml_validator import validate_against_xsd, validate_xml_content
 from ..xsd_error_mapping import build_error_details, errors_by_record
@@ -88,45 +88,87 @@ class BaseConverter(abc.ABC):
         so a Windows-1252 export converts from the command line too instead of
         stopping at the first accented name, and keeps duplicate columns from
         erasing each other (data_cleaning.NormalizedDictReader). Both are
-        recorded as file-level warnings. A file that cannot be read is
-        recorded as a FILE_ACCESS error and re-raised.
+        recorded as file-level warnings, as are rows the reader saw lose data
+        (see _report_row_shapes). A file that cannot be read is recorded as a
+        FILE_ACCESS error and re-raised.
         """
+        excel_errors: list[tuple[int, str, str]] = []
         try:
             with open(input_path, "rb") as csv_file:
                 text, encoding = data_cleaning.decode_csv_bytes(csv_file.read())
             reader = data_cleaning.NormalizedDictReader(io.StringIO(text))
-            rows = [self._blank_unwritable_cells(row) for row in reader]
+            rows = [self._blank_unwritable_cells(row, number, excel_errors)
+                    for number, row in enumerate(reader, 1)]
         except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
             self._file_error(ValidationCategory.FILE_ACCESS, f"Failed to read CSV file: {e}")
             raise
         self.logger.info(f"Successfully read CSV file with {len(rows)} records")
-        if encoding == data_cleaning.UTF16_DAMAGED:
-            self.validator.add_issue(
-                "file", "warning", ValidationCategory.FILE_ACCESS, "input_file",
-                "The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
-                "an emoji); they were replaced with '\ufffd'. Check the values around them.")
-        if encoding == "windows-1252":
-            self.validator.add_issue(
-                "file", "warning", ValidationCategory.FILE_ACCESS, "input_file",
-                "The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
-                "delimited)\"). Check that accented names came through correctly.")
+        message = data_cleaning.encoding_warning(encoding)
+        if message:
+            self.validator.add_issue("file", "warning", ValidationCategory.FILE_ACCESS, "input_file", message)
         for name, count in reader.duplicates.items():
             self.validator.add_issue("file", "warning", ValidationCategory.INVALID_FORMAT, name,
                                      data_cleaning.duplicate_header_message(name, count))
+        self._report_row_shapes(reader)
+        if excel_errors:
+            number, column, value = excel_errors[0]
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.INVALID_VALUE, column,
+                f"{len(excel_errors)} cell(s) hold an Excel error instead of a value, the first "
+                f"'{value}' in row {number}; they were read as blank. Fix the formula in the "
+                "spreadsheet if a value belongs there.")
         return reader.fieldnames, rows
 
-    @staticmethod
-    def _blank_unwritable_cells(row: dict) -> dict:
-        """Treat a cell holding only characters XML cannot carry as blank.
+    def _report_row_shapes(self, reader) -> None:
+        """Report the rows NormalizedDictReader saw lose data: a cell that
+        swallowed the rows after it (each one an error, since whole rows are
+        missing from the XML), and rows with values past the last column (one
+        warning for the file, naming the first few)."""
+        for number, column, lines in reader.swallowed_rows:
+            self.validator.add_issue(
+                "file", "error", ValidationCategory.INVALID_FORMAT, column,
+                f"Row {number}'s '{column}' cell runs on over {lines} more line(s) that look like rows "
+                "of their own: a quotation mark in it is probably opened and never closed. Those rows "
+                "were read as part of the cell, so they are missing from the XML; close or remove the "
+                "quotation mark and convert again.")
+        if not reader.long_rows:
+            return
+        width = len(reader.fieldnames)
+        if len(reader.long_rows) == 1:
+            (number, extra), = reader.long_rows
+            shown = ", ".join(f"'{value}'" for value in extra[:3]) + (", ..." if len(extra) > 3 else "")
+            verb = "was" if len(extra) == 1 else "were"
+            what = (f"Row {number} has more values than the header has columns ({width}): {shown} "
+                    f"past the last column {verb} dropped, and its other values may be in the wrong "
+                    "columns.")
+        else:
+            shown = ", ".join(str(number) for number, _ in reader.long_rows[:5])
+            what = (f"{len(reader.long_rows)} rows have more values than the header has columns "
+                    f"({width}): rows {shown}{', ...' if len(reader.long_rows) > 5 else ''}. Their "
+                    "values past the last column were dropped, and their other values may be in "
+                    "the wrong columns.")
+        self.validator.add_issue("file", "warning", ValidationCategory.INVALID_FORMAT, "input_file",
+                                 f"{what} Check for a comma that isn't inside quotes.")
 
-        SchemaGuard strips those characters from what is written, which left
-        such a Contact ID as an empty <PartnerClientNumber/> -- valid XML that
-        names nobody -- where a blank one leaves the row out with an error.
-        Blanking the cell here gives every column its blank-cell handling.
+    @staticmethod
+    def _blank_unwritable_cells(row: dict, number: int, excel_errors: list) -> dict:
+        """Treat a cell that holds no value as blank: one of only characters
+        XML cannot carry or nobody can see (data_cleaning.is_invisible), or an
+        Excel error such as '#N/A' (appended to `excel_errors` with its row,
+        for one warning).
+
+        SchemaGuard strips the characters XML can't carry from what is written,
+        which left such a Contact ID as an empty <PartnerClientNumber/> -- valid
+        XML that names nobody; a zero-width space was filed as the ID itself,
+        and '#N/A' as an event. Blanking the cell here gives every column its
+        blank-cell handling, such as the error that leaves out a row without an ID.
         """
         for column, value in row.items():
-            if value and not value.isspace() and not strip_illegal_xml_chars(value).strip():
+            # Whitespace is left as it is: every reader already trims it.
+            if value and not value.isspace() and data_cleaning.is_blank_cell(value):
+                if data_cleaning.is_excel_error(value):
+                    excel_errors.append((number, column, value.strip()))
                 row[column] = ""
         return row
 

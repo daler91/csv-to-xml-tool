@@ -10,6 +10,7 @@ import csv
 import logging
 import math
 import re
+import unicodedata
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -44,6 +45,51 @@ def is_empty(value: Any) -> bool:
         return True
     s = str(value).strip()
     return s == "" or s.lower() == "nan"
+
+
+# What Excel (and Google Sheets) write in a cell whose formula failed: a
+# VLOOKUP that found nothing, a deleted reference. Not a value -- "#N/A" in the
+# Class/Event ID column was filed as an event called "#N/A".
+EXCEL_ERROR_VALUES = frozenset({
+    "#N/A", "#VALUE!", "#REF!", "#NAME?", "#DIV/0!", "#NULL!", "#NUM!",
+    "#SPILL!", "#CALC!", "#ERROR!",
+})
+
+# Characters nobody sees: controls (Cc), format characters (Cf -- the
+# zero-width space, a BOM, direction marks, the word joiner) and the halves of
+# a damaged UTF-16 character (Cs). str.strip() keeps all of them, so a cell of
+# nothing else was read as filled in.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs"})
+
+
+def is_excel_error(value: Any) -> bool:
+    """True for a cell holding one of EXCEL_ERROR_VALUES."""
+    text = str(value).strip() if value else ""
+    return text.startswith("#") and text.upper() in EXCEL_ERROR_VALUES
+
+
+def is_invisible(value: Any) -> bool:
+    """True for a cell with nothing a reader can see: only whitespace and
+    invisible characters (see _INVISIBLE_CATEGORIES), or nothing at all."""
+    text = str(value) if value else ""
+    if text.isprintable():  # the usual case, decided without a per-character scan
+        return not text.strip()
+    return all(ch.isspace() or ch in "￾￿" or unicodedata.category(ch) in _INVISIBLE_CATEGORIES
+               for ch in text)
+
+
+def is_blank_cell(value: Any) -> bool:
+    """True for a cell that holds no value: blank, invisible, or an Excel
+    error. Every reader treats these as blank, so each column's own blank-cell
+    handling (an error for a missing ID, a reported default) applies."""
+    return is_invisible(value) or is_excel_error(value)
+
+
+def remove_format_chars(text: str) -> str:
+    """`text` without invisible format characters (Unicode category Cf)."""
+    if text.isprintable():
+        return text
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
 DEFAULT_STATE_MAPPINGS = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
@@ -327,9 +373,11 @@ def normalize_header(name: str) -> str:
     single space, so a stray trailing/leading or doubled space in an exported
     header can't silently break a column lookup. Must be applied identically on
     every read path (the converters, the CONV-1 required-column check, and the
-    preview/diff readers) so they all agree on the column set.
+    preview/diff readers) so they all agree on the column set. Invisible format
+    characters go too: a zero-width space, or the BOM a second export pasted
+    below the first brings with it, made "Contact ID" a different column.
     """
-    return re.sub(r'\s+', ' ', str(name)).strip()
+    return re.sub(r'\s+', ' ', remove_format_chars(str(name))).strip()
 
 
 def normalize_row_keys(row: dict) -> dict:
@@ -366,6 +414,16 @@ class NormalizedDictReader:
     Otherwise it matches DictReader followed by normalize_row_keys: headers
     normalized, blank lines skipped, a short row padded with "", extra trailing
     cells dropped.
+
+    Two shapes of row that lose data without an error are recorded for the
+    caller to report, numbered as the converters number rows (1 for the first
+    data row): ``long_rows``, (row, the values past the last column), for a row
+    with more values than the header has columns -- the mark of a comma that
+    isn't inside quotes, which shifts every later value one column over; and
+    ``swallowed_rows``, (row, column, lines), for a cell holding what look like
+    further rows -- the mark of a quotation mark opened and never closed, which
+    reads every following line into the one cell until the next quotation mark.
+    A short row is not recorded: exports leave trailing blank cells off.
     """
 
     def __init__(self, lines):
@@ -374,16 +432,40 @@ class NormalizedDictReader:
         self.fieldnames = [normalize_header(name) for name in header]
         self.duplicates = {name: count for name, count in Counter(self.fieldnames).items()
                            if count > 1}
+        self.long_rows: list[tuple[int, list[str]]] = []
+        self.swallowed_rows: list[tuple[int, str, int]] = []
 
     def __iter__(self):
+        width = len(self.fieldnames)
+        number = 0
         for cells in self._reader:
             if not cells:
                 continue
+            number += 1
             row = dict.fromkeys(self.fieldnames, "")
             for name, value in zip(self.fieldnames, cells, strict=False):
-                if str(value).strip() or not str(row[name]).strip():
+                if not is_blank_cell(value) or is_blank_cell(row[name]):
                     row[name] = value
+            swallowed = self._swallowed(number, row)
+            extra = [value for value in cells[width:] if not is_invisible(value)]
+            if extra and not swallowed:  # the swallowed rows explain those
+                self.long_rows.append((number, extra))
             yield row
+
+    def _swallowed(self, number: int, row: dict) -> bool:
+        """Record, and return whether, a cell of this row holds lines with as
+        many commas as a row of this file has -- at least four, so a line of a
+        note listing a few things is not taken for a row."""
+        delimiters = max(len(self.fieldnames) - 1, 4)
+        found = False
+        for name, value in row.items():
+            if "\n" not in value:
+                continue
+            lines = sum(1 for line in value.split("\n")[1:] if line.count(",") >= delimiters)
+            if lines:
+                self.swallowed_rows.append((number, name, lines))
+                found = True
+        return found
 
 
 def duplicate_header_message(name: str, count: int) -> str:
@@ -403,6 +485,18 @@ codecs.register_error(
 
 # decode_csv_bytes' encoding for a UTF-16 file with bytes that aren't text.
 UTF16_DAMAGED = "utf-16 (damaged)"
+
+
+def encoding_warning(encoding: str) -> str | None:
+    """The file-level warning for how decode_csv_bytes had to read a file,
+    or None when it was plain UTF-8 or UTF-16."""
+    if encoding == UTF16_DAMAGED:
+        return ("The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
+                "an emoji); they were replaced with '�'. Check the values around them.")
+    if encoding == "windows-1252":
+        return ("The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
+                "delimited)\"). Check that accented names came through correctly.")
+    return None
 
 
 def decode_csv_bytes(data: bytes) -> tuple[str, str]:

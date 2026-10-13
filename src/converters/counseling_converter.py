@@ -343,6 +343,7 @@ class CounselingConverter(BaseConverter):
         """Append the CounselingRecord for one CSV row to `root`. Returns
         whether it was filed; a row that can't be is left out, with the
         reason recorded."""
+        csv_row = row
         row = self._preprocess_row(row)
         contact_id = row.get('Contact ID')
         if contact_id is not None:
@@ -358,9 +359,9 @@ class CounselingConverter(BaseConverter):
         self._fabrication_warned.clear()
         self._warned_once.clear()
 
-        if not data_validation.validate_counseling_record(row, row_index, self.validator):
+        if not data_validation.validate_counseling_record(row, row_index, self.validator, csv_row):
             self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
-            self.left_out_reasons.append(f"row {row_index}: no Contact ID")
+            self.left_out_reasons.append(f"row {row_index}: " + ("not a record" if contact_id else "no Contact ID"))
             # Counted, so "Total Records" is every row and the ones left out
             # are the difference from "Successful".
             self.validator.record_processed(success=False)

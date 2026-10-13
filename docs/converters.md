@@ -138,7 +138,9 @@ so the results page can show a before/after diff for each value.
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |
 | Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described) |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
-| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
+| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup; invisible format characters are removed |
+| Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters is blank; one file-level warning counts the Excel errors |
+| Rows | A blank row, a repeat of the header row, or a title/footer line (one filled cell in a file of three or more columns) is skipped with a warning naming it; a row with values past the last column, and a cell that swallowed further rows (an unclosed quote), are reported |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
 | Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Whether a value is valid is decided by libxml2 against the element's own type, so the guard and SBA's validation never disagree about a pattern, a number or a date. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
 

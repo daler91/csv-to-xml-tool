@@ -24,8 +24,10 @@ from ..logging_context import set_job_id
 from ..models.schemas import FixXmlRequest, FixXmlResponse
 from ..services.xsd_validation import (
     cleanup_staging,
+    invalid_result,
     read_text,
     stage_xml_content,
+    unpaired_surrogate_error,
     validate_with_details,
 )
 from .validate import SCHEMAS_DIR, XSD_MAP
@@ -65,6 +67,12 @@ async def fix_xml(req: FixXmlRequest):
         )
     if not req.xml_content.strip():
         raise HTTPException(status_code=400, detail="xml_content must not be empty")
+
+    problem = unpaired_surrogate_error(req.xml_content, "XML")
+    if problem:
+        # Nor can the text be sent back as it came: the response is UTF-8 too.
+        return {"changed": False, "fixed_xml_content": "", "fix_error": problem,
+                **invalid_result(problem, "counseling")}
 
     xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP["counseling"])
 

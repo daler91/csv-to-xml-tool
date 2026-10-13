@@ -565,6 +565,25 @@ def test_fix_xml_requires_worker_token(monkeypatch):
 # --- /fix-xml and /validate-xsd: what the fixer moves and what it reports ---
 
 
+def _post_json(monkeypatch, path, body: bytes):
+    """POST a raw JSON body through the app, auth and response encoding included."""
+    import json
+
+    from app import main as worker_main
+    from app.core import auth as worker_auth
+
+    monkeypatch.setattr(worker_auth, "WORKER_AUTH_TOKEN", "test-token")
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    headers = {
+        "content-type": "application/json",
+        "content-length": str(len(body)),
+        "authorization": "Bearer test-token",
+    }
+    status, payload = _asgi_request(worker_main.app, "POST", path, body, headers)
+    return status, json.loads(payload)
+
+
 def _golden_counseling():
     with open(os.path.join(_REPO_ROOT, "tests", "golden", "sample_counseling.xml"), encoding="utf-8") as f:
         return f.read()
@@ -625,3 +644,31 @@ def test_entity_declarations_get_a_clear_answer_from_both_routes(monkeypatch):
     assert fixed["changed"] is False
     assert fixed["fix_error"].startswith(ENTITIES_NOT_SUPPORTED), fixed
     assert fixed["fixed_xml_content"] == content
+
+
+def test_lone_surrogate_is_a_result_not_a_500(monkeypatch):
+    """A JSON "\\ud800" escape is a str Python can't encode as UTF-8: staging it
+    raised UnicodeEncodeError, a 500 from both routes."""
+    body = (b'{"job_id":"r","schema_type":"counseling",'
+            b'"xml_content":"<CounselingInformation>\\ud800</CounselingInformation>"}')
+
+    for path in ("/validate-xsd", "/fix-xml"):
+        status, result = _post_json(monkeypatch, path, body)
+        assert status == 200, (path, result)
+        assert result["is_valid"] is False
+        assert result["error_count"] == len(result["error_details"]) == 1
+        assert "unpaired UTF-16 surrogate (U+D800) at line 1, column 24" in result["errors"][0], result
+    assert (result["changed"], result["fixed_xml_content"]) == (False, "")
+    assert result["fix_error"] == result["errors"][0]
+
+
+def test_convert_answers_a_lone_surrogate_with_422(monkeypatch):
+    """It was a 400 "Invalid request parameters" that named nothing."""
+    req = ConvertRequest(job_id="jobSur", csv_content=COUNSELING_CSV.replace("Smith", "Smith\ud83d", 1),
+                         converter_type="counseling")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(convert_route.convert(req))
+
+    assert exc.value.status_code == 422
+    assert "unpaired UTF-16 surrogate (U+D83D) at line 2, column 12" in exc.value.detail

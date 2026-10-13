@@ -8,7 +8,9 @@ from ..logging_context import set_job_id
 from ..models.schemas import ValidateXsdRequest, ValidateXsdResponse
 from ..services.xsd_validation import (
     cleanup_staging,
+    invalid_result,
     stage_xml_content,
+    unpaired_surrogate_error,
     validate_with_details,
 )
 
@@ -47,6 +49,10 @@ async def validate_xsd(req: ValidateXsdRequest):
         raise HTTPException(status_code=400, detail="Unknown schema type")
     if not req.xml_content.strip():
         raise HTTPException(status_code=400, detail="xml_content must not be empty")
+
+    problem = unpaired_surrogate_error(req.xml_content, "XML")
+    if problem:
+        return invalid_result(problem, req.schema_type)
 
     xsd_file = os.path.join(SCHEMAS_DIR, XSD_MAP[req.schema_type])
 

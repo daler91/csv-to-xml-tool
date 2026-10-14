@@ -317,15 +317,34 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
 # A time after the date, as Salesforce writes a Date/Time field: "1/15/2025
 # 10:30 AM" in a report export, "2025-01-15T14:30:00.000Z" from the API.
 _TRAILING_TIME = re.compile(
-    r"(?P<date>[^\sT]+)[ T]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:[AaPp]\.?[Mm]\.?)?"
-    r"\s*(?:Z|[+-]\d{2}:?\d{2})?")
+    r"(?P<date>.+?),?[ T]\s*\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:[AaPp]\.?[Mm]\.?)?"
+    r"\s*(?P<zone>Z|[+-]\d{2}:?\d{2})?")
+# Longer than any date with a time ("September 30, 2025, 11:59:59.999 PM
+# +05:30" is 41). A longer cell isn't tried, so a crafted one can't make the
+# regex above slow; it is simply not a date.
+_MAX_DATE_TIME = 48
+
+
+def _trailing_time(date_str: str):
+    text = date_str.strip()
+    return _TRAILING_TIME.fullmatch(text) if len(text) <= _MAX_DATE_TIME else None
 
 
 def date_part(date_str: str) -> str:
-    """`date_str` without a trailing time of day. The forms record a date, and
-    the date is the one written, whatever time zone the time was in."""
-    match = _TRAILING_TIME.fullmatch(date_str.strip())
+    """`date_str` without a trailing time of day ("1/15/2025, 10:30 AM",
+    "Jan 15, 2025 10:30 AM"). The forms record a date, and the date kept is
+    the one written; has_zoned_time says when that may not be the local one."""
+    match = _trailing_time(date_str)
     return match.group("date") if match else date_str
+
+
+def has_zoned_time(date_str: str | None) -> bool:
+    """True for a date written with a UTC time or a time-zone offset, as
+    Salesforce's API and Data Loader export a Date/Time field
+    ("2025-01-15T23:30:00.000Z"). The date written is the UTC one: an evening
+    session in the US can carry the next day's date."""
+    match = _trailing_time(str(date_str or ""))
+    return bool(match and match.group("zone"))
 
 
 def _two_digit_year_in_past(parsed: datetime, fmt: str) -> datetime:

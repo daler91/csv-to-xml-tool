@@ -356,6 +356,18 @@ class SafetyNetWithoutLinesTest(_ValidityCase):
         self.assertEqual(error["record_id"], "file")
         self.assertIn("no record on its own does", error["message"])
 
+    def test_the_worker_lists_such_a_failure_once(self):
+        # Its own XSD check lists the errors (xsd_errors); the converter's
+        # file error repeated them on the results page.
+        from app.services.conversion_service import run_conversion
+        whole_file = {"is_valid": False,
+                      "errors": ["Line 1: Element 'CounselingInformation': something only the whole file has."]}
+        with mock.patch("src.converters.base_converter.validate_against_xsd", return_value=whole_file), \
+                mock.patch("app.services.conversion_service.validate_against_xsd", return_value=whole_file):
+            result = run_conversion(self.write_csv([_make_counseling_row()]), self.xml_path, "counseling")
+        self.assertEqual(result["xsd_errors"], whole_file["errors"])
+        self.assertEqual([i for i in result["issues"] if "no record on its own does" in i["message"]], [])
+
 
 class SharedSchemaTest(_ValidityCase):
     """The per-record check validates against one compiled schema, shared by

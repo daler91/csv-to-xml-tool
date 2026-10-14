@@ -97,6 +97,11 @@ class BaseConverter(abc.ABC):
         self.record_sources: list[dict] = []
         # Why each record left out of the file was (see _leave_out), in order.
         self.left_out_reasons: list[str] = []
+        # True when the caller validates the file itself and shows its XSD
+        # errors, as the worker does (xsd_errors): an XSD failure no record
+        # explains is then not also recorded as a file error, which listed
+        # the same messages twice on the results page.
+        self.caller_reports_xsd_errors = False
         # (record, column, cell) for each identifier change already reported,
         # so an event's thirty attendee rows give one warning, not thirty.
         self._cleaned_identifiers: set[tuple[str, str, str]] = set()
@@ -287,10 +292,11 @@ class BaseConverter(abc.ABC):
             if not failing:
                 # Leaving records out can't fix it, so say so: the CLI shows
                 # only this report.
-                self._file_error(
-                    ValidationCategory.PROCESSING_ERROR,
-                    "The XML fails SBA's schema, and no record on its own does: "
-                    + "; ".join(result["errors"][:3]))
+                if not self.caller_reports_xsd_errors:
+                    self._file_error(
+                        ValidationCategory.PROCESSING_ERROR,
+                        "The XML fails SBA's schema, and no record on its own does: "
+                        + "; ".join(result["errors"][:3]))
                 return left_out
             self._leave_out_failing(root, failing)
             left_out += len(failing)

@@ -227,6 +227,8 @@ def run_conversion(
         # Run conversion
         converter_cls = CONVERTER_MAP[converter_type]
         converter = converter_cls(logger, tracker)
+        # The XSD check below reports a failure no record explains (xsd_errors).
+        converter.caller_reports_xsd_errors = True
         if on_progress is not None:
             converter.progress_callback = on_progress
         converter.convert(actual_csv_path, xml_path)

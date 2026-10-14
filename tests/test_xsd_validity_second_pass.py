@@ -179,6 +179,29 @@ class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
         warning, = self.issues("Branch Of Service", "warning")
         self.assertIn("'Army' was left out", warning["message"])
 
+    def test_a_branch_left_out_is_explained_by_the_status(self):
+        # It used to say "not military service" for every status, a retiree's
+        # unrecognised one and a declined one included.
+        for status, why in (("Retired Colonel", "Veteran Status 'Retired Colonel' is not a recognized military "
+                                                "status"),
+                            ("Prefer not to say", "Veteran Status is 'Prefer not to say'"),
+                            ("No", "Veteran Status 'No' is filed as 'No military service'"),
+                            ("", "Veteran Status is blank")):
+            with self.subTest(status=status):
+                self.setUp()
+                root = self.convert_row(**{"Veteran Status": status, "Branch Of Service": "Army"})
+                self.assertIsNone(root.find(".//ClientIntake/BranchOfService"))
+                warning, = self.issues("Branch Of Service", "warning")
+                self.assertEqual(warning["message"], f"'Army' was left out of the XML because {why}.")
+
+    def test_a_branch_that_names_no_branch_is_not_reported(self):
+        for status, branch in (("No military service", "No military service"), ("No", "N/A"),
+                               ("No military service", "Prefer not to say"), ("", "None")):
+            with self.subTest(status=status, branch=branch):
+                self.setUp()
+                self.convert_row(**{"Veteran Status": status, "Branch Of Service": branch})
+                self.assertEqual(self.issues("Branch Of Service"), [])
+
     def test_a_legal_entity_for_a_client_not_in_business_is_reported(self):
         root = self.convert_row(**{"Currently In Business?": "No", "Legal Entity of Business": "LLC"})
         self.assertIsNone(root.find(".//ClientIntake/LegalEntity"))
@@ -188,6 +211,13 @@ class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
         root = self.convert_row(Rural_vs_Urban="Undetermined", FIPS_Code="19153")
         self.assertIsNone(root.find(".//ClientIntake/FIPS_Code"))
         self.assertEqual(len(self.issues("FIPS_Code", "warning")), 1)
+
+    def test_a_fips_code_beside_a_blank_rural_vs_urban_says_it_is_blank(self):
+        # Not "Rural_vs_Urban is 'Undetermined'": the user's cell is empty.
+        self.convert_row(Rural_vs_Urban="", FIPS_Code="19153")
+        warning, = self.issues("FIPS_Code", "warning")
+        self.assertEqual(warning["message"], "'19153' was left out of the XML because Rural_vs_Urban is blank, "
+                                             "filed as 'Undetermined'.")
 
     def test_unreadable_numbers_are_reported(self):
         root = self.convert_row(**{"Total Number of Employees": "10-20", "Prep Hours": "1:30"})
@@ -234,6 +264,23 @@ class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
 
 class TrainingClientContactHoursTest(_ValidityCase):
     converter_class = TrainingClientConverter
+
+    def test_a_legal_entity_left_out_agrees_with_the_downgrade(self):
+        # Right after "Client answered 'Yes' ... recorded as not in business",
+        # it said "because Currently In Business is 'No'".
+        self.convert([_make_training_client_row(**{"Currently in Business?": "Yes", "Training Topic": "",
+                                                   "Legal Entity of Business": "LLC"})])
+        self.assertEqual(len(self.issues("CurrentlyInBusiness", "warning")), 1)
+        warning, = self.issues("Legal Entity of Business", "warning")
+        self.assertEqual(warning["message"], "'LLC' was left out of the XML because the client is recorded as "
+                                             "not in business, and SBA asks for it only of a business.")
+
+    def test_messages_name_the_files_military_status_column(self):
+        self.convert([_make_training_client_row(**{"Military Status": "Retired", "Branch Of Service": "Army"})])
+        warning, = self.issues("Branch Of Service", "warning")
+        self.assertIn("because Military Status 'Retired' is not a recognized", warning["message"])
+        warning, = self.issues("Military Status", "warning")
+        self.assertTrue(warning["message"].startswith("Military Status 'Retired'"))
 
     def test_invented_contact_hours_are_reported_on_the_row(self):
         root = self.convert([_make_training_client_row(**{"Type of Session": "Online"})])

@@ -26,6 +26,13 @@ def _session_type_key(value):
 
 _SESSION_TYPE_LOOKUP = {_session_type_key(t): t for t in CounselingConfig.VALID_SESSION_TYPES}
 
+# Branch Of Service answers that name no branch. Beside a status with no
+# military service to file a branch for, leaving one out loses nothing, so it
+# isn't reported -- an export that fills the column for every client would
+# otherwise warn on every row.
+_NO_BRANCH = frozenset({'no military service', 'prefer not to say', 'n/a', 'na', 'none', 'no', '-',
+                        'not applicable'})
+
 
 class CounselingConverter(BaseConverter):
     """
@@ -222,6 +229,11 @@ class CounselingConverter(BaseConverter):
                 record_id, "warning", ValidationCategory.INVALID_FORMAT, column,
                 f"'{str(raw).strip()}' is not a number, so it was left out of the XML.")
         return number
+
+    def _column_label(self, column):
+        """`column` as the user's CSV names it, for the text of a message: the
+        tracker translates an issue's field (field_aliases), not its text."""
+        return self.validator.field_aliases.get(column, column)
 
     def _warn_not_filed(self, record_id, column, raw, why):
         """Report a filled cell the converter leaves out of the XML on purpose."""
@@ -535,10 +547,11 @@ class CounselingConverter(BaseConverter):
     def _build_military_status(self, client_intake, row, record_id):
         military_status_raw = row.get('Veteran Status', '').strip()
         military_status_csv = data_cleaning.map_military_status_to_xsd(military_status_raw)
+        status_label = self._column_label('Veteran Status')
         if military_status_raw and not military_status_csv:
             self.validator.add_issue(
                 record_id, "warning", ValidationCategory.INVALID_VALUE, "Veteran Status",
-                f"Veteran Status '{military_status_raw}' is not a recognized military "
+                f"{status_label} '{military_status_raw}' is not a recognized military "
                 f"status and was omitted from the XML.",
             )
         emit_optional(client_intake, 'MilitaryStatus', military_status_csv)
@@ -553,10 +566,18 @@ class CounselingConverter(BaseConverter):
                                data_cleaning.map_branch_of_service_to_xsd(branch_csv))
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "BranchOfService", f"BranchOfService required for MilitaryStatus '{military_status_csv}' but is missing/invalid.")
-        else:
-            self._warn_not_filed(
-                record_id, 'Branch Of Service', branch_csv,
-                f"Veteran Status is '{military_status_raw or 'blank'}', not military service")
+        elif branch_csv.casefold() not in _NO_BRANCH:
+            # Why, from the status as read: "not military service" was wrong
+            # for a status that wasn't recognised or declined the question.
+            if not military_status_raw:
+                why = f"{status_label} is blank"
+            elif not military_status_csv:
+                why = f"{status_label} '{military_status_raw}' is not a recognized military status"
+            elif military_status_raw.casefold() == military_status_csv.casefold():
+                why = f"{status_label} is '{military_status_raw}'"
+            else:
+                why = f"{status_label} '{military_status_raw}' is filed as '{military_status_csv}'"
+            self._warn_not_filed(record_id, 'Branch Of Service', branch_csv, why)
 
     def _build_media_and_internet(self, client_intake, row, record_id):
         media_codes = data_cleaning.split_multi_value(row.get('What Prompted you to contact us?', ''))
@@ -698,7 +719,8 @@ class CounselingConverter(BaseConverter):
             create_element(le_element, 'Other', le_other)
 
     def _build_rural_urban(self, client_intake, row, record_id):
-        rural_urban_val = (row.get('Rural_vs_Urban') or '').strip() or self.config.DEFAULT_URBAN_RURAL
+        rural_urban_raw = (row.get('Rural_vs_Urban') or '').strip()
+        rural_urban_val = rural_urban_raw or self.config.DEFAULT_URBAN_RURAL
         create_element(client_intake, 'Rural_vs_Urban', rural_urban_val)
 
         fips_code = row.get('FIPS_Code', '').strip()
@@ -708,8 +730,11 @@ class CounselingConverter(BaseConverter):
             else:
                 self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "FIPS_Code", f"FIPS Code required for Rural/Urban status '{rural_urban_val}' but is missing.")
         else:
+            # A blank cell is said to be blank: the user won't find the
+            # default it is filed as in the CSV.
             self._warn_not_filed(record_id, 'FIPS_Code', fips_code,
-                                 f"Rural_vs_Urban is '{rural_urban_val}', not Rural or Urban")
+                                 f"Rural_vs_Urban is '{rural_urban_val}', not Rural or Urban" if rural_urban_raw
+                                 else f"Rural_vs_Urban is blank, filed as '{rural_urban_val}'")
 
     def _cap_single_code(self, codes, record_id, element_label, csv_field):
         """Trim a multi-value code list to the one Code the XSD allows.
@@ -793,7 +818,11 @@ class CounselingConverter(BaseConverter):
         if in_business_val.lower() == 'yes':
             self._build_legal_entity(client_intake, row, record_id)
         else:
-            why = f"Currently In Business is '{in_business_val}', and SBA asks for it only of a business"
+            # The status as filed, not the cell: training-client records a
+            # client who answered Yes as not in business, and says so.
+            why = ("the client is recorded as not in business" if in_business_val == 'No'
+                   else f"the client's business status is recorded as '{in_business_val}'")
+            why += ", and SBA asks for it only of a business"
             self._warn_not_filed(record_id, 'Legal Entity of Business', row.get('Legal Entity of Business', ''), why)
             self._warn_not_filed(record_id, 'Other legal entity (specify)',
                                  row.get('Other legal entity (specify)', ''), why)

@@ -112,6 +112,12 @@ warning on its row; a file without the column gets one warning instead. A blank
 | `Nature of the Counseling Seeking - Other Detail` | counseling sought is `Other` |
 | `Other Counseling Provided` | counseling provided is `Other` |
 
+A filled cell its case doesn't call for is left out of the XML with a warning
+that says why, from the value as read: `Army` beside a Veteran Status of `No`,
+or of `Retired` (not a recognized status), or a `FIPS_Code` beside a blank
+`Rural_vs_Urban`. A `Branch Of Service` that names no branch (`N/A`, `None`,
+`No military service`, `Prefer not to say`) is left out without one.
+
 **Fabrication-risk (9).** Absent → a non-empty value is invented. See
 [converters.md](./converters.md#fabricated-defaults) for the exact values.
 

@@ -67,6 +67,17 @@ class GuardAgreesWithLibxml2Test(_ValidityCase):
         # 90 characters; libxml2 gives up after about 2 s and the result is cached.
         self.assertLess(time.monotonic() - started, 15)
 
+    def test_only_short_values_are_remembered(self):
+        # The verdicts are kept for the life of the worker: a 100,000-digit
+        # FIPS code in each row of each upload stayed in memory.
+        rule = _rule("counseling", "ClientIntake", "FIPS_Code")
+        cache = rule.checker._cached_accepts.cache_info
+        size = cache().currsize
+        rule.checker.accepts(rule.check_tag, "1" * 1000)
+        self.assertEqual(cache().currsize, size)
+        rule.checker.accepts(rule.check_tag, "98765")
+        self.assertEqual(cache().currsize, size + 1)
+
     def test_iso_basic_and_week_dates_are_not_xs_date(self):
         rule = _rule("counseling", "CounselorRecord", "DateCounseled")
         for text in ("20250115", "2025-W03-3", "2025-W03", "0000-01-01"):

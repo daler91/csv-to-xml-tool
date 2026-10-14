@@ -97,6 +97,11 @@ _DATE_LEXICAL = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})
 _INTEGER_BASES = {"integer", "int", "positiveInteger", "nonNegativeInteger", "long", "short"}
 _DECIMAL_BASES = {"decimal"} | _INTEGER_BASES
 
+# The longest value _ValueChecker remembers its verdict on. The cache lives as
+# long as the worker; with no bound on a value's length it held a 100,000-digit
+# FIPS code per row of every upload, and grew with each job.
+_MAX_CACHED_TEXT = 256
+
 # The two Yes/No enumerations get the same synonyms the converter's own
 # is_affirmative/is_negative helpers accept.
 _YES_NO_TYPES = {"YesNoType", "YesNoUndeterminedType"}
@@ -142,7 +147,7 @@ class _ValueChecker:
         # One validation at a time: the worker converts in several threads,
         # and an XMLSchema object's error log is shared by its callers.
         self._lock = threading.Lock()
-        self.accepts = functools.lru_cache(maxsize=65536)(self._accepts)
+        self._cached_accepts = functools.lru_cache(maxsize=65536)(self._accepts)
 
     def tag_for(self, type_ref: str, inline_simple) -> str:
         """The element name standing for this type, declaring it on first use."""
@@ -158,6 +163,12 @@ class _ValueChecker:
 
     def compile(self) -> None:
         self._schema = etree.XMLSchema(self._root)
+
+    def accepts(self, tag: str, text: str) -> bool:
+        """True when libxml2 accepts `text` as a value of the type `tag` stands for."""
+        if len(text) > _MAX_CACHED_TEXT:
+            return self._accepts(tag, text)
+        return self._cached_accepts(tag, text)
 
     def _accepts(self, tag: str, text: str) -> bool:
         element = etree.Element(tag)

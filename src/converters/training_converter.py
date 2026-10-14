@@ -291,14 +291,22 @@ class TrainingConverter(BaseConverter):
                        or self.general_config.DEFAULT_LOCATION_CODE)
 
         date_val = self._event_value(event_id, group_rows, "start_date")
-        formatted_date = self._filed_date(date_val)
-        if not formatted_date:
-            formatted_date = self.config.DEFAULT_START_DATE
+        parsed_date = self._filed_date(date_val)
+        formatted_date = parsed_date or self.config.DEFAULT_START_DATE
+        if not parsed_date:
             # A blank or unparseable date silently becomes a fixed past date,
             # which is the kind of substitution a reviewer has to know about.
             self._warn_fabricated_default(event_id, 'Start Date', formatted_date, 'DateTrainingStarted',
                                           raw=date_val)
         create_element(record, 'DateTrainingStarted', formatted_date)
+        if parsed_date and data_cleaning.has_zoned_time(date_val):
+            # As CounselingConverter._warn_zoned_time: a UTC Date/Time from the
+            # API is filed with its UTC date, which an evening event in the US
+            # has already moved on to the next day.
+            self.validator.add_issue(
+                str(event_id), "warning", ValidationCategory.AMBIGUOUS_DATE, self._header('start_date'),
+                f"'{date_val}' is a time in UTC or at a time-zone offset, so it was filed as "
+                f"{formatted_date}, the date there, which can be a day later than the local date of the session.")
         if data_cleaning.is_ambiguous_date(date_val):
             # CONV-3: emitted month-first, but flag the ambiguity for human review.
             self.validator.add_issue(

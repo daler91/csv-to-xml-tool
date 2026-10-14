@@ -142,6 +142,47 @@ class DateTimeTest(_ValidityCase):
                 root = self.convert_row(Date=text)
                 self.assertEqual(root.findtext(".//DateCounseled"), expected)
 
+    def zoned(self, column):
+        return [i["message"] for i in self.issues(column, "warning") if i["category"] == "ambiguous_date"]
+
+    def test_a_utc_date_time_is_reported_where_it_is_filed(self):
+        # Salesforce's API and Data Loader write a Date/Time in UTC: a session
+        # at 6 pm Pacific on 30 September is 1 October there, the next fiscal
+        # year, and the date was filed without a word.
+        cells = {"Date": ("2025-10-01T01:00:00.000Z", "2025-10-01"),
+                 "Client Signature - Date": ("2025-10-01T02:30:00Z", "2025-10-01"),
+                 "Reportable Impact Date": ("2025-10-01T03:00:00+00:00", "2025-10-01"),
+                 "Business Start Date": ("2020-05-01T04:00:00.000Z", "2020-05-01")}
+        root = self.convert_row(**{column: raw for column, (raw, _) in cells.items()})
+        self.assertEqual(root.findtext(".//DateCounseled"), "2025-10-01")
+        self.assertEqual(root.findtext(".//BusinessStartDatePart3"), "2020-05-01")
+        for column, (raw, filed) in cells.items():
+            with self.subTest(column=column):
+                warning, = self.zoned(column)
+                self.assertTrue(warning.startswith(f"'{raw}' is a time in UTC or at a time-zone offset, so it was "
+                                                   f"filed as {filed}, the date there, which can be a day later "
+                                                   "than the local date"), warning)
+        self.assertTrue(self.zoned("Date")[0].endswith("local date of the session."))
+
+    def test_a_local_date_time_is_not_reported(self):
+        self.convert_row(Date="1/15/2025 6:30 PM", **{"Client Signature - Date": "2025-01-15 18:30:00"})
+        self.assertEqual(self.zoned("Date") + self.zoned("Client Signature - Date"), [])
+
+    def test_training_forms_report_it_once(self):
+        self.converter_class = TrainingClientConverter
+        self.converter = TrainingClientConverter(self.converter.logger, self.validator)
+        root = self.convert([_make_training_client_row(**{"Start Date": "2025-10-01T01:00:00.000Z"})])
+        self.assertEqual(root.findtext(".//TrainingSession/DateTrainingStarted"), "2025-10-01")
+        self.assertEqual(len(self.zoned("Start Date")), 1)
+
+        self.converter_class = TrainingConverter
+        self.setUp()
+        root = self.convert([_make_training_row(**{"Start Date": "2025-10-01T01:00:00.000Z"}),
+                             _make_training_row(**{"Start Date": "2025-10-01T01:00:00.000Z"})])
+        self.assertEqual(root.findtext(".//DateTrainingStarted"), "2025-10-01")
+        warning, = self.zoned("Start Date")
+        self.assertIn("filed as 2025-10-01", warning)
+
     def test_an_ambiguous_date_with_a_time_is_still_flagged(self):
         self.assertTrue(data_cleaning.is_ambiguous_date("3/4/2025 9:05 pm"))
 

@@ -131,10 +131,10 @@ class TrainingClientConverter(CounselingConverter):
 
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = super()._build_counselor_record_section(parent, row, record_id)
-        self._build_training_session(counselor_record, row)
+        self._build_training_session(counselor_record, row, record_id)
         return counselor_record
 
-    def _build_training_session(self, counselor_record, row):
+    def _build_training_session(self, counselor_record, row, record_id):
         """TrainingSession is the last child of CounselorRecord in the XSD
         sequence. Child order: DateTrainingStarted, PartnerTrainingNumber,
         EmployeesTrained, HoursTrained (all optional)."""
@@ -142,6 +142,8 @@ class TrainingClientConverter(CounselingConverter):
         date_started = data_cleaning.format_date(row.get('Date', ''))  # remapped 'Start Date'
         if date_started:
             create_element(training_session, 'DateTrainingStarted', date_started)
+        # DateCounseled, from the same cell, has usually said it already.
+        self._warn_zoned_time(record_id, 'Date', row.get('Date', ''), date_started, session=True)
         event_id = (row.get('Activity ID') or '').strip()  # remapped 'Class/Event ID'
         if event_id:
             create_element(training_session, 'PartnerTrainingNumber', event_id)

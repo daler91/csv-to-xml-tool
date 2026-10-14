@@ -224,7 +224,22 @@ class CounselingConverter(BaseConverter):
             self.validator.add_issue(
                 record_id, "warning", ValidationCategory.INVALID_FORMAT, column,
                 f"'{str(raw).strip()}' is not a date this tool can read, so it was left out of the XML.")
+        self._warn_zoned_time(record_id, column, raw, date)
         return date
+
+    def _warn_zoned_time(self, record_id, column, raw, filed, session=False):
+        """Report a date filed from a UTC time or one with a time-zone offset,
+        as Salesforce's API and Data Loader export a Date/Time
+        ("2025-10-01T01:00:00.000Z"). The date written is the one filed, and
+        an evening session in the US is already the next day in UTC: 30
+        September became 1 October, the next fiscal year, without a word.
+        Once per cell, though training-client files 'Date' twice."""
+        if filed and data_cleaning.has_zoned_time(raw) and self._first_time(record_id, ('zoned time', column)):
+            self.validator.add_issue(
+                record_id, "warning", ValidationCategory.AMBIGUOUS_DATE, column,
+                f"'{str(raw).strip()}' is a time in UTC or at a time-zone offset, so it was filed as "
+                f"{filed}, the date there, which can be a day later than the local date"
+                f"{' of the session' if session else ''}.")
 
     def _optional_number(self, raw, column, record_id):
         """A numeric cell for an optional element, or '' to leave the element
@@ -903,6 +918,8 @@ class CounselingConverter(BaseConverter):
             self._optional_date(raw, column, record_id)  # reports it
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
+            column = self._record_columns['CounselorRecord/BusinessStartDatePart3']
+            self._warn_zoned_time(record_id, column, self._first_present(row, column), business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
         # Omitted when blank, as Part 2 does: a default of '0' made a blank cell
@@ -1037,6 +1054,7 @@ class CounselingConverter(BaseConverter):
         date_counseled = data_cleaning.format_date(date_raw)
         if date_counseled:
             create_element(counselor_record, 'DateCounseled', date_counseled)
+        self._warn_zoned_time(record_id, 'Date', date_raw, date_counseled, session=True)
         if data_cleaning.is_ambiguous_date(date_raw):
             # CONV-3: emitted month-first, but flag the ambiguity for human review.
             self.validator.add_issue(

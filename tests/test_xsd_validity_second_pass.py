@@ -462,14 +462,36 @@ class DamagedUtf16Test(_ValidityCase):
     """A UTF-16 export with a stray byte stopped the command line with a
     UnicodeDecodeError; the web read the same bytes."""
 
-    def test_it_converts_with_a_warning(self):
-        csv_path = self.write_csv([_make_counseling_row()])
+    def convert_utf16(self, rows, damage):
+        csv_path = self.write_csv(rows)
         with open(csv_path, "rb") as f:
             text = f.read().decode("utf-8")
         with open(csv_path, "wb") as f:
-            f.write(codecs.BOM_UTF16_LE + text.encode("utf-16-le") + b"\n")
+            f.write(codecs.BOM_UTF16_LE + damage(text))
         self.converter.convert(csv_path, self.xml_path)
-        self.assertEqual(len(self.issues("input_file", "warning")), 1)
+        return [r.findtext("PartnerClientNumber") for r in SafeET.parse(self.xml_path).getroot()]
+
+    def test_it_converts_with_a_warning(self):
+        # The odd byte at the end was decoded as a last line of '�', read as
+        # a row whose Contact ID was '�'.
+        filed = self.convert_utf16([_make_counseling_row()], lambda text: text.encode("utf-16-le") + b"\n")
+        self.assertEqual(filed, ["C-001"])
+        self.assertEqual(self.validator.get_summary()["total_records"], 1)
+        warning, = self.issues("input_file", "warning")
+        self.assertIn("odd number of bytes", warning["message"])
+
+    def test_a_line_of_bytes_that_are_not_text(self):
+        def damage(text):  # half an emoji where the second row's ID was
+            header, first, second = text.splitlines(keepends=True)
+            return ((header + first).encode("utf-16-le") + "\ud83d".encode("utf-16-le", "surrogatepass")
+                    + second.removeprefix("C-2").encode("utf-16-le"))
+        filed = self.convert_utf16([_make_counseling_row(**{"Contact ID": "C-1"}),
+                                    _make_counseling_row(**{"Contact ID": "C-2"})], damage)
+        self.assertEqual(filed, ["C-1"])
+        self.assertEqual([e["message"] for e in self.issues("Contact ID", "error")],
+                         ["Missing required Contact ID."])
+        warning, = self.issues("input_file", "warning")
+        self.assertIn("replaced with '�'", warning["message"])
 
 
 class _TextCase(_ValidityCase):

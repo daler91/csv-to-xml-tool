@@ -55,6 +55,9 @@ EXCEL_ERROR_VALUES = frozenset({
     "#SPILL!", "#CALC!", "#ERROR!",
 })
 
+# What a decoder reads bytes that aren't text as.
+REPLACEMENT_CHARACTER = "\ufffd"
+
 # Characters nobody sees: controls (Cc), format characters (Cf -- the
 # zero-width space, a BOM, direction marks, the word joiner) and the halves of
 # a damaged UTF-16 character (Cs). str.strip() keeps all of them, so a cell of
@@ -79,10 +82,15 @@ def is_invisible(value: Any) -> bool:
 
 
 def is_blank_cell(value: Any) -> bool:
-    """True for a cell that holds no value: blank, invisible, or an Excel
+    """True for a cell that holds no value: blank, invisible, only what bytes
+    that aren't text were read as ('�', see decode_csv_bytes), or an Excel
     error. Every reader treats these as blank, so each column's own blank-cell
-    handling (an error for a missing ID, a reported default) applies."""
-    return is_invisible(value) or is_excel_error(value)
+    handling (an error for a missing ID, a reported default) applies; a
+    Contact ID of '�' was filed as the client's ID."""
+    text = str(value) if value else ""
+    if REPLACEMENT_CHARACTER in text:
+        text = text.replace(REPLACEMENT_CHARACTER, "")
+    return is_invisible(text) or is_excel_error(text)
 
 
 def remove_format_chars(text: str) -> str:
@@ -507,20 +515,30 @@ codecs.register_error(
 )
 
 
-# decode_csv_bytes' encoding for a UTF-16 file with bytes that aren't text.
+# decode_csv_bytes' encodings for a UTF-16 file with bytes that aren't text:
+# some read as '�', an odd number of bytes (the last left out), or both.
 UTF16_DAMAGED = "utf-16 (damaged)"
+UTF16_ODD_LENGTH = "utf-16 (odd length)"
+UTF16_DAMAGED_ODD_LENGTH = "utf-16 (damaged, odd length)"
+
+_ODD_LENGTH = ("The file is UTF-16 but has an odd number of bytes, so one of them is stray; the "
+               "last byte was left out")
+_GARBLED = ("If the values from some row on look garbled, the stray byte is there: export the "
+            "file again.")
+_ENCODING_WARNINGS = {
+    UTF16_DAMAGED: ("The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
+                    "an emoji); they were replaced with '�'. Check the values around them."),
+    UTF16_ODD_LENGTH: f"{_ODD_LENGTH}. {_GARBLED}",
+    UTF16_DAMAGED_ODD_LENGTH: f"{_ODD_LENGTH}, and bytes that are not text were replaced with '�'. {_GARBLED}",
+    "windows-1252": ("The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
+                     "delimited)\"). Check that accented names came through correctly."),
+}
 
 
 def encoding_warning(encoding: str) -> str | None:
     """The file-level warning for how decode_csv_bytes had to read a file,
     or None when it was plain UTF-8 or UTF-16."""
-    if encoding == UTF16_DAMAGED:
-        return ("The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
-                "an emoji); they were replaced with '�'. Check the values around them.")
-    if encoding == "windows-1252":
-        return ("The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
-                "delimited)\"). Check that accented names came through correctly.")
-    return None
+    return _ENCODING_WARNINGS.get(encoding)
 
 
 def decode_csv_bytes(data: bytes) -> tuple[str, str]:
@@ -533,12 +551,19 @@ def decode_csv_bytes(data: bytes) -> tuple[str, str]:
     normalized to "\n", as reading the file in text mode did.
     """
     if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        # An odd number of bytes: one is stray, most often one added at the
+        # end (a newline written as a single byte). Decoded, it was a last
+        # line of '�', read as a row; it is left out instead.
+        odd = len(data) % 2 == 1
+        if odd:
+            data = data[:-1]
         try:
-            text, encoding = data.decode("utf-16"), "utf-16"
+            text, encoding = data.decode("utf-16"), UTF16_ODD_LENGTH if odd else "utf-16"
         except UnicodeDecodeError:
             # A stray byte or half an emoji: replaced with U+FFFD, as the web's
             # TextDecoder does, rather than failing the whole file.
-            text, encoding = data.decode("utf-16", errors="replace"), UTF16_DAMAGED
+            text = data.decode("utf-16", errors="replace")
+            encoding = UTF16_DAMAGED_ODD_LENGTH if odd else UTF16_DAMAGED
     else:
         try:
             text, encoding = data.decode("utf-8-sig"), "utf-8"

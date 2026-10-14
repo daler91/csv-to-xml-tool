@@ -21,6 +21,9 @@ absent.
    (`run.py`, `src/main.py`) decodes the same way
    (`src/data_cleaning.decode_csv_bytes`) and records a file-level warning when
    it falls back to Windows-1252; it used to stop at the first accented name.
+   A damaged UTF-16 file converts with a file-level warning: bytes that are not
+   text are read as `�`, and a stray byte that leaves the file an odd number of
+   bytes long is left out (it used to become a last row of `�`).
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
    column name it no longer uses. The mapping is matched against the headers
@@ -37,7 +40,8 @@ absent.
 - **A cell with no value in it is blank**: an Excel error (`#N/A`, `#REF!`,
   `#VALUE!`, `#NAME?`, `#DIV/0!`, `#NULL!`, `#NUM!`, and the newer `#SPILL!`,
   `#CALC!`, `#ERROR!`), or a cell of only whitespace and invisible characters
-  (zero-width space, BOM, direction marks, control characters). The column's
+  (zero-width space, BOM, direction marks, control characters) or `�` (bytes
+  that weren't text, so a damaged ID is not filed as the ID). The column's
   usual blank-cell handling then applies — a row whose ID is `#N/A` is left out
   with a "Missing required" error — and one file-level warning counts the Excel
   errors and names the first.

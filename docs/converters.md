@@ -143,7 +143,7 @@ so the results page can show a before/after diff for each value.
 | Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described). Punctuation in a race answer reads as a space (`African-American`), and `Alaskan Native` is Native American/Alaska Native. Gender is read by whole words of any alphabet, so `Préfère ne pas répondre` is not Female |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup; invisible format characters are removed |
-| Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters is blank; one file-level warning counts the Excel errors |
+| Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters or `�` is blank; one file-level warning counts the Excel errors |
 | Rows | A blank row, a repeat of the header row, or a title/footer line (one filled cell in a file of three or more columns) is skipped with a warning naming it; a row with values past the last column, and a cell that swallowed further rows (an unclosed quote), are reported |
 | Identifiers | `Contact ID`, `Activity ID`, `Member ID` and `Class/Event ID` lose invisible format characters, and control characters become a space, before they are compared or grouped, as `STANDARDIZED_VALUE` |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |

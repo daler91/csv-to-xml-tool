@@ -105,6 +105,28 @@ class GuardAgreesWithLibxml2Test(_ValidityCase):
         self.assertIsNone(_check_value("José", rules[("R", "Letters")])[1])
         self.assertIsNotNone(_check_value("José1", rules[("R", "Letters")])[1])
 
+    def test_one_type_that_does_not_compile_leaves_only_its_values_unchecked(self):
+        # CodeType restricts a type from the included file, which the value
+        # checks' copy of the schema doesn't have; every pattern went unchecked.
+        xsd = os.path.join(tempfile.mkdtemp(), "include.xsd")
+        with open(xsd, "w", encoding="utf-8") as f:
+            f.write(
+                '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+                '<xs:include schemaLocation="types.xsd"/><xs:element name="R"><xs:complexType><xs:sequence>'
+                '<xs:element name="Zip" type="ZipType"/><xs:element name="Code" type="CodeType"/>'
+                '</xs:sequence></xs:complexType></xs:element>'
+                '<xs:simpleType name="ZipType"><xs:restriction base="xs:string"><xs:pattern value="\\d{5}"/>'
+                '</xs:restriction></xs:simpleType>'
+                '<xs:simpleType name="CodeType"><xs:restriction base="IncludedType"><xs:maxLength value="3"/>'
+                '</xs:restriction></xs:simpleType></xs:schema>')
+        with self.assertLogs("src.schema_rules", "WARNING") as logs:
+            rules = load_rules(xsd)
+        self.assertEqual(_check_value("abc", rules[("R", "Zip")])[1], "is not in the format SBA requires")
+        self.assertIsNone(rules[("R", "Code")].checker)
+        self.assertEqual(_check_value("abcd", rules[("R", "Code")])[1], "is longer than the 3 characters SBA allows")
+        warning, = logs.output
+        self.assertIn(f"Could not build the value checks of {xsd} for Code: simple type 'CodeType'", warning)
+
 
 class ExponentTest(_ValidityCase):
     """W.2: clean_numeric wrote out an exponent in full -- '1e5000' raised and

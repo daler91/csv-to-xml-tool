@@ -143,7 +143,8 @@ class _ValueChecker:
         for simple_type in schema_root.findall(f"{_XS}simpleType"):
             self._root.append(copy.deepcopy(simple_type))
         self._tags: dict[str, str] = {}
-        self._schema: etree.XMLSchema | None = None
+        # The compiled schema each vN is checked against (see compile).
+        self._schemas: dict[str, etree.XMLSchema] = {}
         # One validation at a time: the worker converts in several threads,
         # and an XMLSchema object's error log is shared by its callers.
         self._lock = threading.Lock()
@@ -161,8 +162,34 @@ class _ValueChecker:
                 declaration.append(copy.deepcopy(inline_simple))
         return self._tags[key]
 
-    def compile(self) -> None:
-        self._schema = etree.XMLSchema(self._root)
+    def compile(self) -> dict[str, str]:
+        """Compile the checks. Returns {tag: libxml2's error} for the types
+        that can't be compiled, which go unchecked here.
+
+        One type libxml2 can't compile in this copy -- a pattern it refuses, a
+        type based on one from a file the XSD includes -- used to leave every
+        value of the schema unchecked. Each declaration is then compiled on its
+        own, with the named types it uses, so only those that fail go unchecked.
+        """
+        try:
+            self._schemas = dict.fromkeys(self._tags.values(), etree.XMLSchema(self._root))
+            return {}
+        except etree.XMLSchemaParseError:
+            pass  # one declaration at a time, below
+        named = {simple_type.get("name"): simple_type
+                 for simple_type in self._root.findall(f"{_XS}simpleType")}
+        failed = {}
+        for declaration in self._root.findall(f"{_XS}element"):
+            alone = etree.Element(f"{_XS}schema", nsmap=self._root.nsmap)
+            for name in _named_types_used(declaration, named):
+                alone.append(copy.deepcopy(named[name]))
+            alone.append(copy.deepcopy(declaration))
+            try:
+                self._schemas[declaration.get("name")] = etree.XMLSchema(alone)
+            except etree.XMLSchemaParseError as exc:
+                # Without str(exc)'s line number, which is this copy's.
+                failed[declaration.get("name")] = exc.error_log[0].message if exc.error_log else str(exc)
+        return failed
 
     def accepts(self, tag: str, text: str) -> bool:
         """True when libxml2 accepts `text` as a value of the type `tag` stands for."""
@@ -175,12 +202,28 @@ class _ValueChecker:
         element.text = text
         with self._lock:
             try:
-                return self._schema.validate(etree.ElementTree(element))
+                return self._schemas[tag].validate(etree.ElementTree(element))
             except etree.XMLSchemaValidateError:
                 # libxml2 gives up on a regex that backtracks too much -- an
                 # invalid email with a dozen dotted labels, after ~2 seconds.
                 # Not a value the schema accepts, and dropping it is safe.
                 return False
+
+
+def _named_types_used(node, named: dict) -> list[str]:
+    """The names of the simple types in `named` that `node` refers to,
+    directly or through one another."""
+    found: list[str] = []
+    pending = [node]
+    while pending:
+        for element in pending.pop().iter(etree.Element):
+            for attribute in ("type", "base", "itemType", "memberTypes"):
+                for reference in (element.get(attribute) or "").split():
+                    name = reference.rpartition(":")[2]
+                    if name in named and name not in found:
+                        found.append(name)
+                        pending.append(named[name])
+    return found
 
 
 def _local(tag: str) -> str:
@@ -297,13 +340,19 @@ def load_rules(xsd_path: str) -> dict[tuple[str, ...], ElementRule]:
 
     for top in schema.findall(f"{_XS}element"):
         visit(top, (), frozenset())
-    try:
-        checker.compile()
-    except etree.XMLSchemaParseError as exc:
-        # Values are then judged by the Python checks alone, and the XSD
-        # check of the finished file is the backstop for the rest.
-        logger.warning(f"Could not build the value checks for {xsd_path}: {exc}")
-        rules = {path: replace(rule, checker=None) for path, rule in rules.items()}
+    failed = checker.compile()
+    if failed:
+        # Those values are judged by the Python checks alone, which run no
+        # pattern; the XSD check of the finished file is the backstop.
+        unchecked = sorted({path[-1] for path, rule in rules.items() if rule.check_tag in failed})
+        shown = ", ".join(unchecked[:10]) + (f" and {len(unchecked) - 10} more" if len(unchecked) > 10 else "")
+        logger.warning(
+            f"Could not build the value checks of {xsd_path} for {shown}: {next(iter(failed.values()))} "
+            "Their enumerations, numbers, dates and lengths are still checked as each record is "
+            "built, but a pattern or other facet only by the XSD check of the finished file, "
+            "which leaves out the whole record for a value it rejects.")
+        rules = {path: replace(rule, checker=None) if rule.check_tag in failed else rule
+                 for path, rule in rules.items()}
     return rules
 
 

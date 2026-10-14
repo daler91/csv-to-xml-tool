@@ -113,6 +113,12 @@ class CounselingConverter(BaseConverter):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
 
+    def _csv_cell(self, row, column):
+        """`column`'s value as the user's CSV gives it, for a message that
+        quotes the cell; None when the value didn't come from the CSV (see
+        TrainingClientConverter, which fills absent columns from config)."""
+        return row.get(column)
+
     def _mapped(self, row, mapping_key, element, default=''):
         """Read a column by its CounselingConfig.COLUMN_MAPPING key.
 
@@ -629,8 +635,10 @@ class CounselingConverter(BaseConverter):
         if data_cleaning.is_empty(row.get('Business Ownership - % Female(old)')):
             self._warn_fabricated_default(record_id, 'Business Ownership - % Female(old)', female_ownership_val, '% Female Ownership')
         elif not data_cleaning.is_percentage(female_raw):
+            # Always: the configured default is a number, so this is the
+            # user's own cell, even on a form that defaults the column.
             self._warn_fabricated_default(record_id, 'Business Ownership - % Female(old)', female_ownership_val,
-                                          '% Female Ownership', raw=female_raw)
+                                          '% Female Ownership', raw=female_raw, always=True)
         if data_cleaning.percentage_was_clamped(female_raw):
             # CONV-7: record the out-of-range original before clean_percentage clamps it.
             self.validator.add_issue(
@@ -719,8 +727,8 @@ class CounselingConverter(BaseConverter):
             create_element(le_element, 'Other', le_other)
 
     def _build_rural_urban(self, client_intake, row, record_id):
-        rural_urban_raw = (row.get('Rural_vs_Urban') or '').strip()
-        rural_urban_val = rural_urban_raw or self.config.DEFAULT_URBAN_RURAL
+        rural_urban_raw = (self._csv_cell(row, 'Rural_vs_Urban') or '').strip()
+        rural_urban_val = (row.get('Rural_vs_Urban') or '').strip() or self.config.DEFAULT_URBAN_RURAL
         create_element(client_intake, 'Rural_vs_Urban', rural_urban_val)
 
         fips_code = row.get('FIPS_Code', '').strip()
@@ -1048,7 +1056,9 @@ class CounselingConverter(BaseConverter):
         contact_val = data_cleaning.clean_numeric((row.get('Duration (hours)') or '0'))
         if session_type not in self.config.NO_CONTACT_HOUR_SESSION_TYPES and float(contact_val or 0) <= 0:
             contact_val = "0.5"
-            raw_duration = row.get('Duration (hours)')
+            # Not the configured '0' a training-client row is given for a
+            # column its CSV doesn't have: that is no cell of the user's.
+            raw_duration = self._csv_cell(row, 'Duration (hours)')
             self._warn_fabricated_default(
                 record_id, 'Duration (hours)', contact_val, f'Contact hours for a {session_type} session',
                 raw=None if data_cleaning.is_empty(raw_duration) else raw_duration, always=True)

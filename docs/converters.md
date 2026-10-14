@@ -211,6 +211,10 @@ event type it doesn't recognize. Values configured rather than read — the loca
 code, sessions, hours, partner, fees and language for training; hours trained,
 employees trained, session type and every other default the shorter training-client
 form has no column for — are listed once per file in a `configured_defaults` warning.
+A training-client row's own cell is still reported when it can't be used (a `%
+Female` of `Majority` filed as `0`), and the 0.5 contact hours filed for a session
+type that needs them say the duration was blank, not that the configured `0` was
+the row's.
 
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at

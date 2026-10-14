@@ -288,6 +288,34 @@ class TrainingClientContactHoursTest(_ValidityCase):
         warning, = self.issues("Duration (hours)", "warning")
         self.assertIn("0.5", warning["message"])
 
+    def test_contact_hours_quote_only_the_users_own_cell(self):
+        # The CSV has no Duration (hours) column: the '0' is configuration's,
+        # and the warning said "'0' could not be used".
+        for duration, start in ((None, "Blank value defaulted to '0.5'"), ("", "Blank value defaulted to '0.5'"),
+                                ("0", "'0' could not be used and was replaced with '0.5'")):
+            with self.subTest(duration=duration):
+                self.setUp()
+                row = _make_training_client_row(**{"Type of Session": "Telephone"})
+                if duration is not None:
+                    row["Duration (hours)"] = duration
+                self.convert([row])
+                warning, = self.issues("Duration (hours)", "warning")
+                self.assertTrue(warning["message"].startswith(start), warning["message"])
+
+    def test_an_unreadable_female_share_is_reported(self):
+        for text in ("Majority", "NaN%"):
+            with self.subTest(text=text):
+                self.setUp()
+                root = self.convert([_make_training_client_row(**{"Business Ownership - % Female(old)": text})])
+                self.assertEqual(root.findtext(".//BusinessOwnership/Female"), "0")
+                warning, = self.issues("Business Ownership - % Female(old)", "warning")
+                self.assertIn(f"'{text}' could not be used", warning["message"])
+
+    def test_a_configured_rural_vs_urban_is_not_quoted_as_the_users(self):
+        self.convert([_make_training_client_row(FIPS_Code="19153")])
+        warning, = self.issues("FIPS_Code", "warning")
+        self.assertIn("Rural_vs_Urban is blank, filed as 'Undetermined'", warning["message"])
+
 
 class TrainingEventValuesTest(_ValidityCase):
     """W.6: the training form read every event value from its first

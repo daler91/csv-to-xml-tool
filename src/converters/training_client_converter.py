@@ -30,6 +30,7 @@ class TrainingClientConverter(CounselingConverter):
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.training_client_config = TrainingClientConfig()
+        self._defaulted = set()  # set per row by _preprocess_row
         # The shorter training-client form doesn't collect the fabrication-risk
         # counseling columns; _preprocess_row intentionally injects DEFAULTS for
         # them, so a per-row FABRICATED_DEFAULT warning for every injected value
@@ -97,6 +98,11 @@ class TrainingClientConverter(CounselingConverter):
         # Over the defaults for all absent counseling columns, which a blank
         # cell doesn't erase.
         remapped = self.training_client_config.rename_columns(row, self.training_client_config.DEFAULTS)
+        # The columns this row takes from DEFAULTS, so no message quotes a
+        # configured value as the user's cell (see _csv_cell).
+        supplied = {self.training_client_config.COLUMN_MAPPING.get(column, column)
+                    for column, value in row.items() if str(value).strip()}
+        self._defaulted = set(self.training_client_config.DEFAULTS) - supplied
 
         # The event's Training Topic is what the attendee sought and received;
         # an explicit counseling-format column in the CSV still wins.
@@ -108,6 +114,9 @@ class TrainingClientConverter(CounselingConverter):
                 remapped['Services Provided'] = topic
 
         return remapped
+
+    def _csv_cell(self, row, column):
+        return None if column in self._defaulted else row.get(column)
 
     def _partner_session_number(self, row):
         """Per-attendee campaign-member id; falls back to the event id (the

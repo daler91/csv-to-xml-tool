@@ -7,6 +7,7 @@ against the schema SBA supplied, plus what was filed and reported.
 import codecs
 import os
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -18,7 +19,7 @@ from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.training_converter import TrainingConverter
 from src.schema_rules import SchemaGuard, _check_value, load_rules, schema_path
-from src.xml_validator import validate_against_xsd
+from src.xml_validator import validate_against_xsd, validate_xml_content
 
 from tests.test_integration_xsd import _make_counseling_row, _make_training_client_row, _make_training_row
 from tests.test_xsd_validity import _XSD, _ValidityCase
@@ -337,6 +338,53 @@ class SafetyNetWithoutLinesTest(_ValidityCase):
         error, = self.issues(severity="error")
         self.assertEqual(error["record_id"], "file")
         self.assertIn("no record on its own does", error["message"])
+
+
+class SharedSchemaTest(_ValidityCase):
+    """The per-record check validates against one compiled schema, shared by
+    every conversion the worker runs in its threads. An XMLSchema's error log
+    is the object's, so two checks at once read each other's errors -- another
+    upload's values -- or none, and an invalid record with no error stopped
+    the conversion with an IndexError."""
+
+    def test_concurrent_checks_each_get_their_own_errors(self):
+        xsd = schema_path("counseling")
+        wrong = []
+
+        def check(marker):
+            content = (f"<CounselingInformation><CounselingRecord><PartnerClientNumber>{marker}"
+                       f"</PartnerClientNumber><Bogus{marker}/></CounselingRecord>"
+                       "</CounselingInformation>").encode()
+            for _ in range(500):
+                errors = validate_xml_content(content, xsd)["errors"]
+                if not errors or any(marker not in error for error in errors):
+                    wrong.append((marker, errors))
+
+        threads = [threading.Thread(target=check, args=(marker,)) for marker in ("AAA", "BBB")]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(wrong[:1], [])
+
+    def test_a_record_invalid_with_no_error_is_left_out_with_a_reason(self):
+        gave_up = {"is_valid": False, "errors": ["SBA's schema validator could not finish checking this (x)."]}
+        file_checks = iter([gave_up])
+
+        def check_file(path, xsd):
+            return next(file_checks, None) or validate_against_xsd(path, xsd)
+
+        def check_record(content, xsd):
+            return {"is_valid": b"BAD" not in content, "errors": []}
+
+        with mock.patch("src.converters.base_converter.validate_against_xsd", side_effect=check_file), \
+                mock.patch("src.converters.base_converter.validate_xml_content", side_effect=check_record):
+            root = self.convert([_make_counseling_row(**{"Contact ID": "KEEP"}),
+                                 _make_counseling_row(**{"Contact ID": "BAD"})])
+        self.assertEqual([r.findtext("PartnerClientNumber") for r in root], ["KEEP"])
+        error, = self.issues(severity="error")
+        self.assertEqual(error["record_id"], "BAD")
+        self.assertIn("gave no reason", error["message"])
 
 
 class DamagedUtf16Test(_ValidityCase):

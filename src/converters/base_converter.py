@@ -28,6 +28,10 @@ from ..xsd_error_mapping import build_error_details, errors_by_record
 if TYPE_CHECKING:
     from ..validation_report import ValidationTracker
 
+# The reason given for a record the XSD check finds invalid without an error
+# message to say why.
+NO_REASON_GIVEN = "SBA's schema validator found this record invalid but gave no reason."
+
 # Type alias for the progress callback signature.
 # First int is rows processed so far, second is total rows.
 ProgressCallback = Callable[[int, int], None]
@@ -299,7 +303,10 @@ class BaseConverter(abc.ABC):
             if result["is_valid"]:
                 continue
             sources = self.record_sources[position - 1:position]
-            details = build_error_details(content, result["errors"], self.SCHEMA_TYPE, sources)
+            # Invalid with no message still leaves the record out, with a
+            # reason: _leave_out_failing names each record by its first.
+            details = build_error_details(content, result["errors"] or [NO_REASON_GIVEN],
+                                          self.SCHEMA_TYPE, sources)
             row = sources[0].get("row") if sources else position
             for detail in details:
                 if detail["row_number"] is None:  # no line to place it by

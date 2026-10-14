@@ -8,6 +8,7 @@ import functools
 import os
 import shutil
 import sys
+import threading
 from dataclasses import dataclass, field
 
 from lxml import etree
@@ -132,14 +133,22 @@ def validate_xml_content(content: bytes, xsd_file):
     """validate_against_xsd for a document held in memory, against a schema
     compiled once per path: the converters check records one at a time."""
     try:
-        return _validate(_compiled_schema(xsd_file), etree.fromstring(content, _parser()).getroottree())
+        xmlschema, lock = _compiled_schema(xsd_file)
+        document = etree.fromstring(content, _parser()).getroottree()
     except etree.XMLSyntaxError as e:
         return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
+    # One check at a time per schema, as schema_rules._ValueChecker does: the
+    # worker converts in several threads, and an XMLSchema's error log belongs
+    # to the object, so two checks at once read each other's errors -- another
+    # upload's values -- or none at all.
+    with lock:
+        return _validate(xmlschema, document)
 
 
 @functools.lru_cache(maxsize=8)
 def _compiled_schema(xsd_file):
-    return etree.XMLSchema(etree.parse(xsd_file, etree.XMLParser(resolve_entities=False)))
+    """(the compiled schema, the lock its callers take to use it)."""
+    return etree.XMLSchema(etree.parse(xsd_file, etree.XMLParser(resolve_entities=False))), threading.Lock()
 
 
 def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):

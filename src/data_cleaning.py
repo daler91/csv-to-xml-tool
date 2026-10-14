@@ -757,30 +757,34 @@ def map_ethnicity_to_xsd(value: str | None) -> str:
     """Map an ethnicity value onto the XSD enumeration.
 
     Delegates the hispanic/non-hispanic decision to classify_ethnicity so the
-    "Not Hispanic or Latino" trap is handled in exactly one place.
+    "Not Hispanic or Latino" trap is handled in exactly one place. A refusal
+    is read only from a label that gives no answer: "Hispanic or Latino
+    (origin unknown)" answers the question, and was filed as "Prefer not to
+    say" for its "unknown".
     """
     if is_empty(value):
         return ""
-    if declines_to_answer(value):
-        return "Prefer not to say"
     bucket = classify_ethnicity(value)
     if bucket == "hispanic":
         return "Hispanic or Latino"
     if bucket == "non_hispanic":
         return "Non Hispanic or Latino"
+    if declines_to_answer(value):
+        return "Prefer not to say"
     return ""
 
 
 def map_disability_to_xsd(value: str | None) -> str:
-    """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to say)."""
+    """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to
+    say); a refusal, as for ethnicity, only when the label gives no answer."""
     if is_empty(value):
         return ""
-    if declines_to_answer(value):
-        return "Prefer not to say"
     if is_affirmative(value):
         return "Yes"
     if is_negative(value):
         return "No"
+    if declines_to_answer(value):
+        return "Prefer not to say"
     return ""
 
 

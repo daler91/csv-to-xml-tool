@@ -140,7 +140,7 @@ so the results page can show a before/after diff for each value.
 | Percentages | Clamped to 0–100, recorded as `CLAMPED_VALUE` |
 | States | Standardized to the schema's spelling (`IA` → `Iowa`) |
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |
-| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described). Punctuation in a race answer reads as a space (`African-American`), and `Alaskan Native` is Native American/Alaska Native. Gender is read by whole words of any alphabet, so `Préfère ne pas répondre` is not Female |
+| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described). An ethnicity or disability label that declines the question ("Decline to answer", "Unknown") is `Prefer not to say`, but one that also gives the answer ("Hispanic or Latino (origin unknown)") keeps it. Punctuation in a race answer reads as a space (`African-American`), and `Alaskan Native` is Native American/Alaska Native. Gender is read by whole words of any alphabet, so `Préfère ne pas répondre` is not Female |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
 | Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup; invisible format characters are removed |
 | Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters or `�` is blank; one file-level warning counts the Excel errors, and one per column names the rows whose cells held only invisible or unreadable characters |

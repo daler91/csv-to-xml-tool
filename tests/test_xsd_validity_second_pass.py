@@ -228,6 +228,20 @@ class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
         self.assertEqual(root.findtext(".//ClientIntake/Ethnicity"), "Prefer not to say")
         self.assertEqual(root.findtext(".//ClientIntake/Disability"), "Prefer not to say")
 
+    def test_an_answer_with_a_refusal_word_keeps_the_answer(self):
+        # 'unknown' or 'declined' anywhere in the label made it 'Prefer not to say'.
+        for text, filed in (("Hispanic or Latino (origin unknown)", "Hispanic or Latino"),
+                            ("Hispanic, declined to give race", "Hispanic or Latino"),
+                            ("Non-Hispanic; Decline", "Non Hispanic or Latino"),
+                            ("Unknown", "Prefer not to say")):
+            with self.subTest(text=text):
+                self.setUp()
+                root = self.convert_row(**{"Ethnicity:": text})
+                self.assertEqual(root.findtext(".//ClientIntake/Ethnicity"), filed)
+        for text, filed in (("Yes", "Yes"), ("no", "No"), ("Declined", "Prefer not to say")):
+            with self.subTest(text=text):
+                self.assertEqual(data_cleaning.map_disability_to_xsd(text), filed)
+
     def test_a_branch_of_prefer_not_to_say_is_filed(self):
         root = self.convert_row(**{"Veteran Status": "Veteran", "Branch Of Service": "Prefer not to say"})
         self.assertEqual(root.findtext(".//ClientIntake/BranchOfService"), "Prefer not to say")

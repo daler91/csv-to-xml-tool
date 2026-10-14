@@ -443,9 +443,14 @@ class NormalizedDictReader:
                 continue
             number += 1
             row = dict.fromkeys(self.fieldnames, "")
-            for name, value in zip(self.fieldnames, cells, strict=False):
-                if not is_blank_cell(value) or is_blank_cell(row[name]):
-                    row[name] = value
+            # Cell by cell only for a repeated header: is_blank_cell on every
+            # cell of a 20,000-row file doubled the time it took to read.
+            if self.duplicates:
+                for name, value in zip(self.fieldnames, cells, strict=False):
+                    if not is_blank_cell(value) or is_blank_cell(row[name]):
+                        row[name] = value
+            else:
+                row.update(zip(self.fieldnames, cells, strict=False))
             swallowed = self._swallowed(number, row)
             extra = [value for value in cells[width:] if not is_invisible(value)]
             if extra and not swallowed:  # the swallowed rows explain those

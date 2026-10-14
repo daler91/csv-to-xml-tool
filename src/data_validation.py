@@ -81,13 +81,24 @@ def non_record_reason(row: dict[str, str]) -> str | None:
         # A line of commas, or the '""' lines around a report's footer: a
         # blank line, not a record missing its ID.
         return "is blank"
-    repeated = sum(1 for column, value in filled if normalize_header(value).casefold() == column.casefold())
+    repeated = sum(1 for column, value in filled if _is_own_header(column, value))
     if repeated >= 2 and repeated * 2 >= len(filled):
         return "repeats the header row"
     if len(filled) == 1 and len(row) >= _FOOTER_MIN_COLUMNS:
         column, value = filled[0]
         return f"holds only '{value}' (in '{column}'), like a report's title or footer line"
     return None
+
+
+def _is_own_header(column: str, value: str) -> bool:
+    """True when a cell holds its own column's header, as normalize_header
+    reads headers -- called only when normalizing could change the cell,
+    since this runs on every cell of every row."""
+    if value.casefold() == column.casefold():
+        return True
+    if value.isprintable() and "  " not in value:
+        return False
+    return normalize_header(value).casefold() == column.casefold()
 
 
 def _skip_non_record(row: dict[str, str], row_index: int, validator: ValidationTracker) -> bool:

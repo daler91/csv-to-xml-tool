@@ -825,6 +825,20 @@ class Part3FallbackTest(_ValidityCase):
         self.assertEqual(warning["message"], "'n/a' is not a number, so 'Gross Revenues/Sales' was used instead.")
         self.assertEqual(len(self.issues("Profit & Loss (Meeting)", "warning")), 1)
 
+    def test_the_reviewed_cases_each_alone(self):
+        # Code review's reproduction: Part 3 filed 0 beside Part 2's figure,
+        # and nothing was reported.
+        for meeting, cell, intake, figure, element in (
+                ("Gross Revenues/Sales (Meeting)", "lots", "Gross Revenues/Sales", "5000", "GrossRevenues"),
+                ("Profit & Loss (Meeting)", "n/a", "Profits/Losses", "1200", "ProfitLoss")):
+            with self.subTest(meeting=meeting):
+                self.setUp()
+                root = self.convert_row(**{meeting: cell, intake: figure})
+                self.assertEqual(root.findtext(f".//ClientAnnualIncomePart2/{element}"), figure)
+                self.assertEqual(root.findtext(f".//ClientAnnualIncomePart3/{element}"), figure)
+                warning, = self.issues(meeting, "warning")
+                self.assertEqual(warning["message"], f"'{cell}' is not a number, so '{intake}' was used instead.")
+
     def test_an_unreadable_meeting_amount_with_nothing_to_fall_back_on(self):
         root = self.convert_row(**{"Gross Revenues/Sales (Meeting)": "n/a"})
         self.assertEqual(root.findtext(".//ClientAnnualIncomePart3/GrossRevenues"), "0")

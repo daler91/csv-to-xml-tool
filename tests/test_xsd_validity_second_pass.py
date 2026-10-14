@@ -154,6 +154,23 @@ class ExponentTest(_ValidityCase):
         warning, = self.issues("Gross Revenues/Sales", "warning")
         self.assertIn("'1e5000' could not be used", warning["message"])
 
+    def test_zeros_and_long_numbers_are_read(self):
+        # The bound counted a zero's exponent and a long number's digits.
+        for text, expected in (("0e5000", "0"), ("0E-5000", "0"), ("0." + "0" * 33, "0"),
+                               ("9" * 32, "9" * 32), ("1E+40", "1" + "0" * 40),
+                               ("0." + "0" * 30 + "1", "0." + "0" * 30 + "1")):
+            with self.subTest(text=text):
+                self.assertEqual(data_cleaning.clean_numeric(text), expected)
+
+    def test_an_amount_over_the_maximum_is_omitted_not_filed_as_zero(self):
+        # '1E+40' was past the bound and filed as a fabricated 0.
+        root = self.convert_row(**{"Gross Revenues/Sales": "1E+40", "Prep Hours": "0e5000"})
+        self.assertIsNone(root.find(".//GrossRevenues"))
+        self.assertTrue(all("must be at most" in w["message"]
+                            for w in self.issues("Gross Revenues/Sales", "warning")))
+        self.assertEqual(root.findtext(".//CounselingHours/Prepare"), "0")
+        self.assertEqual(self.issues("Prep Hours"), [])
+
 
 class UnwritableCellTest(_ValidityCase):
     """W.3: a cell of characters XML can't carry was stripped to an empty

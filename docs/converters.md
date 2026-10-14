@@ -136,7 +136,7 @@ so the results page can show a before/after diff for each value.
 | Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD`. A time after the date, as Salesforce exports a Date/Time field (`1/15/2025 10:30 AM`, `2025-01-15T14:30:00.000Z`), is dropped; an optional date that can't be read is left out with a warning |
 | Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE`. A slash date only day-first can read (`13/01/25`, `15/01/2025`) is read day-first, before the year-first `%y/%m/%d` that used to turn `13/01/25` into 2013-01-25 |
 | Phone numbers | Reduced to digits; a leading country-code digit is dropped from an 11-digit number; too-short numbers are rejected rather than emitted malformed |
-| Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision |
+| Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision. An exponent is written out (`1.5E+6` → `1500000`), so an amount too large for its field (`1E+40`) is omitted by the schema check as over the maximum; only a magnitude past 10^1000 is unreadable |
 | Percentages | Clamped to 0–100, recorded as `CLAMPED_VALUE` |
 | States | Standardized to the schema's spelling (`IA` → `Iowa`) |
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |

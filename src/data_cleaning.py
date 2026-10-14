@@ -34,9 +34,11 @@ PHONE_NUMBER_DIGITS = 10
 PHONE_WITH_COUNTRY_CODE_DIGITS = 11
 PERCENTAGE_MIN = 0
 PERCENTAGE_MAX = 100
-# Largest power of ten clean_numeric reads (see there). Far above any count or
-# dollar amount SBA's schemas accept, so nothing real is refused.
-NUMERIC_MAX_EXPONENT = 30
+# Largest power of ten clean_numeric reads (see there). Far beyond any facet in
+# SBA's schemas, so a number merely too large for its field ('1E+40') reaches
+# the schema guard and is reported as over the maximum; a thousand digits is
+# still cheap to write out.
+NUMERIC_MAX_EXPONENT = 1000
 
 
 def is_empty(value: Any) -> bool:
@@ -918,8 +920,14 @@ def clean_numeric(value: str | int | float | None) -> str:
         return ""
     if not dec.is_finite():  # reject NaN / Infinity rather than emitting them
         return ""
+    # Before the bound: a zero's exponent counts too, so "0E+5000" and "0."
+    # with 33 zeros were refused as no number at all.
+    if dec.is_zero():
+        return "0"
     # An exponent is only ever a few digits of real data ("1.5E+6"). "1e5000"
     # is not an amount, and writing out "1E+99999999" in full never finishes.
+    # The bound used to be 10^30, and an amount of "1E+40" was then filed as
+    # a fabricated 0 instead of being omitted as over the schema's maximum.
     if abs(dec.adjusted()) > NUMERIC_MAX_EXPONENT:
         return ""
 

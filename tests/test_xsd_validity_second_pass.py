@@ -331,6 +331,23 @@ class SafetyNetWithoutLinesTest(_ValidityCase):
                     if "left out of the XML" in e["message"]}
         self.assertEqual(left_out, {"GAVE-UP", "BAD"})
 
+    def test_errors_with_no_line_say_what_happened(self):
+        # They read "Row 2: SBA's schema validator could not finish checking
+        # this (...). SBA's schema rejects this", without the record's ID.
+        self.convert([
+            _make_counseling_row(**{"Contact ID": "KEEP"}),
+            _make_counseling_row(**{"Contact ID": "GAVE-UP", "Email": "a@b" + ".aaaa" * 14 + "!"}),
+            _make_counseling_row(**{"Contact ID": "CTRL", "Mailing City": "Des\x01Moines"}),
+        ])
+        messages = {e["record_id"]: e["message"] for e in self.issues(severity="error")}
+        self.assertEqual(messages["GAVE-UP"],
+                         "Row 2 (Contact ID GAVE-UP): SBA's schema validator could not check a value in "
+                         "this record (it gives up on some malformed values, most often an Email), so the "
+                         "record was left out of the XML; correct the value in the CSV and convert again.")
+        self.assertEqual(messages["CTRL"],
+                         "Row 3 (Contact ID CTRL): the record holds a character XML cannot carry, so the "
+                         "record was left out of the XML; correct the value in the CSV and convert again.")
+
     def test_a_failure_no_record_explains_is_reported(self):
         gave_up = {"is_valid": False, "errors": ["SBA's schema validator could not finish checking this (x)."]}
         with mock.patch("src.converters.base_converter.validate_against_xsd", return_value=gave_up):

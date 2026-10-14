@@ -22,7 +22,7 @@ from .. import data_cleaning
 from ..config import ValidationCategory
 from ..schema_rules import clean_identifier, identifier_noise, schema_path
 from ..xml_utils import ET, write_document
-from ..xml_validator import validate_against_xsd, validate_xml_content
+from ..xml_validator import VALIDATOR_GAVE_UP, XML_PARSE_ERROR, validate_against_xsd, validate_xml_content
 from ..xsd_error_mapping import build_error_details, errors_by_record
 
 if TYPE_CHECKING:
@@ -30,7 +30,17 @@ if TYPE_CHECKING:
 
 # The reason given for a record the XSD check finds invalid without an error
 # message to say why.
-NO_REASON_GIVEN = "SBA's schema validator found this record invalid but gave no reason."
+NO_REASON_GIVEN = "SBA's schema validator found this record invalid but gave no reason"
+
+# What a record-level XSD error with no line means, by how its message begins.
+# None of them is the schema rejecting a value, and none names a column, so
+# each is worded as what happened.
+_UNPLACED_ERRORS = (
+    (VALIDATOR_GAVE_UP, "SBA's schema validator could not check a value in this record (it gives up "
+                        "on some malformed values, most often an Email)"),
+    (XML_PARSE_ERROR, "the record holds a character XML cannot carry"),
+    (NO_REASON_GIVEN, NO_REASON_GIVEN),
+)
 
 # Type alias for the progress callback signature.
 # First int is rows processed so far, second is total rows.
@@ -308,13 +318,28 @@ class BaseConverter(abc.ABC):
             details = build_error_details(content, result["errors"] or [NO_REASON_GIVEN],
                                           self.SCHEMA_TYPE, sources)
             row = sources[0].get("row") if sources else position
+            record_id = (record[0].text or "").strip() if len(record) else None
             for detail in details:
                 if detail["row_number"] is None:  # no line to place it by
-                    detail["row_number"] = row
-                    detail["record_id"] = (record[0].text or "").strip() if len(record) else None
-                    detail["friendly_message"] = f"Row {row}: {detail['message']}"
+                    detail.update(row_number=row, record_id=record_id,
+                                  **self._unplaced_error(row, record_id, detail["message"]))
             failing[position] = details
         return failing
+
+    def _unplaced_error(self, row: int, record_id: str | None, message: str) -> dict:
+        """friendly_message for an error _failing_records can't place by its
+        line, and whether it is the schema rejecting a value ("rejected"),
+        which _leave_out_failing says. libxml2 giving up, or a character XML
+        can't carry, was reported as "Row 2: SBA's schema validator could not
+        finish checking this (...). SBA's schema rejects this", with no ID."""
+        who = f"Row {row}"
+        if record_id:
+            column = self.IDENTIFIER_COLUMNS[0] if self.IDENTIFIER_COLUMNS else "ID"
+            who += f" ({column} {record_id})"
+        for start, what in _UNPLACED_ERRORS:
+            if message.startswith(start):
+                return {"friendly_message": f"{who}: {what}", "rejected": False}
+        return {"friendly_message": f"{who}: {message}", "rejected": True}
 
     def _leave_out_failing(self, root, failing: dict[int, list[dict]]) -> None:
         """Leave out the records errors_by_record found failing, recording an
@@ -325,12 +350,13 @@ class BaseConverter(abc.ABC):
         for position in sorted(failing):
             event = sources[position - 1].get("event", "") if position <= len(sources) else ""
             for detail in failing[position]:
+                why = " SBA's schema rejects this," if detail.get("rejected", True) else ","
                 self.validator.add_issue(
                     detail["record_id"] or f"Row_{detail['row_number']}", "error",
                     ValidationCategory.INVALID_VALUE,
                     detail["csv_column"] or detail["field_label"] or "record",
-                    f"{detail['friendly_message']} SBA's schema rejects this, so the record was "
-                    "left out of the XML; correct the value in the CSV and convert again.",
+                    f"{detail['friendly_message']}{why} so the record was left out of the XML; "
+                    "correct the value in the CSV and convert again.",
                     event_id=event)
             self.left_out_reasons.append(failing[position][0]["friendly_message"])
             self.validator.record_left_out()

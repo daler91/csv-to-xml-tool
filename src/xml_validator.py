@@ -75,6 +75,10 @@ def _validate_file_paths(xml_file, xsd_file, enforce_data_dir=False):
 # every other error in the file goes unreported with it.
 VALIDATOR_GAVE_UP = "SBA's schema validator could not finish checking this"
 
+# How validate_against_xsd's error for a document that isn't well-formed
+# XML begins; libxml2's own message follows.
+XML_PARSE_ERROR = "XML parse error"
+
 # What the validator and the fixer say about a document whose DOCTYPE
 # declares (or that uses) entities.
 ENTITIES_NOT_SUPPORTED = "DTD/entity declarations are not supported"
@@ -136,7 +140,7 @@ def validate_xml_content(content: bytes, xsd_file):
         xmlschema, lock = _compiled_schema(xsd_file)
         document = etree.fromstring(content, _parser()).getroottree()
     except etree.XMLSyntaxError as e:
-        return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
+        return {"is_valid": False, "errors": [f"{XML_PARSE_ERROR}: {e}"]}
     # One check at a time per schema, as schema_rules._ValueChecker does: the
     # worker converts in several threads, and an XMLSchema's error log belongs
     # to the object, so two checks at once read each other's errors -- another
@@ -179,7 +183,7 @@ def validate_against_xsd(xml_file, xsd_file, enforce_data_dir=False):
         # surface the parse message so callers (e.g. the worker's /validate-xsd
         # route) can show the user what is wrong with the document.
         logger.exception("Error during XML/XSD validation")
-        return {"is_valid": False, "errors": [f"XML parse error: {e}"]}
+        return {"is_valid": False, "errors": [f"{XML_PARSE_ERROR}: {e}"]}
     except (OSError, etree.XMLSchemaError, etree.XMLSchemaParseError):
         logger.exception("Error during XML/XSD validation")
         return {"is_valid": False, "errors": ["Validation error"]}
@@ -387,7 +391,7 @@ def fix_element_order(xml_file, output_file=None, add_missing_elements_flag=Fals
     try:
         tree = etree.parse(xml_file, _parser())
     except etree.XMLSyntaxError as e:
-        return _not_fixed(f"XML parse error: {e}")
+        return _not_fixed(f"{XML_PARSE_ERROR}: {e}")
     except OSError as e:
         return _not_fixed(f"Could not read the file: {e}")
     problem = _entity_problem(tree)

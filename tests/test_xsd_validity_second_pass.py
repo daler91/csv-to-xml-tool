@@ -372,6 +372,66 @@ class TrainingEventValuesTest(_ValidityCase):
         self.assertNotEqual(root.findtext(".//TrainingLocation/ZipCode"), "51555")
         self.assertTrue(self.issues("Zip/Postal Code", "warning"))
 
+    def location(self, root):
+        location = root.find(".//TrainingLocation")
+        return tuple(location.findtext(tag) for tag in ("City", "State", "ZipCode", "Zip4Code"))
+
+    def test_zips_excel_or_the_state_wrap(self):
+        # Each of these lost the attendee's Ames, Iowa to the configured
+        # Des Moines, Iowa 50312, with a warning that the cells were blank.
+        for cell, expected, warned in (('="05030"', "05030", None), ("'05030", "05030", None),
+                                       ("IA 50010", "50010", "Only '50010' of 'IA 50010' is a ZIP or ZIP+4"),
+                                       ("50309-12", "50309", "Only '50309' of '50309-12'")):
+            with self.subTest(cell=cell):
+                self.setUp()
+                root = self.convert([_make_training_row(City="Ames", **{"Zip/Postal Code": cell})])
+                self.assertEqual(self.location(root), ("Ames", "Iowa", expected, None))
+                warnings = [i["message"] for i in self.issues("Zip/Postal Code", "warning")]
+                self.assertEqual(len(warnings), 1 if warned else 0, warnings)
+                if warned:
+                    self.assertIn(warned, warnings[0])
+                self.assertEqual(self.issues("Class/Event Location"), [])
+
+    def test_a_dash_before_the_plus_four(self):
+        for cell in ("50010\u20131234", "50010\u20141234", "50010 - 1234"):
+            with self.subTest(cell=cell):
+                self.setUp()
+                root = self.convert([_make_training_row(City="Ames", **{"Zip/Postal Code": cell})])
+                self.assertEqual(self.location(root), ("Ames", "Iowa", "50010", "1234"))
+                self.assertEqual(self.issues("Zip/Postal Code"), [])
+
+    def test_an_unreadable_or_blank_zip_keeps_the_city_and_state(self):
+        for cell in ("503091", "unknown", ""):
+            with self.subTest(cell=cell):
+                self.setUp()
+                root = self.convert([_make_training_row(City="Ames", **{"Zip/Postal Code": cell})])
+                self.assertEqual(self.location(root), ("Ames", "Iowa", None, None))
+                warning, = self.issues("Zip/Postal Code", "warning")
+                self.assertIn("without one", warning["message"])
+                self.assertEqual(self.issues("Class/Event Location"), [])
+
+    def test_a_missing_state_files_the_default_and_says_what_was_given(self):
+        root = self.convert([_make_training_row(City="Ames", **{"State/Province": ""})])
+        self.assertEqual(self.location(root), ("Des Moines", "Iowa", "50312", None))
+        warning, = self.issues("Class/Event Location", "warning")
+        self.assertEqual(warning["message"],
+                         "No row gives both a city and a state (the first to give any of them has City "
+                         "'Ames', State/Province blank, Zip/Postal Code '50309'), so the configured location "
+                         "'Des Moines, Iowa 50312' was filed instead.")
+
+    def test_a_zip_warning_names_the_files_column(self):
+        row = _make_training_row(City="Ames")
+        del row["Zip/Postal Code"]
+        self.convert([dict(row, Zip="ZIP 50010")])
+        warning, = self.issues("Zip", "warning")
+        self.assertIn("Only '50010' of 'ZIP 50010'", warning["message"])
+
+    def test_an_unparseable_start_date_is_not_called_blank(self):
+        self.convert([_make_training_row(**{"Start Date": "TBD"})])
+        warning, = self.issues("Start Date", "warning")
+        self.assertEqual(warning["message"],
+                         "'TBD' could not be used and was replaced with '2023-12-12' (DateTrainingStarted).")
+
     def test_a_later_complete_address_beats_the_default(self):
         root = self.convert([_make_training_row(City=""), _make_training_row(City="Ames")])
         self.assertEqual(root.findtext(".//TrainingLocation/City"), "Ames")

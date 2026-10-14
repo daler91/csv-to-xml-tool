@@ -6,6 +6,7 @@ from .. import data_validation
 import xml.etree.ElementTree as ET
 import re
 from collections import defaultdict
+from typing import NamedTuple
 
 from .base_converter import BaseConverter, EmptyCSVError
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
@@ -18,6 +19,27 @@ _NO_COSPONSOR = frozenset({'', 'n/a', 'na', 'none', '-', 'null', 'n/a.'})
 
 # How many of an event's differing values a warning lists.
 _SHOWN_VALUES = 3
+
+# A ZIP, or ZIP+4, anywhere in the cell ('IA 50010') but not inside a longer
+# run of digits, where it is part of a phone number. The +4 may follow a
+# hyphen or a dash with spaces around it, a space, or nothing (503091234, a
+# ZIP+4 a spreadsheet stored as a number). [0-9], not \d: the XSD's \d, as
+# libxml2 has it, is ASCII only.
+_ZIP = re.compile(r'(?<![0-9])([0-9]{5})(?:\s*[-\u2013\u2014]\s*([0-9]{4})|\s?([0-9]{4}))?(?![0-9])')
+# How Excel keeps a ZIP's leading zero: ="05030", or a leading apostrophe.
+_EXCEL_TEXT = re.compile(r'="(.*)"|\'(.*)', re.S)
+
+
+class _RowLocation(NamedTuple):
+    """One row's City, State and ZIP, as read for TrainingLocation."""
+    city: str
+    state: str
+    zip_code: str    # five digits, or '' when the cell has none
+    zip4: str
+    zip_cell: str    # the ZIP cell as written
+    zip_header: str  # the file's column it came from
+    zip_written: str  # the ZIP(+4) as the cell writes it
+    ignored: bool    # whether the cell holds text besides it
 
 class TrainingConverter(BaseConverter):
     """
@@ -196,17 +218,22 @@ class TrainingConverter(BaseConverter):
         self.logger.info(f"Found {len(event_groups)} unique training events.")
         return event_groups, event_id_col
 
-    def _warn_fabricated_default(self, event_id, field, default_value, element_label):
+    def _warn_fabricated_default(self, event_id, field, default_value, element_label, raw=None):
         """Record a FABRICATED_DEFAULT warning for a value substituted for a blank cell.
 
         Mirrors CounselingConverter._warn_fabricated_default. Only for fields the
         CSV *could* have supplied -- deployment constants with no CSV source at
         all are reported once per file by _warn_constant_defaults instead, since
         a per-event warning for them would be identical every time.
+
+        `raw` is the cell as written when it was filled but could not be used
+        ('TBD' as a start date), so the message doesn't call it blank.
         """
+        raw_text = str(raw).strip() if raw is not None else ''
         self.validator.add_issue(
             str(event_id), "warning", ValidationCategory.FABRICATED_DEFAULT, field,
-            f"Blank value defaulted to '{default_value}' ({element_label}).",
+            f"'{raw_text}' could not be used and was replaced with '{default_value}' ({element_label})."
+            if raw_text else f"Blank value defaulted to '{default_value}' ({element_label}).",
         )
 
     def _warn_constant_defaults(self):
@@ -269,10 +296,8 @@ class TrainingConverter(BaseConverter):
             formatted_date = self.config.DEFAULT_START_DATE
             # A blank or unparseable date silently becomes a fixed past date,
             # which is the kind of substitution a reviewer has to know about.
-            self._warn_fabricated_default(
-                event_id, 'Start Date', formatted_date,
-                'DateTrainingStarted' if data_cleaning.is_empty(date_val)
-                else f"DateTrainingStarted; '{str(date_val).strip()}' could not be parsed")
+            self._warn_fabricated_default(event_id, 'Start Date', formatted_date, 'DateTrainingStarted',
+                                          raw=date_val)
         create_element(record, 'DateTrainingStarted', formatted_date)
         if data_cleaning.is_ambiguous_date(date_val):
             # CONV-3: emitted month-first, but flag the ambiguity for human review.
@@ -382,46 +407,89 @@ class TrainingConverter(BaseConverter):
         self.logger.info(f"XML file successfully created at {output_path}")
 
     def _location(self, row):
-        """(city, state, ZIP, ZIP+4 or '', the ZIP cell) from one row. The ZIP
-        must start the cell, as counseling's does: a 5-digit run taken from
-        anywhere filed a phone number's first digits as the ZIP."""
-        zip_raw = (self._get_column_value(row, 'zip') or '').strip()
-        zip_match = re.match(r'(\d{5})(?:[-\s]?(\d{4}))?(?!\d)', zip_raw)
-        return ((self._get_column_value(row, 'city') or '').strip(),
-                (self._get_column_value(row, 'state') or '').strip(),
-                zip_match.group(1) if zip_match else '',
-                (zip_match.group(2) or '') if zip_match else '',
-                zip_raw)
+        """One row's City, State and ZIP (see _RowLocation). The ZIP is read
+        from inside Excel's ="05030" or '05030, which keep its leading zero,
+        and from anywhere in the cell, but never from a longer run of digits:
+        taking the first five digits of a cell filed a phone number's as the
+        ZIP."""
+        zip_header, zip_cell = self._column_value(row, 'zip')
+        zip_cell = zip_cell.strip()
+        excel = _EXCEL_TEXT.fullmatch(zip_cell)
+        text = next(part for part in excel.groups() if part is not None).strip() if excel else zip_cell
+        zip_match = _ZIP.search(text)
+        return _RowLocation(
+            city=(self._get_column_value(row, 'city') or '').strip(),
+            state=(self._get_column_value(row, 'state') or '').strip(),
+            zip_code=zip_match.group(1) if zip_match else '',
+            zip4=(zip_match.group(2) or zip_match.group(3) or '') if zip_match else '',
+            zip_cell=zip_cell,
+            zip_header=zip_header or self._header('zip'),
+            zip_written=zip_match.group(0) if zip_match else '',
+            ignored=bool(zip_match and (text[:zip_match.start()] + text[zip_match.end():]).strip()),
+        )
 
     def _build_location_section(self, parent, rows):
         training_location = create_element(parent, 'TrainingLocation')
-        event_id = self.validator.current_record_id
+        event_id = str(self.validator.current_record_id)
 
-        # The first row with a complete city, state and ZIP; reading only the
-        # first row filed a default when it alone was incomplete.
-        locations = [self._location(row) for row in rows]
-        city, state, zip_code, zip4, zip_raw = next(
-            (loc for loc in locations if all(loc[:3])), locations[0])
-        if zip_raw and not zip_code:
-            self.validator.add_issue(
-                str(event_id), "warning", ValidationCategory.INVALID_FORMAT, self._header('zip'),
-                f"Could not read a 5-digit ZIP from '{zip_raw}'.")
+        # The first row with a city, a state and a ZIP; else the first with a
+        # city and a state, filed without a ZIP (ZipCode is optional) rather
+        # than replaced, city and state too, by the configured location.
+        # Reading only the first row filed a default when it alone was
+        # incomplete. Rows that give different addresses are not reported: in
+        # a campaign-member export each row's City/State/Zip is that
+        # attendee's own mailing address, so they differ on nearly every event.
+        complete = partial = given = None
+        for row in rows:
+            loc = self._location(row)
+            given = given or (loc if loc.city or loc.state or loc.zip_cell else None)
+            if loc.city and loc.state:
+                if loc.zip_code:
+                    complete = loc
+                    break
+                partial = partial or loc
+        loc = complete or partial
 
-        if not (city and state and zip_code):
+        if loc is None:
             self.logger.info(f"Using default location for event {event_id}")
-            city = self.config.DEFAULT_LOCATION['city']
-            state = self.config.DEFAULT_LOCATION['state']
-            zip_code = self.config.DEFAULT_LOCATION['zip']
-            zip4 = ''
-            self._warn_fabricated_default(
-                event_id, 'Class/Event Location', f"{city}, {state} {zip_code}",
-                'TrainingLocation; the CSV did not supply a complete city/state/ZIP')
+            default = self.config.DEFAULT_LOCATION
+            where = f"{default['city']}, {default['state']} {default['zip']}"
+            if given is None:
+                self._warn_fabricated_default(event_id, 'Class/Event Location', where,
+                                              'TrainingLocation; no row gives a city, state or ZIP')
+            else:
+                parts = ", ".join(f"{self._header(key)} '{value}'" if value else f"{self._header(key)} blank"
+                                  for key, value in (('city', given.city), ('state', given.state),
+                                                     ('zip', given.zip_cell)))
+                self.validator.add_issue(
+                    event_id, "warning", ValidationCategory.FABRICATED_DEFAULT, 'Class/Event Location',
+                    f"No row gives both a city and a state (the first to give any of them has {parts}), "
+                    f"so the configured location '{where}' was filed instead.")
+            loc = _RowLocation(default['city'], default['state'], default['zip'], '', '', '', '', False)
+        elif not loc.zip_code:
+            if loc.zip_cell:
+                self.validator.add_issue(
+                    event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
+                    f"Could not read a 5-digit ZIP from '{loc.zip_cell}', so the location was filed "
+                    f"as '{loc.city}, {loc.state}' without one.")
+            else:
+                self.validator.add_issue(
+                    event_id, "warning", ValidationCategory.MISSING_FIELD, loc.zip_header,
+                    f"No ZIP code is given with '{loc.city}, {loc.state}', so the location was filed "
+                    "without one.")
+        elif loc.ignored:
+            # As counseling's _build_address says it.
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
+                f"Only '{loc.zip_written}' of '{loc.zip_cell}' is a ZIP or ZIP+4, so the rest was left "
+                "out of the XML.")
 
-        create_element(training_location, 'City', city)
-        create_element(training_location, 'State', data_cleaning.standardize_state_name(state))
-        create_element(training_location, 'ZipCode', zip_code)
-        if zip4:
-            create_element(training_location, 'Zip4Code', zip4)
+        create_element(training_location, 'City', loc.city)
+        create_element(training_location, 'State', data_cleaning.standardize_state_name(loc.state))
+        if loc.zip_code:
+            create_element(training_location, 'ZipCode', loc.zip_code)
+        if loc.zip4:
+            create_element(training_location, 'Zip4Code', loc.zip4)
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
 

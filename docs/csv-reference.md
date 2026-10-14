@@ -236,10 +236,18 @@ answer no count takes — "Two or More Races", "Multiracial", "Hispanic or
 Latino" as a race, "Retired" — is counted under none and named in one warning
 per event; answers that decline the question are not reported.
 
-**Missing location.** If city, state and a 5-digit ZIP are not all present for an
-event, the whole `TrainingLocation` falls back to
-`TrainingConfig.DEFAULT_LOCATION` and a `FABRICATED_DEFAULT` warning is recorded.
-It is all-or-nothing: a partial address does not produce a partial location.
+**Location.** An event's location is the first of its rows with a city, a
+state and a ZIP, else the first with a city and a state. The ZIP may sit
+anywhere in its cell (`IA 50010`) and inside Excel's leading-zero forms
+(`="05030"`, `'05030`); a ZIP+4 may be written `50309-1234`, `50309 1234`,
+`503091234` or with a dash (`50309 – 1234`). Five digits inside a longer run of
+digits — a phone number — are not a ZIP. Text in the cell besides the ZIP is
+left out with a warning. When no row's ZIP can be read, the city and state are
+filed without one (`ZipCode` is optional), with a warning. Only when no row
+gives both a city and a state does the whole `TrainingLocation` fall back to
+`TrainingConfig.DEFAULT_LOCATION`, with a `FABRICATED_DEFAULT` warning naming
+what the rows did give. Rows that give different addresses are not reported:
+in a campaign-member export each row's address is that attendee's own.
 
 **Funding source** must match an SBA funding code exactly (case-insensitively).
 A partner's own label — `CORE`, `Federal` — is **omitted from the XML** with a

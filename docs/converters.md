@@ -107,7 +107,9 @@ Two behaviours to be aware of:
   reported as a warning naming the value filed; values are compared as they
   would be filed, so `1/15/2025` and `2025-01-15`, or `249003` and
   `249003.0`, agree. The location is the first row with a complete city,
-  state and ZIP.
+  state and ZIP, else the first with a city and state, filed without a ZIP;
+  the configured location is used only when no row gives both a city and a
+  state.
 
 Column matching for this converter is **alias-based**: `TrainingConfig.COLUMN_MAPPING`
 lists several accepted spellings per field (`Cosponsor` / `CosponsorsName` /
@@ -237,8 +239,8 @@ This was reviewed and **accepted as correct for a single-organization
 deployment** ([`reviews/CODEBASE_ANALYSIS.md` §1.6](./reviews/CODEBASE_ANALYSIS.md)).
 What changed was visibility: `_warn_constant_defaults()` records one file-level
 `FABRICATED_DEFAULT` warning per conversion naming every value emitted from
-configuration, and per-event warnings fire when a blank cell falls back to the
-configured location, event title or start date.
+configuration, and per-event warnings fire when a blank or unusable cell falls
+back to the configured location, event title or start date.
 
 **If a second organization ever uses the same deployment, this is a data-integrity
 bug, not a configuration preference.** The web app has open signup, so a shared
@@ -280,7 +282,9 @@ From [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md), still ope
   `max(len(rows), 1)`. An attendee listed twice is counted twice.
 - **A training event's location is read from the `City`/`State`/`Zip` columns**,
   which in a campaign-member export are each attendee's mailing address. The
-  first complete address among the event's rows is filed as the event's.
+  first complete address among the event's rows is filed as the event's. Rows
+  that give different addresses are not reported, since in such an export
+  they differ on nearly every event.
 - **The counseling converter still reads ~70 headers as string literals**
   (§5.2), so a differently-named column must be mapped, not auto-detected.
 - **`training` has no exact-match required-column check** in the worker, on

@@ -316,6 +316,22 @@ def count_illegal_xml_chars(text: str) -> int:
     return sum(1 for ch in text if ord(ch) in _ILLEGAL_XML_CODEPOINTS)
 
 
+def clean_identifier(text: str) -> str:
+    """An identifier as it is written to the XML (see strip_illegal_xml_chars),
+    trimmed and without invisible format characters such as a zero-width
+    space, which the schema accepts but which make a different ID from the one
+    it looks like. The converters compare and group IDs in this form, so two
+    spellings the XML can't tell apart are one ID before it is written, not two
+    records with the same number after."""
+    return strip_illegal_xml_chars(data_cleaning.remove_format_chars(text)).strip()
+
+
+def identifier_noise(text: str) -> list[str]:
+    """The characters clean_identifier takes out of `text`, as "U+200B"."""
+    return [f"U+{ord(ch):04X}" for ch in text
+            if ord(ch) in _ILLEGAL_XML_CODEPOINTS or data_cleaning.remove_format_chars(ch) == ""]
+
+
 def _chars(n: int) -> str:
     return f"{n} character" if n == 1 else f"{n} characters"
 

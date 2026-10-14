@@ -70,9 +70,13 @@ What it handles that hand-built XML usually gets wrong:
   | `Phone` | 10 |
   | `PartnerClientNumber`, `PartnerSessionNumber` | 20 |
 
-- **Part 3 impact fallbacks.** `Date Started (Meeting)`,
-  `Total No. of Employees (Meeting)`, `Gross Revenues/Sales (Meeting)` and
-  `Profit & Loss (Meeting)` fall back to their intake counterparts when blank.
+- **Part 3 impact fallbacks.** `Total No. of Employees (Meeting)`,
+  `Gross Revenues/Sales (Meeting)` and `Profit & Loss (Meeting)` fall back to
+  their intake counterparts, and `Business Start Date` to
+  `Date Started (Meeting)`, when blank — or when the cell isn't a number or a
+  date this tool can read, with a warning naming the cell passed over. With
+  nothing to fall back on, an unreadable revenue or profit cell is reported as
+  replaced with the `0` Part 3 files.
   Note that `Total Number of Employees`, `Gross Revenues/Sales` and
   `Profits/Losses` are *also* read on their own — they are fallback sources, not
   aliases. (Treating them as aliases is exactly the bug that once dropped three
@@ -130,15 +134,18 @@ so the results page can show a before/after diff for each value.
 | Rule | Behaviour |
 |---|---|
 | Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD`. A time after the date, as Salesforce exports a Date/Time field (`1/15/2025 10:30 AM`, `2025-01-15T14:30:00.000Z`), is dropped; an optional date that can't be read is left out with a warning |
-| Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE` |
+| Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE`. A slash date only day-first can read (`13/01/25`, `15/01/2025`) is read day-first, before the year-first `%y/%m/%d` that used to turn `13/01/25` into 2013-01-25 |
 | Phone numbers | Reduced to digits; a leading country-code digit is dropped from an 11-digit number; too-short numbers are rejected rather than emitted malformed |
 | Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision |
 | Percentages | Clamped to 0–100, recorded as `CLAMPED_VALUE` |
 | States | Standardized to the schema's spelling (`IA` → `Iowa`) |
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |
-| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described) |
+| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described). Punctuation in a race answer reads as a space (`African-American`), and `Alaskan Native` is Native American/Alaska Native. Gender is read by whole words of any alphabet, so `Préfère ne pas répondre` is not Female |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
-| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
+| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup; invisible format characters are removed |
+| Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters is blank; one file-level warning counts the Excel errors |
+| Rows | A blank row, a repeat of the header row, or a title/footer line (one filled cell in a file of three or more columns) is skipped with a warning naming it; a row with values past the last column, and a cell that swallowed further rows (an unclosed quote), are reported |
+| Identifiers | `Contact ID`, `Activity ID`, `Member ID` and `Class/Event ID` lose invisible format characters, and control characters become a space, before they are compared or grouped, as `STANDARDIZED_VALUE` |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
 | Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Whether a value is valid is decided by libxml2 against the element's own type, so the guard and SBA's validation never disagree about a pattern, a number or a date. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
 

@@ -21,6 +21,7 @@ class TrainingConverter(BaseConverter):
     Converter for Management Training Report data.
     """
     SCHEMA_TYPE = "training"
+    IDENTIFIER_COLUMNS = (TrainingConfig.COLUMN_MAPPING["event_id"],)
 
     # Read when the CSV has them, but not offered on the mapping page (which
     # lists TrainingConfig.COLUMN_MAPPING): optional, as on the counseling
@@ -103,8 +104,15 @@ class TrainingConverter(BaseConverter):
             raise EmptyCSVError(f"Required column '{event_id_col}' is missing from the CSV.")
 
         # 1-based, like the counseling converter's Row_N ids and row numbers.
-        valid_rows = [(index, row) for index, row in enumerate(rows, 1)
-                      if data_validation.validate_training_record(row, index, self.validator)]
+        valid_rows = []
+        for index, row in enumerate(rows, 1):
+            # Before grouping: an ID the XML would write the same way as
+            # another one is the same event.
+            cleaned_ids = self._clean_identifiers(row)
+            if data_validation.validate_training_record(row, index, self.validator):
+                event_id = str(row[event_id_col]).strip()
+                self._report_cleaned_identifiers(cleaned_ids, event_id, event_id=event_id)
+                valid_rows.append((index, row))
         if not valid_rows:
             # Must raise, not return: a silent return left convert() writing no
             # file at all while main.py still logged "Conversion process
@@ -524,6 +532,33 @@ class TrainingConverter(BaseConverter):
 
         return race_counts, hispanic, non_hispanic, minorities
 
+    def _report_uncounted(self, rows, race_col, military_col):
+        """One warning per event for the Race and Military Status answers no
+        count takes, naming them: "Two or More Races" or "Retired" left the
+        attendee out of every race or military count without a word. Answers
+        that decline the question, or say there was no military service,
+        belong in no count and are not reported."""
+        race_keywords = self.config.DEMOGRAPHIC_KEYWORDS['race']
+        military_keywords = self.config.DEMOGRAPHIC_KEYWORDS['military']
+        races = [label for row in rows if race_col
+                 for label in data_cleaning.split_multi_value(row.get(race_col))
+                 if not data_cleaning.classify_races(label, race_keywords)
+                 and data_cleaning.classify_race_label(label)[0] != data_cleaning.RACE_PREFER_NOT_TO_SAY]
+        statuses = [row.get(military_col).strip() for row in rows if military_col
+                    and not data_cleaning.is_empty(row.get(military_col))
+                    and not data_cleaning.classify_military(row.get(military_col), military_keywords)
+                    and not data_cleaning.map_military_status_to_xsd(row.get(military_col))]
+        event_id = str(self.validator.current_record_id)
+        for key, answers, counts in (('race', races, "race"), ('military_status', statuses, "military")):
+            if not answers:
+                continue
+            shown = ", ".join(f"'{answer}'" for answer in dict.fromkeys(answers))
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.INVALID_VALUE, self._header(key),
+                f"{shown} {'fits' if len(set(answers)) == 1 else 'fit'} none of SBA's {counts} counts, "
+                f"so {len(answers)} attendee answer{'s were' if len(answers) != 1 else ' was'} "
+                f"counted under no {counts} category.")
+
     def _calculate_demographics(self, rows):
         """Aggregate per-attendee rows for one event into demographic counts.
 
@@ -546,6 +581,7 @@ class TrainingConverter(BaseConverter):
             return key if rows and key in rows[0] else None
 
         business_col = column('business_status')
+        self._report_uncounted(rows, column('race'), column('military_status'))
         female, male = self._count_sex(rows, column('gender'))
         currently_in_business, not_in_business = self._count_business_status(rows, business_col)
         military_counts = self._count_military(rows, column('military_status'), military_keywords)

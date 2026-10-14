@@ -34,6 +34,7 @@ class CounselingConverter(BaseConverter):
     # Which schema's facets SchemaGuard enforces, and whose CSV column names
     # its issues use (training-client overrides this).
     SCHEMA_TYPE = "counseling"
+    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID')
     # The column PartnerSessionNumber is read from, which a blank session
     # number is reported against, and how that warning starts.
     SESSION_NUMBER_FIELD = 'Activity ID'
@@ -97,6 +98,10 @@ class CounselingConverter(BaseConverter):
         (see TrainingClientConverter). Nothing to report for counseling, whose
         defaults are per-row FABRICATED_DEFAULT warnings."""
 
+    def _check_renamed_columns(self, headers):
+        """Hook for converters that rename columns (see TrainingClientConverter);
+        counseling reads its columns as they are named."""
+
     def _preprocess_row(self, row):
         """Hook for subclasses to transform a row before processing. Returns the row unchanged by default."""
         return row
@@ -104,10 +109,11 @@ class CounselingConverter(BaseConverter):
     def _mapped(self, row, mapping_key, element, default=''):
         """Read a column by its CounselingConfig.COLUMN_MAPPING key.
 
-        Used for the Part 3 impact fields, whose fallback chain ("(Meeting)"
-        column, else the intake column) is declared once in config instead of
-        being repeated at each call site. Delegates to _first_present so the
-        blank-vs-absent semantics below are the same either way.
+        Used for a field with a fallback chain declared once in config (the
+        Internet source, else the older column) instead of being repeated at
+        each call site; the Part 3 impact fields, which must parse, use
+        _mapped_parsed. Delegates to _first_present so the blank-vs-absent
+        semantics below are the same either way.
 
         The column that supplied the value is recorded against `element`
         ("Parent/Tag"), so an issue about it names that column: a bad
@@ -121,10 +127,33 @@ class CounselingConverter(BaseConverter):
                 return value
         return default
 
-    def _column_for(self, element, mapping_key):
-        """The CSV column _mapped() read `element` from in this row, else the
-        first header `mapping_key` names."""
-        return self._record_columns.get(element) or self.config.headers_for(mapping_key)[0]
+    def _mapped_parsed(self, row, mapping_key, element, parse, what, record_id):
+        """_mapped for a value that has to parse -- a number or a date: a cell
+        `parse` can't read falls through to the next header rather than hide a
+        good value there. 'n/a' in Gross Revenues/Sales (Meeting) filed Part 3
+        as 0 beside a perfectly good Gross Revenues/Sales, with no issue.
+
+        Returns (value, unread): the parsed value, '' when no header gives one,
+        and the (column, cell) pairs that couldn't be read, for the caller to
+        report. A cell passed over for a later column's value is reported here.
+        """
+        unread = []
+        for header in self.config.headers_for(mapping_key):
+            raw = self._first_present(row, header)
+            if not raw:
+                continue
+            value = parse(raw)
+            if value:
+                self._record_columns[element] = header
+                for column, text in unread:
+                    self.validator.add_issue(
+                        record_id, "warning", ValidationCategory.INVALID_FORMAT, column,
+                        f"'{text}' is not {what}, so '{header}' was used instead.")
+                return value, []
+            unread.append((header, raw))
+        if unread:
+            self._record_columns[element] = unread[0][0]
+        return '', unread
 
     @staticmethod
     def _first_present(row, *keys, default=''):
@@ -292,6 +321,7 @@ class CounselingConverter(BaseConverter):
             raise EmptyCSVError("CSV has no data rows to convert.")
 
         self._warn_constant_defaults(set(rows[0]))
+        self._check_renamed_columns(set(rows[0]))
         self._check_session_column(set(rows[0]))
 
         root = ET.Element('CounselingInformation')
@@ -343,7 +373,9 @@ class CounselingConverter(BaseConverter):
         """Append the CounselingRecord for one CSV row to `root`. Returns
         whether it was filed; a row that can't be is left out, with the
         reason recorded."""
+        csv_row = row
         row = self._preprocess_row(row)
+        cleaned_ids = self._clean_identifiers(row)
         contact_id = row.get('Contact ID')
         if contact_id is not None:
             # A whitespace-only id was written to the filing as "   ";
@@ -358,13 +390,14 @@ class CounselingConverter(BaseConverter):
         self._fabrication_warned.clear()
         self._warned_once.clear()
 
-        if not data_validation.validate_counseling_record(row, row_index, self.validator):
+        if not data_validation.validate_counseling_record(row, row_index, self.validator, csv_row):
             self.logger.warning(f"Skipping record {record_id} due to initial validation errors")
-            self.left_out_reasons.append(f"row {row_index}: no Contact ID")
+            self.left_out_reasons.append(f"row {row_index}: " + ("not a record" if contact_id else "no Contact ID"))
             # Counted, so "Total Records" is every row and the ones left out
             # are the difference from "Successful".
             self.validator.record_processed(success=False)
             return False
+        self._report_cleaned_identifiers(cleaned_ids, record_id)
 
         counseling_record = create_element(root, 'CounselingRecord')
         self._record_columns = {}
@@ -826,36 +859,35 @@ class CounselingConverter(BaseConverter):
             create_element(counselor_record, 'DateOfReportableImpact', impact_date)
         create_element(counselor_record, 'CurrentlyExporting', self._currently_exporting)
 
-        business_start_raw = self._mapped(row, 'business_start_date', 'CounselorRecord/BusinessStartDatePart3')
-        business_start_date = self._optional_date(
-            business_start_raw, self._column_for('CounselorRecord/BusinessStartDatePart3', 'business_start_date'),
-            record_id)
+        business_start_date, unread = self._mapped_parsed(
+            row, 'business_start_date', 'CounselorRecord/BusinessStartDatePart3', data_cleaning.format_date,
+            "a date this tool can read", record_id)
+        for column, raw in unread:
+            self._optional_date(raw, column, record_id)  # reports it
         if business_start_date:
             create_element(counselor_record, 'BusinessStartDatePart3', business_start_date)
 
     def _build_financial_data(self, counselor_record, row, record_id):
         # Omitted when blank, as Part 2 does: a default of '0' made a blank cell
         # indistinguishable from "no employees" in the filing.
-        total_employees_raw = self._mapped(row, 'total_employees_part3', 'CounselorRecord/TotalNumberOfEmployees')
-        total_employees = data_cleaning.clean_numeric(total_employees_raw)
+        total_employees, unread = self._mapped_parsed(
+            row, 'total_employees_part3', 'CounselorRecord/TotalNumberOfEmployees', data_cleaning.clean_numeric,
+            "a number", record_id)
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
-        else:
-            column = self._column_for('CounselorRecord/TotalNumberOfEmployees', 'total_employees_part3')
+        for column, raw in unread:
             if column != 'Total Number of Employees':  # Part 2 reported the intake column
-                self._optional_number(total_employees_raw, column, record_id)
+                self._optional_number(raw, column, record_id)
 
         exporting_employees2 = self._exporting_employees
         if exporting_employees2:
             create_element(counselor_record, 'NumberOfEmployeesInExportingBusiness', exporting_employees2)
 
-        gross_rev_part3 = data_cleaning.clean_numeric(self._mapped(row, 'gross_revenues_part3', 'ClientAnnualIncomePart3/GrossRevenues'))
-        profit_loss_part3 = data_cleaning.clean_numeric(self._mapped(row, 'profit_loss_part3', 'ClientAnnualIncomePart3/ProfitLoss'))
         income_part3 = create_element(counselor_record, 'ClientAnnualIncomePart3')
-        # No fabrication warnings here for gross revenue / profit-loss: they are
-        # keyed on the base columns (the "(Meeting)" variants are intentionally
-        # excluded, see COUNSELING_FABRICATION_DEFAULTS) and Part 2 already warns
-        # whenever the base column is blank, so warning again would be noise.
+        gross_rev_part3 = self._part3_amount(row, 'gross_revenues_part3', 'ClientAnnualIncomePart3/GrossRevenues',
+                                             'Gross Revenues', record_id)
+        profit_loss_part3 = self._part3_amount(row, 'profit_loss_part3', 'ClientAnnualIncomePart3/ProfitLoss',
+                                               'Profit/Loss', record_id)
         create_element(income_part3, 'GrossRevenues', gross_rev_part3 if gross_rev_part3 else '0')
         create_element(income_part3, 'ProfitLoss', profit_loss_part3 if profit_loss_part3 else '0')
         self._emit_export_revenue(income_part3)
@@ -879,6 +911,23 @@ class CounselingConverter(BaseConverter):
             self._warn_fabricated_default(record_id, 'Amount of Equity Capital Received', '0', 'Equity Capital Received',
                                           raw=row.get('Amount of Equity Capital Received'))
         create_element(rpsc, 'EquityCapitalReceived', equity_capital if equity_capital else '0')
+
+    def _part3_amount(self, row, mapping_key, element, label, record_id):
+        """A Part 3 amount from its "(Meeting)" column, else the intake column
+        (see _mapped_parsed); '' when neither gives a number, and 0 is filed.
+
+        A blank or unreadable intake cell has already been reported by Part 2,
+        which files the same 0, so warning again would be noise; a "(Meeting)"
+        cell that couldn't be read Part 2 knows nothing of, so it is reported
+        here.
+        """
+        amount, unread = self._mapped_parsed(row, mapping_key, element, data_cleaning.clean_numeric,
+                                             "a number", record_id)
+        intake = self.config.headers_for(mapping_key)[-1]
+        for column, raw in unread:
+            if column != intake:
+                self._warn_fabricated_default(record_id, column, '0', f"{label} (Part 3)", raw=raw, always=True)
+        return amount
 
     def _build_coded_section(self, parent, element_name, codes, other_text, default_other_code=None,
                              record_id=None, columns=None):

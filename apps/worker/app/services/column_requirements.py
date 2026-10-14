@@ -13,6 +13,7 @@ applied, so a CSV the user has correctly mapped is not falsely rejected.
 """
 
 import csv
+import io
 import os
 import sys
 
@@ -21,7 +22,7 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.config import COUNSELING_FABRICATION_DEFAULTS as _FABRICATION_DEFAULTS_MAP
-from src.data_cleaning import normalize_header
+from src.data_cleaning import decode_csv_bytes, normalize_header
 
 # --- Requirement tiers (moved here from preview_service so preview and conversion
 # share one definition). "required" -> hard-fail if missing; "conditional" -> warn. ---
@@ -111,12 +112,15 @@ def classify_columns(headers: list[str], converter_type: str) -> dict[str, list[
 
 
 def read_header_row(path: str) -> list[str]:
-    """Read just the header row of a CSV (utf-8-sig, matching the converters).
+    """Read just the header row of a CSV, decoded as the converters decode it
+    (data_cleaning.decode_csv_bytes: a strict UTF-8 read raised on a
+    Windows-1252 file the converter itself reads).
 
     Headers are whitespace-normalized (CONV-2) so required-column matching here
     agrees with the normalized keys the converters read. Duplicates are preserved
     so the caller can detect collisions (two columns collapsing to one name).
     """
-    with open(path, "r", encoding="utf-8-sig", newline="") as f:
-        header = next(csv.reader(f), [])
+    with open(path, "rb") as f:
+        text, _ = decode_csv_bytes(f.read())
+    header = next(csv.reader(io.StringIO(text)), [])
     return [normalize_header(h) for h in header]

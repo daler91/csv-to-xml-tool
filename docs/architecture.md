@@ -70,8 +70,11 @@ Inside `src/`, a conversion is always the same seven steps:
 1. **Read** — `BaseConverter._read_csv`: the bytes are decoded as UTF-8 (an
    Excel BOM dropped) or, failing that, Windows-1252, and read with
    `data_cleaning.NormalizedDictReader`, which normalizes header whitespace and
-   keeps a blank duplicate column from erasing a filled one. All three
-   converters use stdlib `csv`; there is no pandas anywhere in the project.
+   keeps a blank duplicate column from erasing a filled one. A cell holding no
+   value (an Excel error such as `#N/A`, or only invisible characters) is read
+   as blank, and a row with values past the last column, or a cell that
+   swallowed the rows after it, is reported. All three converters use stdlib
+   `csv`; there is no pandas anywhere in the project.
 2. **Resolve columns** — each converter maps CSV headers to the fields it needs.
    Counseling declares its vocabulary once in `CounselingConfig.COLUMN_MAPPING`;
    training resolves aliases through `TrainingConfig.COLUMN_MAPPING`.
@@ -81,7 +84,9 @@ Inside `src/`, a conversion is always the same seven steps:
    Salesforce fields.
 4. **Validate the row** — `src/data_validation.py` records every problem against
    a `ValidationTracker` with a severity and a category
-   (`src/config.py:ValidationCategory`).
+   (`src/config.py:ValidationCategory`). A row that is not a record — blank, a
+   repeat of the header row, a report's title or footer line — is skipped here,
+   with a warning naming it.
 5. **Build XML** — elements are created in the exact order the XSD's
    `xs:sequence` demands, which is what prevents the `cvc-complex-type.2.4.a`
    errors that dominate hand-built SBA XML. `src/xml_utils.emit_optional` is the

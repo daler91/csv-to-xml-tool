@@ -333,7 +333,9 @@ stays side-effect free.
 detail, column}]}` and lists only checks with a non-zero count.
 
 A CSV that cannot be parsed at all (typically an unclosed quote, which turns the
-rest of the file into one oversized cell) is a `422` whose detail says so.
+rest of the file into one oversized cell) is a `422` whose detail says so. An
+unclosed quote that swallows fewer rows parses; the conversion then records an
+error naming the row and column where it opened.
 
 ### `POST /convert`
 

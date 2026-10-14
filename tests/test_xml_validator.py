@@ -1,6 +1,5 @@
 import contextlib
 import io
-import importlib
 import types
 import unittest
 from unittest.mock import patch
@@ -14,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 # Import xml_validator module
 import xml_validator
+from src import fix_sba_xml as fix_cli, xml_validator as validator_cli
 
 
 def _fixed(valid):
@@ -527,15 +527,15 @@ class TestCommandLineExitStatus(_FixerCase):
     """Both command lines exited 0 whatever they found: the validator for a
     file that failed the schema, and the fixers for output that still did."""
 
-    def run_module(self, module, *args):
-        """`python -m module args`, run in this process: the exit status the
-        command line would give, and what it wrote to stderr."""
+    def run_module(self, main, *args):
+        """`python -m <main's module> args`, run in this process: the exit
+        status the command line would give (both modules end in
+        sys.exit(main())), and what it wrote to stderr."""
         stderr = io.StringIO()
         with patch.dict(os.environ, SBA_OUTPUT_BASE=self.tmp), \
-                patch.object(sys, 'argv', [module, *args]), contextlib.redirect_stderr(stderr):
+                patch.object(sys, 'argv', [main.__module__, *args]), contextlib.redirect_stderr(stderr):
             try:
-                # Both modules end in sys.exit(main()).
-                code = importlib.import_module(module).main() or 0
+                code = main() or 0
             except SystemExit as stop:  # argparse
                 code = stop.code or 0
         return types.SimpleNamespace(returncode=code, stderr=stderr.getvalue())
@@ -546,16 +546,16 @@ class TestCommandLineExitStatus(_FixerCase):
         return self.write(tree, 'bad.xml')
 
     def test_validate_only(self):
-        bad = self.run_module('src.xml_validator', '--xmlfile', self.bad_date_file(), '--xsd', _COUNSELING_XSD)
-        good = self.run_module('src.xml_validator', '--xmlfile', _GOLDEN_COUNSELING, '--xsd', _COUNSELING_XSD)
+        bad = self.run_module(validator_cli.main, '--xmlfile', self.bad_date_file(), '--xsd', _COUNSELING_XSD)
+        good = self.run_module(validator_cli.main, '--xmlfile', _GOLDEN_COUNSELING, '--xsd', _COUNSELING_XSD)
 
         self.assertEqual((bad.returncode, good.returncode), (1, 0), bad.stderr + good.stderr)
 
     def test_fix_reports_output_that_still_fails(self):
         output = os.path.join(self.tmp, 'fixed.xml')
-        validator = self.run_module('src.xml_validator', '--xmlfile', self.bad_date_file(),
+        validator = self.run_module(validator_cli.main, '--xmlfile', self.bad_date_file(),
                                     '--output', output, '--fix')
-        fixer = self.run_module('src.fix_sba_xml', '--file', self.bad_date_file(), '--output', output)
+        fixer = self.run_module(fix_cli.main, '--file', self.bad_date_file(), '--output', output)
 
         for proc in (validator, fixer):
             self.assertEqual(proc.returncode, 1, proc.stderr)
@@ -568,7 +568,7 @@ class TestCommandLineExitStatus(_FixerCase):
         _move_to_end(tree.getroot().find('CounselingRecord/CounselorRecord'), 'Language')
         source = self.write(tree)
 
-        proc = self.run_module('src.fix_sba_xml', '--file', source, '--no-backup')
+        proc = self.run_module(fix_cli.main, '--file', source, '--no-backup')
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(xml_validator.validate_against_xsd(source, _COUNSELING_XSD)['is_valid'], True)
@@ -579,7 +579,7 @@ class TestCommandLineExitStatus(_FixerCase):
         shutil.copy(_GOLDEN_COUNSELING, os.path.join(folder, 'good.xml'))
         shutil.copy(self.bad_date_file(), os.path.join(folder, 'bad.xml'))
 
-        proc = self.run_module('src.fix_sba_xml', '--directory', folder, '--output', os.path.join(self.tmp, 'out'))
+        proc = self.run_module(fix_cli.main, '--directory', folder, '--output', os.path.join(self.tmp, 'out'))
 
         self.assertEqual(proc.returncode, 1, proc.stderr)
         self.assertIn("2 file(s): 1 pass SBA's schema, 1 still fail it, 0 could not be fixed.", proc.stderr)

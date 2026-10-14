@@ -176,10 +176,13 @@ def run_conversion(
 
     try:
         # Set up logger and tracker
+        # The logging.Logger, as the CLI passes: the ConversionLogger wrapper's
+        # error() takes no exc_info, so the converters' per-row error handler
+        # raised TypeError and failed the whole job instead of one row.
         logger = ConversionLogger(
             logger_name="WebConverter",
             log_to_file=False,
-        )
+        ).logger
         tracker = ValidationTracker()
         # The converter reads the UTF-8 copy the mapping wrote, so it can't
         # tell how the upload had to be decoded; say it here.

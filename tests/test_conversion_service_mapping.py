@@ -121,3 +121,25 @@ def test_a_windows_1252_csv_converts_with_or_without_a_mapping(tmp_path, monkeyp
         root = ET.parse(result["xml_path"]).getroot()
         assert root.findtext(".//TrainingTitle") == "Taller – José Muñoz"
         assert [i for i in result["issues"] if "Windows-1252" in i["message"]], mapping
+
+
+def test_an_error_in_one_event_does_not_fail_the_job(tmp_path, monkeypatch):
+    """The worker passed the ConversionLogger wrapper, whose error() takes no
+    exc_info, so the converters' per-row handler raised TypeError and the
+    whole job failed instead of one event being left out."""
+    from src.converters.training_converter import TrainingConverter
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    real = TrainingConverter._build_location_section
+
+    def fail_on_second(self, parent, rows):
+        if self.validator.current_record_id == "EVT-2":
+            raise ValueError("boom")
+        return real(self, parent, rows)
+
+    monkeypatch.setattr(TrainingConverter, "_build_location_section", fail_on_second)
+    csv = TRAINING_CSV + TRAINING_CSV.split("\n", 1)[1].replace("EVT-1", "EVT-2")
+    result = _convert(tmp_path, csv)
+    assert result["xsd_valid"] is True
+    errors = [i for i in result["issues"] if i["severity"] == "error"]
+    assert [e["record_id"] for e in errors] == ["EVT-2"]

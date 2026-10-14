@@ -7,6 +7,7 @@ against the schema SBA supplied, plus what was filed and reported.
 import codecs
 import os
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -18,10 +19,10 @@ from src.converters.counseling_converter import CounselingConverter
 from src.converters.training_client_converter import TrainingClientConverter
 from src.converters.training_converter import TrainingConverter
 from src.schema_rules import SchemaGuard, _check_value, load_rules, schema_path
-from src.xml_validator import validate_against_xsd
+from src.xml_validator import validate_against_xsd, validate_xml_content
 
 from tests.test_integration_xsd import _make_counseling_row, _make_training_client_row, _make_training_row
-from tests.test_xsd_validity import _XSD, _ValidityCase
+from tests.test_xsd_validity import _XSD, _ValidityCase, _csv_bytes
 
 # What base_converter._write_valid_xml says when the final XSD check had to
 # leave a record out: the schema guard should have handled the value itself.
@@ -66,6 +67,26 @@ class GuardAgreesWithLibxml2Test(_ValidityCase):
         # 90 characters; libxml2 gives up after about 2 s and the result is cached.
         self.assertLess(time.monotonic() - started, 15)
 
+    def test_only_short_values_are_remembered(self):
+        # The verdicts are kept for the life of the worker: a 100,000-digit
+        # FIPS code in each row of each upload stayed in memory.
+        rule = _rule("counseling", "ClientIntake", "FIPS_Code")
+        cache = rule.checker._cached_accepts.cache_info
+        size = cache().currsize
+        rule.checker.accepts(rule.check_tag, "1" * 1000)
+        self.assertEqual(cache().currsize, size)
+        rule.checker.accepts(rule.check_tag, "98765")
+        self.assertEqual(cache().currsize, size + 1)
+
+    def test_line_endings_are_measured_as_the_file_reads_them(self):
+        # xml.etree writes CR as it is, and the parser reads CR LF as LF: 20
+        # characters with a CR LF were 19 in the file, failing an xs:length of 20.
+        rule = _rule("training", "TrainingLocation", "PostalCode")
+        self.assertEqual(rule.length, 20)
+        self.assertEqual(_check_value("x" * 18 + "\r\n", rule)[1], "must be exactly 20 characters")
+        self.assertEqual(_check_value("x" * 19 + "\r\n", rule), ("x" * 19 + "\n", None))
+        self.assertEqual(_check_value("x" * 19 + "\r", rule), ("x" * 19 + "\n", None))
+
     def test_iso_basic_and_week_dates_are_not_xs_date(self):
         rule = _rule("counseling", "CounselorRecord", "DateCounseled")
         for text in ("20250115", "2025-W03-3", "2025-W03", "0000-01-01"):
@@ -93,6 +114,28 @@ class GuardAgreesWithLibxml2Test(_ValidityCase):
         self.assertIsNone(_check_value("José", rules[("R", "Letters")])[1])
         self.assertIsNotNone(_check_value("José1", rules[("R", "Letters")])[1])
 
+    def test_one_type_that_does_not_compile_leaves_only_its_values_unchecked(self):
+        # CodeType restricts a type from the included file, which the value
+        # checks' copy of the schema doesn't have; every pattern went unchecked.
+        xsd = os.path.join(tempfile.mkdtemp(), "include.xsd")
+        with open(xsd, "w", encoding="utf-8") as f:
+            f.write(
+                '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+                '<xs:include schemaLocation="types.xsd"/><xs:element name="R"><xs:complexType><xs:sequence>'
+                '<xs:element name="Zip" type="ZipType"/><xs:element name="Code" type="CodeType"/>'
+                '</xs:sequence></xs:complexType></xs:element>'
+                '<xs:simpleType name="ZipType"><xs:restriction base="xs:string"><xs:pattern value="\\d{5}"/>'
+                '</xs:restriction></xs:simpleType>'
+                '<xs:simpleType name="CodeType"><xs:restriction base="IncludedType"><xs:maxLength value="3"/>'
+                '</xs:restriction></xs:simpleType></xs:schema>')
+        with self.assertLogs("src.schema_rules", "WARNING") as logs:
+            rules = load_rules(xsd)
+        self.assertEqual(_check_value("abc", rules[("R", "Zip")])[1], "is not in the format SBA requires")
+        self.assertIsNone(rules[("R", "Code")].checker)
+        self.assertEqual(_check_value("abcd", rules[("R", "Code")])[1], "is longer than the 3 characters SBA allows")
+        warning, = logs.output
+        self.assertIn(f"Could not build the value checks of {xsd} for Code: simple type 'CodeType'", warning)
+
 
 class ExponentTest(_ValidityCase):
     """W.2: clean_numeric wrote out an exponent in full -- '1e5000' raised and
@@ -110,6 +153,23 @@ class ExponentTest(_ValidityCase):
         self.assertEqual(root.findtext(".//ClientAnnualIncomePart2/GrossRevenues"), "0")
         warning, = self.issues("Gross Revenues/Sales", "warning")
         self.assertIn("'1e5000' could not be used", warning["message"])
+
+    def test_zeros_and_long_numbers_are_read(self):
+        # The bound counted a zero's exponent and a long number's digits.
+        for text, expected in (("0e5000", "0"), ("0E-5000", "0"), ("0." + "0" * 33, "0"),
+                               ("9" * 32, "9" * 32), ("1E+40", "1" + "0" * 40),
+                               ("0." + "0" * 30 + "1", "0." + "0" * 30 + "1")):
+            with self.subTest(text=text):
+                self.assertEqual(data_cleaning.clean_numeric(text), expected)
+
+    def test_an_amount_over_the_maximum_is_omitted_not_filed_as_zero(self):
+        # '1E+40' was past the bound and filed as a fabricated 0.
+        root = self.convert_row(**{"Gross Revenues/Sales": "1E+40", "Prep Hours": "0e5000"})
+        self.assertIsNone(root.find(".//GrossRevenues"))
+        self.assertTrue(all("must be at most" in w["message"]
+                            for w in self.issues("Gross Revenues/Sales", "warning")))
+        self.assertEqual(root.findtext(".//CounselingHours/Prepare"), "0")
+        self.assertEqual(self.issues("Prep Hours"), [])
 
 
 class UnwritableCellTest(_ValidityCase):
@@ -208,6 +268,20 @@ class CounselingReportsWhatItLeavesOutTest(_ValidityCase):
         root = self.convert_row(**{"Ethnicity:": "Decline to answer", "Disability": "Unknown"})
         self.assertEqual(root.findtext(".//ClientIntake/Ethnicity"), "Prefer not to say")
         self.assertEqual(root.findtext(".//ClientIntake/Disability"), "Prefer not to say")
+
+    def test_an_answer_with_a_refusal_word_keeps_the_answer(self):
+        # 'unknown' or 'declined' anywhere in the label made it 'Prefer not to say'.
+        for text, filed in (("Hispanic or Latino (origin unknown)", "Hispanic or Latino"),
+                            ("Hispanic, declined to give race", "Hispanic or Latino"),
+                            ("Non-Hispanic; Decline", "Non Hispanic or Latino"),
+                            ("Unknown", "Prefer not to say")):
+            with self.subTest(text=text):
+                self.setUp()
+                root = self.convert_row(**{"Ethnicity:": text})
+                self.assertEqual(root.findtext(".//ClientIntake/Ethnicity"), filed)
+        for text, filed in (("Yes", "Yes"), ("no", "No"), ("Declined", "Prefer not to say")):
+            with self.subTest(text=text):
+                self.assertEqual(data_cleaning.map_disability_to_xsd(text), filed)
 
     def test_a_branch_of_prefer_not_to_say_is_filed(self):
         root = self.convert_row(**{"Veteran Status": "Veteran", "Branch Of Service": "Prefer not to say"})
@@ -582,6 +656,23 @@ class SafetyNetWithoutLinesTest(_ValidityCase):
                     if "left out of the XML" in e["message"]}
         self.assertEqual(left_out, {"GAVE-UP", "BAD"})
 
+    def test_errors_with_no_line_say_what_happened(self):
+        # They read "Row 2: SBA's schema validator could not finish checking
+        # this (...). SBA's schema rejects this", without the record's ID.
+        self.convert([
+            _make_counseling_row(**{"Contact ID": "KEEP"}),
+            _make_counseling_row(**{"Contact ID": "GAVE-UP", "Email": "a@b" + ".aaaa" * 14 + "!"}),
+            _make_counseling_row(**{"Contact ID": "CTRL", "Mailing City": "Des\x01Moines"}),
+        ])
+        messages = {e["record_id"]: e["message"] for e in self.issues(severity="error")}
+        self.assertEqual(messages["GAVE-UP"],
+                         "Row 2 (Contact ID GAVE-UP): SBA's schema validator could not check a value in "
+                         "this record (it gives up on some malformed values, most often an Email), so the "
+                         "record was left out of the XML; correct the value in the CSV and convert again.")
+        self.assertEqual(messages["CTRL"],
+                         "Row 3 (Contact ID CTRL): the record holds a character XML cannot carry, so the "
+                         "record was left out of the XML; correct the value in the CSV and convert again.")
+
     def test_a_failure_no_record_explains_is_reported(self):
         gave_up = {"is_valid": False, "errors": ["SBA's schema validator could not finish checking this (x)."]}
         with mock.patch("src.converters.base_converter.validate_against_xsd", return_value=gave_up):
@@ -590,19 +681,100 @@ class SafetyNetWithoutLinesTest(_ValidityCase):
         self.assertEqual(error["record_id"], "file")
         self.assertIn("no record on its own does", error["message"])
 
+    def test_the_worker_lists_such_a_failure_once(self):
+        # Its own XSD check lists the errors (xsd_errors); the converter's
+        # file error repeated them on the results page.
+        from app.services.conversion_service import run_conversion
+        whole_file = {"is_valid": False,
+                      "errors": ["Line 1: Element 'CounselingInformation': something only the whole file has."]}
+        with mock.patch("src.converters.base_converter.validate_against_xsd", return_value=whole_file), \
+                mock.patch("app.services.conversion_service.validate_against_xsd", return_value=whole_file):
+            result = run_conversion(self.write_csv([_make_counseling_row()]), self.xml_path, "counseling")
+        self.assertEqual(result["xsd_errors"], whole_file["errors"])
+        self.assertEqual([i for i in result["issues"] if "no record on its own does" in i["message"]], [])
+
+
+class SharedSchemaTest(_ValidityCase):
+    """The per-record check validates against one compiled schema, shared by
+    every conversion the worker runs in its threads. An XMLSchema's error log
+    is the object's, so two checks at once read each other's errors -- another
+    upload's values -- or none, and an invalid record with no error stopped
+    the conversion with an IndexError."""
+
+    def test_concurrent_checks_each_get_their_own_errors(self):
+        xsd = schema_path("counseling")
+        wrong = []
+
+        def check(marker):
+            content = (f"<CounselingInformation><CounselingRecord><PartnerClientNumber>{marker}"
+                       f"</PartnerClientNumber><Bogus{marker}/></CounselingRecord>"
+                       "</CounselingInformation>").encode()
+            for _ in range(500):
+                errors = validate_xml_content(content, xsd)["errors"]
+                if not errors or any(marker not in error for error in errors):
+                    wrong.append((marker, errors))
+
+        threads = [threading.Thread(target=check, args=(marker,)) for marker in ("AAA", "BBB")]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(wrong[:1], [])
+
+    def test_a_record_invalid_with_no_error_is_left_out_with_a_reason(self):
+        gave_up = {"is_valid": False, "errors": ["SBA's schema validator could not finish checking this (x)."]}
+        file_checks = iter([gave_up])
+
+        def check_file(path, xsd):
+            return next(file_checks, None) or validate_against_xsd(path, xsd)
+
+        def check_record(content, xsd):
+            return {"is_valid": b"BAD" not in content, "errors": []}
+
+        with mock.patch("src.converters.base_converter.validate_against_xsd", side_effect=check_file), \
+                mock.patch("src.converters.base_converter.validate_xml_content", side_effect=check_record):
+            root = self.convert([_make_counseling_row(**{"Contact ID": "KEEP"}),
+                                 _make_counseling_row(**{"Contact ID": "BAD"})])
+        self.assertEqual([r.findtext("PartnerClientNumber") for r in root], ["KEEP"])
+        error, = self.issues(severity="error")
+        self.assertEqual(error["record_id"], "BAD")
+        self.assertIn("gave no reason", error["message"])
+
 
 class DamagedUtf16Test(_ValidityCase):
     """A UTF-16 export with a stray byte stopped the command line with a
     UnicodeDecodeError; the web read the same bytes."""
 
-    def test_it_converts_with_a_warning(self):
-        csv_path = self.write_csv([_make_counseling_row()])
+    def convert_utf16(self, rows, damage):
+        csv_path = self.write_csv(rows)
         with open(csv_path, "rb") as f:
             text = f.read().decode("utf-8")
         with open(csv_path, "wb") as f:
-            f.write(codecs.BOM_UTF16_LE + text.encode("utf-16-le") + b"\n")
+            f.write(codecs.BOM_UTF16_LE + damage(text))
         self.converter.convert(csv_path, self.xml_path)
-        self.assertEqual(len(self.issues("input_file", "warning")), 1)
+        return [r.findtext("PartnerClientNumber") for r in SafeET.parse(self.xml_path).getroot()]
+
+    def test_it_converts_with_a_warning(self):
+        # The odd byte at the end was decoded as a last line of '�', read as
+        # a row whose Contact ID was '�'.
+        filed = self.convert_utf16([_make_counseling_row()], lambda text: text.encode("utf-16-le") + b"\n")
+        self.assertEqual(filed, ["C-001"])
+        self.assertEqual(self.validator.get_summary()["total_records"], 1)
+        warning, = self.issues("input_file", "warning")
+        self.assertIn("odd number of bytes", warning["message"])
+
+    def test_a_line_of_bytes_that_are_not_text(self):
+        def damage(text):  # half an emoji where the second row's ID was
+            header, first, second = text.splitlines(keepends=True)
+            return ((header + first).encode("utf-16-le") + "\ud83d".encode("utf-16-le", "surrogatepass")
+                    + second.removeprefix("C-2").encode("utf-16-le"))
+        filed = self.convert_utf16([_make_counseling_row(**{"Contact ID": "C-1"}),
+                                    _make_counseling_row(**{"Contact ID": "C-2"})], damage)
+        self.assertEqual(filed, ["C-1"])
+        self.assertEqual([e["message"] for e in self.issues("Contact ID", "error")],
+                         ["Missing required Contact ID."])
+        warning, = self.issues("input_file", "warning")
+        self.assertIn("replaced with '�'", warning["message"])
 
 
 class _TextCase(_ValidityCase):
@@ -753,8 +925,33 @@ class InvisibleCellTest(_ValidityCase):
 
     def test_an_invisible_name_is_a_missing_name(self):
         self.convert_row(**{"Last Name": "⁠"})
-        warning, = self.issues("Last Name", "warning")
-        self.assertEqual(warning["message"], "Missing Last Name.")
+        self.assertEqual([w["message"] for w in self.issues("Last Name", "warning")], [
+            "Row 1's 'Last Name' cell holds only invisible or unreadable characters (U+2060), so it was "
+            "read as blank. If a value belongs there, retype it in the spreadsheet.",
+            "Missing Last Name."])
+
+    def test_a_cell_read_as_blank_is_reported(self):
+        # A LocationCode of control characters was filed as the default code
+        # with nothing in the report.
+        root = self.convert([_make_counseling_row(**{"Contact ID": "C-1", "LocationCode": "\x01\x02"}),
+                             _make_counseling_row(**{"Contact ID": "C-2", "LocationCode": " \x0b"}),
+                             _make_counseling_row(**{"Contact ID": "C-3", "LocationCode": "�"})])
+        self.assertEqual(len(root), 3)
+        warning, = self.issues("LocationCode", "warning")
+        self.assertEqual((warning["record_id"], warning["message"]), (
+            "file", "3 'LocationCode' cells (rows 1, 2, 3) hold only invisible or unreadable characters "
+                    "(U+0001, U+0002, U+000B, U+FFFD), so they were read as blank. If a value belongs there, "
+                    "retype it in the spreadsheet."))
+
+    def test_a_duplicate_column_of_control_characters_does_not_erase_the_value(self):
+        row = _make_counseling_row(**{"Contact ID": "C-REAL"})
+        csv_path = os.path.join(self.dir, "in.csv")
+        with open(csv_path, "wb") as f:
+            f.write(_csv_bytes([row]).replace(b"\r\n", b",Contact ID\r\n", 1).rstrip(b"\r\n") + b",\x01\r\n")
+        self.converter.convert(csv_path, self.xml_path)
+        root = SafeET.parse(self.xml_path).getroot()
+        self.assertEqual(root.findtext(".//PartnerClientNumber"), "C-REAL")
+        self.assertEqual(self.issues(severity="error"), [])
 
     def test_a_header_with_a_zero_width_space_still_matches(self):
         row = _make_counseling_row()

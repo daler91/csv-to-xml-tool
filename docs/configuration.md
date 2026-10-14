@@ -68,6 +68,13 @@ a silent failure in a federal-reporting tool. CI has a dedicated step that
 imports the default with `SCHEMAS_DIR` unset and asserts the directory exists,
 because every other test monkeypatches it.
 
+The values in each record are checked against the XSD's own types as the record
+is built (`src/schema_rules.py`). If you replace the XSDs with ones where a type
+can't be compiled on its own — one based on a type from a file the XSD includes,
+or a pattern libxml2 refuses — a warning names the elements affected. Only their
+patterns and other libxml2-only facets go unchecked at that stage; the XSD check
+of the finished file still catches a bad value, but leaves out the whole record.
+
 ---
 
 ## Job durability

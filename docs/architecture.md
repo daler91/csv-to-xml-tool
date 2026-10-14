@@ -106,8 +106,11 @@ Inside `src/`, a conversion is always the same seven steps:
    translates each schema error back to a CSV row and column name. The
    converters run this check themselves as a safety net under step 6
    (`BaseConverter._write_valid_xml`): a record that still fails is left out
-   with an error naming its row, so the file produced is one SBA accepts. The
-   worker validates the file again for the results page.
+   with an error naming its row, so the file produced is one SBA accepts. A
+   failure no record explains is a file-level error in the command line's
+   report. The worker validates the file again for the results page, which
+   lists such a failure among its XSD errors instead (`caller_reports_xsd_errors`),
+   so it is not shown twice.
 
 Step 7 is the part worth protecting. An unmapped lxml error reads
 `Line 20: Element 'ZipCode': '' is not a valid value`. Mapped, it reads

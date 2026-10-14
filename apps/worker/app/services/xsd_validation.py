@@ -69,6 +69,18 @@ def read_text(path: str) -> str:
         return f.read()
 
 
+# The encoding pseudo-attribute of a leading XML declaration.
+_DECLARED_ENCODING = re.compile(r"""^(\s*<\?xml[^>]{0,500}?\s)encoding\s*=\s*(["'])[^"']*\2""")
+
+
+def restate_utf8(xml_content: str) -> str:
+    """xml_content with its declaration saying UTF-8, the encoding it is
+    staged in. The text arrived already decoded, so a declaration still
+    naming "windows-1252" or "UTF-16" made lxml read the UTF-8 bytes as
+    that: mojibake, or a parse error for a file that was valid."""
+    return _DECLARED_ENCODING.sub(r'\1encoding="UTF-8"', xml_content, count=1)
+
+
 async def stage_xml_content(prefix: str, xml_content: str) -> tuple[str, str]:
     """Write xml_content into a fresh temp dir; returns (tmp_dir, xml_path).
 
@@ -76,7 +88,7 @@ async def stage_xml_content(prefix: str, xml_content: str) -> tuple[str, str]:
     """
     tmp_dir = await asyncio.to_thread(tempfile.mkdtemp, prefix=prefix)
     xml_path = os.path.join(tmp_dir, "input.xml")
-    await asyncio.to_thread(write_text, xml_path, xml_content)
+    await asyncio.to_thread(write_text, xml_path, restate_utf8(xml_content))
     return tmp_dir, xml_path
 
 

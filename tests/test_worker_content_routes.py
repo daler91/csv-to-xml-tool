@@ -209,6 +209,25 @@ def test_validate_xsd_valid_content(monkeypatch):
     assert result["error_count"] == 0
 
 
+def test_validate_xsd_restates_a_stale_encoding_declaration(monkeypatch):
+    """The text arrives decoded; staged as UTF-8 under a declaration still
+    naming windows-1252, lxml read it as that: a valid file whose funding
+    source has an en dash came back invalid."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    csv = TRAINING_CSV.replace(",CORE,", ",Hurricane Dolly (TX) \u2013 1780,")
+    xml_content = asyncio.run(convert_route.convert(
+        ConvertRequest(job_id="jobV", csv_content=csv, converter_type="training")))["xml_content"]
+    assert "\u2013 1780</FundingSource>" in xml_content
+    stale = xml_content.replace("encoding='utf-8'", 'encoding = "windows-1252"', 1)
+    assert stale != xml_content
+
+    result = _validate(stale, schema_type="training")
+    assert result["is_valid"] is True, result["errors"]
+
+
 def test_validate_xsd_schema_violation(monkeypatch):
     """Well-formed XML that violates the XSD -> 200-style result with errors."""
     monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)

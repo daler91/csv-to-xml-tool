@@ -268,6 +268,82 @@ class TrainingEventValuesTest(_ValidityCase):
         warning, = self.issues("Start Date", "warning")
         self.assertIn("different values", warning["message"])
 
+    def test_a_usable_value_beats_an_earlier_unusable_one(self):
+        # A first row's '0' LocationCode left the whole event out, and its
+        # 'TBD' date, 'CORE' funding or unknown topic was filed as a default
+        # or nothing, though a later row gave a value SBA accepts.
+        root = self.convert([
+            _make_training_row(**{"LocationCode": "0", "Start Date": "TBD", "Funding Source": "CORE",
+                                  "Training Topic": "Bookkeeping stuff", "Class/Event Type": "Gala"}),
+            _make_training_row(**{"LocationCode": "249003", "Start Date": "2/14/2025",
+                                  "Funding Source": "2023 Portable Assistance - PA2023",
+                                  "Training Topic": "Marketing", "Class/Event Type": "Webinar"}),
+        ])
+        record = root.find("ManagementTrainingRecord")
+        self.assertEqual(record.findtext("Location/LocationCode"), "249003")
+        self.assertEqual(record.findtext("DateTrainingStarted"), "2025-02-14")
+        self.assertEqual(record.findtext("FundingSource"), "2023 Portable Assistance - PA2023")
+        self.assertEqual(record.findtext("TrainingTopic/Code"), "Marketing/Sales")
+        self.assertEqual(record.findtext("ProgramFormatType"), "Online")
+        self.assertEqual(self.issues(severity="error"), [])
+        warning, = self.issues("LocationCode", "warning")
+        self.assertEqual(warning["message"],
+                         "The event's rows give different values for this column ('0', '249003'); "
+                         "filed '249003', the first that is a location code SBA accepts.")
+        warning, = self.issues("Start Date", "warning")
+        self.assertIn("filed '2/14/2025', the first that is a date this tool can read", warning["message"])
+        for field in ("Funding Source", "Training Topic", "Class/Event Type"):
+            warning, = self.issues(field, "warning")
+            self.assertIn("the first that is a recognized", warning["message"])
+
+    def test_rows_with_no_usable_value_do_not_claim_one_was_filed(self):
+        root = self.convert([_make_training_row(**{"Start Date": "TBD", "Funding Source": "CORE"}),
+                             _make_training_row(**{"Start Date": "soon", "Funding Source": "Federal"})])
+        self.assertEqual(root.findtext(".//DateTrainingStarted"), "2023-12-12")
+        self.assertIsNone(root.find(".//FundingSource"))
+        messages = [i["message"] for i in self.issues("Start Date", "warning") + self.issues("Funding Source")]
+        self.assertIn("The event's rows give different values for this column ('TBD', 'soon'); none of "
+                      "them is a date this tool can read, so none was filed.", messages)
+        self.assertIn("The event's rows give different values for this column ('CORE', 'Federal'); none of "
+                      "them is a recognized SBA funding code, so none was filed.", messages)
+        self.assertFalse([m for m in messages if "filed the first" in m])
+
+    def test_one_value_written_two_ways_is_not_a_disagreement(self):
+        root = self.convert([
+            _make_training_row(**{"Start Date": "1/15/2025", "LocationCode": "249003", "Training Topic": "Marketing"}),
+            _make_training_row(**{"Start Date": "2025-01-15", "LocationCode": "249003.0",
+                                  "Training Topic": "marketing/sales"}),
+            _make_training_row(**{"Start Date": "01/15/2025 6:00 PM", "LocationCode": "249003",
+                                  "Training Topic": "Marketing"}),
+        ])
+        self.assertEqual(root.findtext(".//DateTrainingStarted"), "2025-01-15")
+        self.assertEqual(root.findtext(".//LocationCode"), "249003")
+        self.assertEqual([i for i in self.validator.issues if "different values" in i["message"]], [])
+
+    def test_the_warning_names_the_files_own_column(self):
+        rows = [_make_training_row(**{"Partner Organization": "ACME"}),
+                _make_training_row(**{"Partner Organization": "Beta Corp"})]
+        root = self.convert(rows)
+        self.assertEqual(root.findtext(".//CosponsorsName"), "ACME")
+        warning, = self.issues("Partner Organization", "warning")
+        self.assertIn("filed the first, 'ACME'", warning["message"])
+
+    def test_an_event_with_a_value_per_row_stops_reading_early(self):
+        # Every distinct value was compared with every one before it: a
+        # 20,000-row event with a cosponsor per attendee took 20 seconds.
+        class CountingRow(dict):
+            reads = 0
+
+            def __getitem__(self, key):
+                CountingRow.reads += 1
+                return super().__getitem__(key)
+
+        rows = [CountingRow(_make_training_row(Cosponsor=f"Partner {i}")) for i in range(1000)]
+        self.assertEqual(self.converter._event_value("EVT-001", rows, "cosponsor"), "Partner 0")
+        self.assertLess(CountingRow.reads, 20)  # a few rows, not all 1,000
+        warning, = self.issues("Cosponsor", "warning")
+        self.assertIn("('Partner 0', 'Partner 1', 'Partner 2', ...)", warning["message"])
+
     def test_a_start_date_equal_to_the_default_is_not_called_unparseable(self):
         self.convert([_make_training_row(**{"Start Date": "12/12/2023"})])
         self.assertEqual(self.issues("Start Date"), [])
@@ -581,8 +657,9 @@ class TrainingDemographicsTest(_ValidityCase):
                          "counts, so 4 attendee answers were counted under no race category.")
 
     def test_military_answers_no_count_takes_are_reported(self):
+        # Named by the file's own column, not the first configured alias.
         self.trained([{"Veteran Status": "Retired"}, {"Veteran Status": "Prefer not to say"}])
-        warning, = self.issues("Military Status", "warning")
+        warning, = self.issues("Veteran Status", "warning")
         self.assertIn("'Retired' fits none of SBA's military counts", warning["message"])
 
     def test_accented_gender_answers_are_not_read_by_their_letters(self):

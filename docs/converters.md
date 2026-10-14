@@ -99,10 +99,15 @@ Two behaviours to be aware of:
   The characterization goldens in `tests/golden/` exist to pin this.
 - **Event-level fields come from the first row of each group that has them**
   (`TrainingConverter._event_value`). A funding source or cosponsor only a
-  later row gives is still filed. If rows for the same event disagree about the
-  event name, start date or another event field, the first value wins and the
-  disagreement is reported as a warning. The location is the first row with a
-  complete city, state and ZIP.
+  later row gives is still filed. A value the converter parses or the schema
+  checks — start date, funding source, training topic, event type,
+  `LocationCode` — comes from the first row where it is usable, so a first
+  row's `TBD` or `0` gives way to a later row's real date or code instead of
+  costing the event. If rows for the same event disagree, the disagreement is
+  reported as a warning naming the value filed; values are compared as they
+  would be filed, so `1/15/2025` and `2025-01-15`, or `249003` and
+  `249003.0`, agree. The location is the first row with a complete city,
+  state and ZIP.
 
 Column matching for this converter is **alias-based**: `TrainingConfig.COLUMN_MAPPING`
 lists several accepted spellings per field (`Cosponsor` / `CosponsorsName` /

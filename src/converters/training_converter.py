@@ -10,11 +10,14 @@ from collections import defaultdict
 from .base_converter import BaseConverter, EmptyCSVError
 from ..config import TrainingConfig, GeneralConfig, ValidationCategory
 from .. import data_cleaning
-from ..schema_rules import SchemaGuard
+from ..schema_rules import SchemaGuard, _check_value
 from ..xml_utils import create_element
 
 # Cosponsor cells that say there was none.
 _NO_COSPONSOR = frozenset({'', 'n/a', 'na', 'none', '-', 'null', 'n/a.'})
+
+# How many of an event's differing values a warning lists.
+_SHOWN_VALUES = 3
 
 class TrainingConverter(BaseConverter):
     """
@@ -38,44 +41,98 @@ class TrainingConverter(BaseConverter):
         self._current_record = None
         self._headers = []
 
-    def _get_column_value(self, record, key, default=''):
-        """
-        Gets a value from a row dict using the list of possible column names from config.
-        """
+    # Event values the filing parses or SBA's schema checks: the method that
+    # gives a value as it would be filed ('' when it can't be), and what such a
+    # value is, for the warning when the event's rows disagree.
+    _EVENT_VALUE_CHECKS = {
+        'start_date': ('_filed_date', "a date this tool can read"),
+        'funding_source': ('_funding_code', "a recognized SBA funding code"),
+        'training_topic': ('_topic_code', "a recognized Training Topic"),
+        'event_type': ('_program_format', "a recognized Class/Event Type"),
+        'location_code': ('_location_code', "a location code SBA accepts"),
+    }
+    _LOCATION_CODE_PATH = ('ManagementTrainingReport', 'ManagementTrainingRecord', 'Location', 'LocationCode')
+
+    def _column_value(self, record, key):
+        """(header, value): the first of the key's columns that is filled in
+        this row, and its value; (None, '') when none is. The header is the
+        user's own, for an issue about the value."""
         possible_columns = self.config.COLUMN_MAPPING.get(key) or self._UNLISTED_COLUMNS.get(key, [])
         if isinstance(possible_columns, str):
             possible_columns = [possible_columns]
 
         for col in possible_columns:
             if col in record and not data_cleaning.is_empty(record[col]):
-                return str(record[col])
-        return default
+                return col, str(record[col])
+        return None, ''
+
+    def _get_column_value(self, record, key, default=''):
+        """
+        Gets a value from a row dict using the list of possible column names from config.
+        """
+        header, value = self._column_value(record, key)
+        return value if header else default
 
     def _event_value(self, event_id, rows, key):
-        """An event-level value: the first of the event's rows that gives one.
+        """An event-level value, from whichever of the event's rows gives one.
 
         Every attendee row repeats the event's columns. Reading only the first
         row dropped a Funding Source or Cosponsor that only a later row had,
-        and filed a fabricated default when the first row was blank. Rows that
-        disagree are reported; the first value is the one filed.
+        and filed a fabricated default when the first row was blank. A value
+        the filing parses or SBA's schema checks (_EVENT_VALUE_CHECKS) is taken
+        from the first row where it is usable: a first row's 'TBD' LocationCode
+        left the whole event out though the other rows gave a good one.
+
+        Rows that disagree are reported, comparing values as they would be
+        filed, so '1/15/2025' and '2025-01-15' agree. Only as many distinct
+        values are kept as the warning lists: comparing each row with every
+        value seen made a 20,000-row event take 20 seconds.
         """
-        values = []
+        method, usable_as = self._EVENT_VALUE_CHECKS.get(key, (None, None))
+        check = getattr(self, method) if method else None
+        filed_as = {}  # value as written -> as filed, or '' when unusable
+        shown = {}     # comparison key -> the value as first written
+        first = filed = None  # (header, value)
         for row in rows:
-            value = (self._get_column_value(row, key) or '').strip()
-            if value and value.casefold() not in (v.casefold() for v in values):
-                values.append(value)
-        if len(values) > 1:
-            shown = ", ".join(f"'{v}'" for v in values[:3]) + (", ..." if len(values) > 3 else "")
+            header, value = self._column_value(row, key)
+            value = value.strip()
+            if not value:
+                continue
+            if value not in filed_as:
+                filed_as[value] = check(value) if check else value
+            if first is None:
+                first = (header, value)
+            if filed is None and filed_as[value]:
+                filed = (header, value)
+            if len(shown) <= _SHOWN_VALUES:
+                shown.setdefault((filed_as[value] or value).casefold(), value)
+            elif filed:
+                break  # the value is found, and the warning can list no more
+        if first is None:
+            return ''
+        header, value = filed or first
+        if len(shown) > 1:
+            listed = ", ".join(f"'{v}'" for v in list(shown.values())[:_SHOWN_VALUES])
+            if len(shown) > _SHOWN_VALUES:
+                listed += ", ..."
+            if filed is None:
+                outcome = f"none of them is {usable_as}, so none was filed"
+            elif filed == first:
+                outcome = f"filed the first, '{value}'"
+            else:
+                outcome = f"filed '{value}', the first that is {usable_as}"
             self.validator.add_issue(
-                str(event_id), "warning", ValidationCategory.INVALID_VALUE, self._header(key),
-                f"The event's rows give different values for this column ({shown}); "
-                f"filed the first, '{values[0]}'.")
-        return values[0] if values else ''
+                str(event_id), "warning", ValidationCategory.INVALID_VALUE, header,
+                f"The event's rows give different values for this column ({listed}); {outcome}.")
+        return value
 
     def _header(self, key):
-        """The first CSV header configured for a COLUMN_MAPPING key."""
+        """The CSV header to name in an issue about a COLUMN_MAPPING key: the
+        first of its accepted spellings this file has, else the first
+        configured. A file with 'Zip' was told about 'Zip/Postal Code'."""
         headers = self.config.COLUMN_MAPPING.get(key) or self._UNLISTED_COLUMNS.get(key, key)
-        return headers if isinstance(headers, str) else headers[0]
+        headers = [headers] if isinstance(headers, str) else headers
+        return next((header for header in headers if header in self._headers), headers[0])
 
     def _read_and_validate_csv(self, input_path):
         """Read CSV, validate columns and rows. Returns (event_groups, event_id_col).
@@ -207,7 +264,7 @@ class TrainingConverter(BaseConverter):
                        or self.general_config.DEFAULT_LOCATION_CODE)
 
         date_val = self._event_value(event_id, group_rows, "start_date")
-        formatted_date = data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS)
+        formatted_date = self._filed_date(date_val)
         if not formatted_date:
             formatted_date = self.config.DEFAULT_START_DATE
             # A blank or unparseable date silently becomes a fixed past date,
@@ -384,6 +441,40 @@ class TrainingConverter(BaseConverter):
         present = {key for key in keys if self._resolve_column(rows, key)}
         return [{key: self._get_column_value(row, key) for key in present} for row in rows]
 
+    def _filed_date(self, date_val):
+        """The start date as YYYY-MM-DD, or '' when it doesn't parse."""
+        return data_cleaning.format_date(date_val, self.config.DATE_INPUT_FORMATS)
+
+    def _location_code(self, value):
+        """The LocationCode as SBA's schema reads it ('249003.0' is 249003),
+        or '' when the schema guard would refuse it and leave the event out."""
+        rule = self._schema_guard.rules.get(self._LOCATION_CODE_PATH)
+        if rule is None:  # schema facets unavailable; the final XSD check judges it
+            return data_cleaning.clean_numeric(value)
+        text, problem = _check_value(value, rule)
+        return '' if problem else (data_cleaning.clean_numeric(text) or text)
+
+    def _funding_code(self, funding_source):
+        """The SBA funding code a Funding Source names, in the schema's
+        spelling, or None."""
+        cleaned = str(funding_source).strip().lower()
+        return next((valid for valid in self.config.VALID_FUNDING_SOURCES if valid.lower() == cleaned), None)
+
+    def _topic_code(self, topic_val):
+        """The TrainingTopic/Code a Training Topic names or translates to, or None."""
+        cleaned = str(topic_val).strip() if topic_val else ''
+        if not cleaned:
+            return None
+        for valid_topic in self.config.VALID_TRAINING_TOPICS:
+            if valid_topic.lower() == cleaned.lower():
+                return valid_topic
+        return data_cleaning.map_value(cleaned, self.config.TRAINING_TOPIC_MAPPINGS, None, False)
+
+    def _program_format(self, format_val):
+        """The ProgramFormatType a Class/Event Type maps onto, or None."""
+        cleaned = str(format_val).strip() if format_val else ''
+        return data_cleaning.map_value(cleaned, self.config.PROGRAM_FORMAT_MAPPINGS, None, False) if cleaned else None
+
     def _resolve_funding_source(self, funding_source, event_id):
         """Return the funding source iff it is a valid XSD enumeration value, else None.
 
@@ -391,13 +482,13 @@ class TrainingConverter(BaseConverter):
         funding string) must be omitted rather than emitted, or the XML fails schema
         validation. Unrecognized values are flagged for review.
         """
-        cleaned = str(funding_source).strip()
-        for valid_source in self.config.VALID_FUNDING_SOURCES:
-            if valid_source.lower() == cleaned.lower():
-                return valid_source
+        valid_source = self._funding_code(funding_source)
+        if valid_source:
+            return valid_source
         self.validator.add_issue(
             str(event_id), "warning", ValidationCategory.INVALID_VALUE, "Funding Source",
-            f"Funding Source '{cleaned}' is not a recognized SBA funding code; omitted from the XML.",
+            f"Funding Source '{str(funding_source).strip()}' is not a recognized SBA funding code; "
+            "omitted from the XML.",
         )
         return None
 
@@ -414,10 +505,7 @@ class TrainingConverter(BaseConverter):
             self._warn_fabricated_default(event_id, 'Training Topic', self.config.DEFAULT_TRAINING_TOPIC,
                                           'TrainingTopic/Code')
             return self.config.DEFAULT_TRAINING_TOPIC
-        for valid_topic in self.config.VALID_TRAINING_TOPICS:
-            if valid_topic.lower() == cleaned.lower():
-                return valid_topic
-        mapped = data_cleaning.map_value(cleaned, self.config.TRAINING_TOPIC_MAPPINGS, None, False)
+        mapped = self._topic_code(cleaned)
         if mapped:
             return mapped
         self.validator.add_issue(
@@ -435,7 +523,7 @@ class TrainingConverter(BaseConverter):
         if not cleaned:
             self._warn_fabricated_default(event_id, 'Class/Event Type', default, 'ProgramFormatType')
             return default
-        mapped = data_cleaning.map_value(cleaned, self.config.PROGRAM_FORMAT_MAPPINGS, None, False)
+        mapped = self._program_format(cleaned)
         if mapped:
             return mapped
         self.validator.add_issue(

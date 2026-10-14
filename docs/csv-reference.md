@@ -196,9 +196,13 @@ because the converter resolves the column through aliases and flags a missing
 event id itself. An exact-match check here would reject valid aliased uploads.
 
 **Alias-based matching.** Each field accepts several spellings; in each row,
-the first one that is filled wins. An event-level field (name, start date,
-funding source, topic, type, cosponsor) is taken from the first of the event's
-rows that has it, with a warning when rows disagree:
+the first one that is filled wins, and issues name the spelling your file
+uses. An event-level field (name, start date, funding source, topic, type,
+cosponsor, `LocationCode`) is taken from the first of the event's rows that
+has it, with a warning when rows disagree. For the start date, funding source,
+topic, type and `LocationCode` it is the first row whose value can be filed —
+a date that parses, a code SBA accepts — and two spellings of one value
+(`1/15/2025` and `2025-01-15`) are not a disagreement:
 
 | Field | Accepted headers |
 |---|---|

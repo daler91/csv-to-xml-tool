@@ -501,6 +501,27 @@ def _conversion_value_checks(headers: list[str], csv_rows: list[dict[str, str]],
     return checks
 
 
+def row_shape_checks(reader) -> list[dict]:
+    """The checks for what a data_cleaning.NormalizedDictReader saw rows lose
+    (BaseConverter._report_row_shapes reports the same at conversion): a cell
+    that swallowed the rows after it, and rows with values past the last column."""
+    checks = []
+    if reader.swallowed_rows:
+        number, column, _ = reader.swallowed_rows[0]
+        checks.append(_quality_check(
+            "unclosed_quote", "Cells holding what look like further rows", len(reader.swallowed_rows), "error",
+            "A quotation mark in these cells is probably opened and never closed, so the lines after it "
+            "were read into the one cell; those rows are missing from the federal XML. The first is row "
+            f"{number}'s '{column}' cell.", column))
+    if reader.long_rows:
+        checks.append(_quality_check(
+            "extra_values", "Rows with more values than the header has columns", len(reader.long_rows),
+            "warning",
+            "Their values past the last column are dropped, and their other values may be in the wrong "
+            f"columns; check them for a comma that isn't inside quotes. The first is row {reader.long_rows[0][0]}."))
+    return checks
+
+
 def analyze_data_quality(headers: list[str], csv_rows: list[dict[str, str]],
                          converter_type: str) -> dict:
     """Build the /preview ``data_quality`` payload for a parsed CSV.

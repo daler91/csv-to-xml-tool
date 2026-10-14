@@ -316,7 +316,9 @@ data-quality panel means nothing was detected — not that nothing was checked.
 It reads cells and rows as the conversion does (see
 [How cells and rows are read](#how-cells-and-rows-are-read)): an ID of `#N/A`
 counts as missing, and rows that are not records are counted under
-`not_a_record` rather than as rows missing their ID.
+`not_a_record` rather than as rows missing their ID. A cell an unclosed quote
+filled with further rows (`unclosed_quote`, an error) and rows with values past
+the last column (`extra_values`) are counted too.
 
 Duplicate headers are preserved rather than deduplicated when the header row is
 read, so two columns collapsing to the same normalized name can be detected

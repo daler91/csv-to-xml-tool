@@ -43,8 +43,11 @@ absent.
   (zero-width space, BOM, direction marks, control characters) or `�` (bytes
   that weren't text, so a damaged ID is not filed as the ID). The column's
   usual blank-cell handling then applies — a row whose ID is `#N/A` is left out
-  with a "Missing required" error — and one file-level warning counts the Excel
-  errors and names the first.
+  with a "Missing required" error, a blank `LocationCode` gets the default — and
+  one file-level warning counts the Excel errors and names the first. Cells
+  that held only invisible or unreadable characters get one file-level warning
+  per column, naming the rows and the characters (`U+0001`), so a default filed
+  for one is never silent. A cell of ordinary spaces is just blank.
 - **A row that is not a record is skipped, with a warning naming it**
   (`data_validation.non_record_reason`): a blank row (a line of commas, or the
   `""` lines around a report footer), a row repeating the header row (two

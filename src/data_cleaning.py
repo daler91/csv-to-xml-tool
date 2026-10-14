@@ -90,7 +90,7 @@ def is_blank_cell(value: Any) -> bool:
     text = str(value) if value else ""
     if REPLACEMENT_CHARACTER in text:
         text = text.replace(REPLACEMENT_CHARACTER, "")
-    return is_invisible(text) or is_excel_error(text)
+    return is_invisible(text) or is_excel_error(value)
 
 
 def remove_format_chars(text: str) -> str:

@@ -22,7 +22,7 @@ from src.schema_rules import SchemaGuard, _check_value, load_rules, schema_path
 from src.xml_validator import validate_against_xsd, validate_xml_content
 
 from tests.test_integration_xsd import _make_counseling_row, _make_training_client_row, _make_training_row
-from tests.test_xsd_validity import _XSD, _ValidityCase
+from tests.test_xsd_validity import _XSD, _ValidityCase, _csv_bytes
 
 # What base_converter._write_valid_xml says when the final XSD check had to
 # leave a record out: the schema guard should have handled the value itself.
@@ -642,8 +642,33 @@ class InvisibleCellTest(_ValidityCase):
 
     def test_an_invisible_name_is_a_missing_name(self):
         self.convert_row(**{"Last Name": "⁠"})
-        warning, = self.issues("Last Name", "warning")
-        self.assertEqual(warning["message"], "Missing Last Name.")
+        self.assertEqual([w["message"] for w in self.issues("Last Name", "warning")], [
+            "Row 1's 'Last Name' cell holds only invisible or unreadable characters (U+2060), so it was "
+            "read as blank. If a value belongs there, retype it in the spreadsheet.",
+            "Missing Last Name."])
+
+    def test_a_cell_read_as_blank_is_reported(self):
+        # A LocationCode of control characters was filed as the default code
+        # with nothing in the report.
+        root = self.convert([_make_counseling_row(**{"Contact ID": "C-1", "LocationCode": "\x01\x02"}),
+                             _make_counseling_row(**{"Contact ID": "C-2", "LocationCode": " \x0b"}),
+                             _make_counseling_row(**{"Contact ID": "C-3", "LocationCode": "�"})])
+        self.assertEqual(len(root), 3)
+        warning, = self.issues("LocationCode", "warning")
+        self.assertEqual((warning["record_id"], warning["message"]), (
+            "file", "3 'LocationCode' cells (rows 1, 2, 3) hold only invisible or unreadable characters "
+                    "(U+0001, U+0002, U+000B, U+FFFD), so they were read as blank. If a value belongs there, "
+                    "retype it in the spreadsheet."))
+
+    def test_a_duplicate_column_of_control_characters_does_not_erase_the_value(self):
+        row = _make_counseling_row(**{"Contact ID": "C-REAL"})
+        csv_path = os.path.join(self.dir, "in.csv")
+        with open(csv_path, "wb") as f:
+            f.write(_csv_bytes([row]).replace(b"\r\n", b",Contact ID\r\n", 1).rstrip(b"\r\n") + b",\x01\r\n")
+        self.converter.convert(csv_path, self.xml_path)
+        root = SafeET.parse(self.xml_path).getroot()
+        self.assertEqual(root.findtext(".//PartnerClientNumber"), "C-REAL")
+        self.assertEqual(self.issues(severity="error"), [])
 
     def test_a_header_with_a_zero_width_space_still_matches(self):
         row = _make_counseling_row()

@@ -16,6 +16,7 @@ import csv
 import io
 import logging
 import os
+import re
 from typing import TYPE_CHECKING, Callable, Optional
 
 from .. import data_cleaning
@@ -41,6 +42,10 @@ _UNPLACED_ERRORS = (
     (XML_PARSE_ERROR, "the record holds a character XML cannot carry"),
     (NO_REASON_GIVEN, NO_REASON_GIVEN),
 )
+
+# Whitespace to Python, which strips it, but control characters XML can't carry
+# (or, U+0085, nobody can see): a vertical tab is a line break pasted from Word.
+_CONTROL_WHITESPACE = re.compile("[\x0b\x0c\x1c-\x1f\x85]")
 
 # Type alias for the progress callback signature.
 # First int is rows processed so far, second is total rows.
@@ -118,11 +123,12 @@ class BaseConverter(abc.ABC):
         FILE_ACCESS error and re-raised.
         """
         excel_errors: list[tuple[int, str, str]] = []
+        unseen: list[tuple[int, str, str]] = []
         try:
             with open(input_path, "rb") as csv_file:
                 text, encoding = data_cleaning.decode_csv_bytes(csv_file.read())
             reader = data_cleaning.NormalizedDictReader(io.StringIO(text))
-            rows = [self._blank_unwritable_cells(row, number, excel_errors)
+            rows = [self._blank_unwritable_cells(row, number, excel_errors, unseen)
                     for number, row in enumerate(reader, 1)]
         except (OSError, csv.Error) as e:
             self.logger.error(f"Failed to read CSV file: {e}")
@@ -143,7 +149,30 @@ class BaseConverter(abc.ABC):
                 f"{len(excel_errors)} cell(s) hold an Excel error instead of a value, the first "
                 f"'{value}' in row {number}; they were read as blank. Fix the formula in the "
                 "spreadsheet if a value belongs there.")
+        self._report_unseen_cells(unseen)
         return reader.fieldnames, rows
+
+    def _report_unseen_cells(self, unseen: list[tuple[int, str, str]]) -> None:
+        """One warning per column for the cells _blank_unwritable_cells read
+        as blank for holding only characters nobody can see or read. A
+        LocationCode of two control characters was filed as the default code,
+        and nothing said why its cell counted as empty."""
+        by_column: dict[str, list[tuple[int, str]]] = {}
+        for number, column, value in unseen:
+            by_column.setdefault(column, []).append((number, value))
+        for column, cells in by_column.items():
+            codes = sorted({f"U+{ord(ch):04X}" for _, value in cells for ch in value if ch not in " \t\n\r"})
+            shown = ", ".join(codes[:5]) + (", ..." if len(codes) > 5 else "")
+            if len(cells) == 1:
+                where = f"Row {cells[0][0]}'s '{column}' cell holds"
+            else:
+                numbers = ", ".join(str(number) for number, _ in cells[:5]) + (", ..." if len(cells) > 5 else "")
+                where = f"{len(cells)} '{column}' cells (rows {numbers}) hold"
+            self.validator.add_issue(
+                "file", "warning", ValidationCategory.INVALID_VALUE, column,
+                f"{where} only invisible or unreadable characters ({shown}), so "
+                f"{'it was' if len(cells) == 1 else 'they were'} read as blank. If a value belongs "
+                "there, retype it in the spreadsheet.")
 
     def _report_row_shapes(self, reader) -> None:
         """Report the rows NormalizedDictReader saw lose data: a cell that
@@ -177,11 +206,12 @@ class BaseConverter(abc.ABC):
                                  f"{what} Check for a comma that isn't inside quotes.")
 
     @staticmethod
-    def _blank_unwritable_cells(row: dict, number: int, excel_errors: list) -> dict:
+    def _blank_unwritable_cells(row: dict, number: int, excel_errors: list, unseen: list) -> dict:
         """Treat a cell that holds no value as blank: one of only characters
-        XML cannot carry or nobody can see (data_cleaning.is_invisible), or an
-        Excel error such as '#N/A' (appended to `excel_errors` with its row,
-        for one warning).
+        XML cannot carry, nobody can see, or that weren't text ('�'; see
+        data_cleaning.is_blank_cell), or an Excel error such as '#N/A'. Each
+        is appended, as (row, column, cell), to `excel_errors` or `unseen`,
+        for the warnings _read_csv records.
 
         SchemaGuard strips the characters XML can't carry from what is written,
         which left such a Contact ID as an empty <PartnerClientNumber/> -- valid
@@ -190,10 +220,14 @@ class BaseConverter(abc.ABC):
         blank-cell handling, such as the error that leaves out a row without an ID.
         """
         for column, value in row.items():
-            # Whitespace is left as it is: every reader already trims it.
-            if value and not value.isspace() and data_cleaning.is_blank_cell(value):
+            # Whitespace is left as it is: every reader already trims it. A
+            # control character Python counts as whitespace is still reported.
+            if (value and (not value.isspace() or _CONTROL_WHITESPACE.search(value))
+                    and data_cleaning.is_blank_cell(value)):
                 if data_cleaning.is_excel_error(value):
                     excel_errors.append((number, column, value.strip()))
+                else:
+                    unseen.append((number, column, value))
                 row[column] = ""
         return row
 

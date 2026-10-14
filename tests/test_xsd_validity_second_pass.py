@@ -78,6 +78,15 @@ class GuardAgreesWithLibxml2Test(_ValidityCase):
         rule.checker.accepts(rule.check_tag, "98765")
         self.assertEqual(cache().currsize, size + 1)
 
+    def test_line_endings_are_measured_as_the_file_reads_them(self):
+        # xml.etree writes CR as it is, and the parser reads CR LF as LF: 20
+        # characters with a CR LF were 19 in the file, failing an xs:length of 20.
+        rule = _rule("training", "TrainingLocation", "PostalCode")
+        self.assertEqual(rule.length, 20)
+        self.assertEqual(_check_value("x" * 18 + "\r\n", rule)[1], "must be exactly 20 characters")
+        self.assertEqual(_check_value("x" * 19 + "\r\n", rule), ("x" * 19 + "\n", None))
+        self.assertEqual(_check_value("x" * 19 + "\r", rule), ("x" * 19 + "\n", None))
+
     def test_iso_basic_and_week_dates_are_not_xs_date(self):
         rule = _rule("counseling", "CounselorRecord", "DateCounseled")
         for text in ("20250115", "2025-W03-3", "2025-W03", "0000-01-01"):

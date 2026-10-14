@@ -420,8 +420,17 @@ def _resolve_enumeration(text: str, rule: ElementRule) -> str | None:
     return None
 
 
+def _as_parsed(text: str) -> str:
+    """`text` as the file's reader will see it. xml.etree writes a carriage
+    return as it is, and every XML parser reads CR LF and a lone CR as LF, so
+    a value measured with them is shorter in the file: one the guard kept at
+    the 20 characters an xs:length allows was 19 there, and failed."""
+    return text.replace("\r\n", "\n").replace("\r", "\n") if "\r" in text else text
+
+
 def _check_value(text: str, rule: ElementRule) -> tuple[str, str | None]:
     """(possibly canonicalized text, reason it violates a facet or None)."""
+    text = _as_parsed(text)
     if rule.enumeration:
         resolved = _resolve_enumeration(text, rule)
         if resolved is None:
@@ -587,7 +596,7 @@ class SchemaGuard:
         if rule is None or rule.has_children:
             return
 
-        text = cleaned
+        text = _as_parsed(cleaned)
         if rule.max_length is not None and len(text) > rule.max_length and element.tag not in _IDENTIFIER_TAGS:
             truncated = text[:rule.max_length].rstrip()
             what = "kept the initial" if rule.max_length == 1 else f"truncated to {_chars(rule.max_length)}"

@@ -33,7 +33,7 @@ ROWS_PER_FILE = 12
 JUNK = [
     "", " ", "N/A", "none", "Yes", "NO", "Y", "true", "0", "-1", "12.5", "Other", "Unknown",
     "Prefer not to say", "José Muñoz–Peña", "<b>&amp;\"'</b>", "line1\nline2", "ctrl\x0bchar",
-    "x" * 300, "A; B; C", ";", " ; ", "  padded  ", "\U0001F600 emoji", "﻿bom", "Ø" * 50,
+    "x" * 300, "A; B; C", ";", " ; ", "  padded  ", "\U0001F600 emoji", "\ufeffbom", "Ø" * 50,
 ]
 KIND_POOLS = {
     "date": ["2025-01-15", "1/5/2025", "01/05/25", "13/01/2025", "02/30/2025", "Jan 5 2025",

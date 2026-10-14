@@ -917,14 +917,14 @@ class InvisibleCellTest(_ValidityCase):
 
     def test_an_invisible_contact_id_is_a_missing_contact_id(self):
         root = self.convert([_make_counseling_row(**{"Contact ID": "KEEP"}),
-                             _make_counseling_row(**{"Contact ID": "​"}),
-                             _make_counseling_row(**{"Contact ID": "﻿ ‎"})])
+                             _make_counseling_row(**{"Contact ID": "\u200b"}),
+                             _make_counseling_row(**{"Contact ID": "\ufeff \u200e"})])
         self.assertEqual([r.findtext("PartnerClientNumber") for r in root], ["KEEP"])
         self.assertEqual(len([e for e in self.issues("Contact ID", "error")
                               if e["message"] == "Missing required Contact ID."]), 2)
 
     def test_an_invisible_name_is_a_missing_name(self):
-        self.convert_row(**{"Last Name": "⁠"})
+        self.convert_row(**{"Last Name": "\u2060"})
         self.assertEqual([w["message"] for w in self.issues("Last Name", "warning")], [
             "Row 1's 'Last Name' cell holds only invisible or unreadable characters (U+2060), so it was "
             "read as blank. If a value belongs there, retype it in the spreadsheet.",
@@ -955,7 +955,7 @@ class InvisibleCellTest(_ValidityCase):
 
     def test_a_header_with_a_zero_width_space_still_matches(self):
         row = _make_counseling_row()
-        row["​Contact ID"] = row.pop("Contact ID")
+        row["\u200bContact ID"] = row.pop("Contact ID")
         root = self.convert([row])
         self.assertEqual(root.findtext(".//PartnerClientNumber"), "C-001")
 
@@ -967,7 +967,7 @@ class IdentifierCharactersTest(_ValidityCase):
     then wrote as 'EVT-001' too."""
 
     def test_an_invisible_character_is_taken_out_of_a_contact_id(self):
-        root = self.convert_row(**{"Contact ID": "003XX000004TMM1AAA​", "Activity ID": "‎A-1"})
+        root = self.convert_row(**{"Contact ID": "003XX000004TMM1AAA\u200b", "Activity ID": "\u200eA-1"})
         self.assertEqual(root.findtext("CounselingRecord/PartnerClientNumber"), "003XX000004TMM1AAA")
         self.assertEqual(root.findtext(".//PartnerSessionNumber"), "A-1")
         warning, = self.issues("Contact ID", "warning")
@@ -989,7 +989,7 @@ class IdentifierCharactersTest(_ValidityCase):
     def test_a_training_client_member_id(self):
         self.converter_class = TrainingClientConverter
         self.converter = TrainingClientConverter(self.converter.logger, self.validator)
-        root = self.convert([_make_training_client_row(**{"Member ID": "00vPe00000Pn89L﻿"})])
+        root = self.convert([_make_training_client_row(**{"Member ID": "00vPe00000Pn89L\ufeff"})])
         self.assertEqual(root.findtext(".//PartnerSessionNumber"), "00vPe00000Pn89L")
         self.assertEqual(len(self.issues("Member ID", "warning")), 1)
 

@@ -12,6 +12,8 @@ import os
 import unittest
 import xml.etree.ElementTree as ET
 
+from defusedxml import ElementTree as SafeET
+
 import pytest
 
 # fastapi (and the worker stack imported below) is a worker dependency; skip this
@@ -166,7 +168,7 @@ def test_convert_end_to_end_content_to_valid_xml(monkeypatch):
     result = asyncio.run(convert_route.convert(req))
 
     assert result["xsd_valid"] is True, result["xsd_errors"]
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     records = root.findall("ManagementTrainingRecord")
     assert len(records) == 1
     nt = records[0].find("NumberTrained")
@@ -361,7 +363,7 @@ def test_convert_ignores_stale_event_id_mapping(monkeypatch):
     assert result["stats"]["errors"] == 0
     cats = [i["category"] for i in result["issues"]]
     assert "missing_required_field" not in cats
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     assert len(root.findall("ManagementTrainingRecord")) == 1
 
 
@@ -480,7 +482,7 @@ def _misordered_counseling_xml(monkeypatch):
     result = asyncio.run(convert_route.convert(req))
     assert result["xsd_valid"] is True, result["xsd_errors"]
 
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     client_intake = root.find(".//ClientIntake")
     race = client_intake.find("Race")
     client_intake.remove(race)
@@ -503,7 +505,7 @@ def test_fix_xml_reorders_and_revalidates(monkeypatch):
     assert result["errors"] == []
     assert result["error_count"] == 0
     assert result["error_details"] == []
-    fixed_root = ET.fromstring(result["fixed_xml_content"])
+    fixed_root = SafeET.fromstring(result["fixed_xml_content"])
     assert fixed_root.find(".//ClientIntake")[0].tag == "Race"
 
 
@@ -613,7 +615,7 @@ def test_fix_xml_reorders_outside_client_intake(monkeypatch):
     place anywhere else came back changed=false, and the page then said the
     problem was in the data."""
     monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
-    root = ET.fromstring(_golden_counseling())
+    root = SafeET.fromstring(_golden_counseling())
     counselor = root.find("CounselingRecord/CounselorRecord")
     language = counselor.find("Language")
     counselor.remove(language)
@@ -623,7 +625,7 @@ def test_fix_xml_reorders_outside_client_intake(monkeypatch):
 
     assert (result["changed"], result["is_valid"]) == (True, True), result["errors"]
     assert result["fix_error"] is None
-    fixed = ET.fromstring(result["fixed_xml_content"]).find("CounselingRecord/CounselorRecord")
+    fixed = SafeET.fromstring(result["fixed_xml_content"]).find("CounselingRecord/CounselorRecord")
     assert [child.tag for child in fixed][-1] == "CounselingHours"
 
 

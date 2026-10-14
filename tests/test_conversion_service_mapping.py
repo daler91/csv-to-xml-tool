@@ -82,7 +82,7 @@ def test_bom_prefixed_training_csv_with_mapping_converts(tmp_path, monkeypatch):
     # mapping branch is exercised.
     monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
     result = _convert(
-        tmp_path, "﻿" + TRAINING_CSV, column_mapping={"city": "City"}
+        tmp_path, "\ufeff" + TRAINING_CSV, column_mapping={"city": "City"}
     )
     assert result["stats"]["successful"] == 1
     assert result["stats"]["errors"] == 0

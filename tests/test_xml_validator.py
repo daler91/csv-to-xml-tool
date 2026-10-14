@@ -1,3 +1,7 @@
+import contextlib
+import io
+import importlib
+import types
 import unittest
 from unittest.mock import patch
 import sys
@@ -524,10 +528,17 @@ class TestCommandLineExitStatus(_FixerCase):
     file that failed the schema, and the fixers for output that still did."""
 
     def run_module(self, module, *args):
-        import subprocess
-        env = dict(os.environ, SBA_OUTPUT_BASE=self.tmp)
-        return subprocess.run([sys.executable, '-m', module, *args], cwd=_REPO_ROOT, env=env,
-                              capture_output=True, text=True)
+        """`python -m module args`, run in this process: the exit status the
+        command line would give, and what it wrote to stderr."""
+        stderr = io.StringIO()
+        with patch.dict(os.environ, SBA_OUTPUT_BASE=self.tmp), \
+                patch.object(sys, 'argv', [module, *args]), contextlib.redirect_stderr(stderr):
+            try:
+                # Both modules end in sys.exit(main()).
+                code = importlib.import_module(module).main() or 0
+            except SystemExit as stop:  # argparse
+                code = stop.code or 0
+        return types.SimpleNamespace(returncode=code, stderr=stderr.getvalue())
 
     def bad_date_file(self):
         tree = self.golden()

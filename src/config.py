@@ -15,8 +15,13 @@ FISCAL_YEAR_START_MONTH = 10
 DATE_INPUT_FORMATS = [
     '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y',
     '%m/%d/%y', '%d-%m-%Y',
+    # Day-first after month-first, so 03/04/2025 still reads as March 4 (and
+    # is_ambiguous_date flags it), and before year-first: '%y/%m/%d' read
+    # 13/01/25 (13 January 2025) as 2013-01-25, and 15/01/2025 not at all.
+    '%d/%m/%Y', '%d/%m/%y',
     '%Y/%m/%d', '%y/%m/%d',
     '%m-%d-%y',
+    '%b %d, %Y', '%B %d, %Y',
 ]
 
 # Delimiter for Salesforce multi-select picklist exports (e.g. "Race", "Services
@@ -560,11 +565,13 @@ EXPORT_COUNTRY_LOOKUP = {code.lower(): code for code in EXPORT_COUNTRY_CODES}
 # Race keywords, shared by the training converter's per-category counts and the
 # counseling converter's Race/Code mapping. Each keyword matches at the start
 # of a word (data_cleaning.classify_races), so 'middle east' still matches
-# "Middle Eastern" but 'asian' no longer matches inside "Caucasian".
+# "Middle Eastern" but 'asian' no longer matches inside "Caucasian". The
+# answer's punctuation reads as a space ("African-American").
 RACE_KEYWORDS = {
     "asian": ['asian'],
     "black": ['black', 'african american'],
-    "native_american": ['american indian', 'alaska native', 'native american'],
+    "native_american": ['american indian', 'alaska native', 'alaskan native', 'native alaskan',
+                        'native american'],
     "pacific_islander": ['hawaiian', 'pacific islander'],
     "white": ['white', 'caucasian'],
     "middle_eastern": ['middle east'],
@@ -715,6 +722,22 @@ class TrainingClientConfig:
         'Start Date': 'Date',
         'Currently in Business?': 'Currently In Business?',
     }
+
+    @classmethod
+    def rename_columns(cls, row: dict, defaults: dict | None = None) -> dict:
+        """`row` with its columns renamed by COLUMN_MAPPING (others pass
+        through), over `defaults`. A blank cell never overwrites a value
+        already there: a blank 'Date' column erased the Start Date renamed to
+        it, and a blank 'Type of Session' the 'Training' default, which then
+        invented 0.5 contact hours. When both are filled the later column
+        wins, as data_cleaning.NormalizedDictReader resolves a repeated header.
+        """
+        renamed = dict(defaults or {})
+        for column, value in row.items():
+            target = cls.COLUMN_MAPPING.get(column, column)
+            if str(value).strip() or not str(renamed.get(target) or '').strip():
+                renamed[target] = value
+        return renamed
 
     @classmethod
     def reverse_column_mapping(cls) -> dict[str, str]:

@@ -13,6 +13,14 @@ out are those with an ID over 20 characters or a bad `LocationCode` (D1), and th
 XSD check (D2) never had to step in. `tests/test_xsd_validity_fuzz.py` keeps a seeded
 version of that run as a regression test, and `tests/test_xsd_validity.py` pins each fix.
 
+**Second pass (2026-10-14):** see [Second pass](#second-pass) at the end. It found no
+realistic input whose final file fails the XSDs, but several ways to get no file at all
+(a hang, a crash), records lost to the final check because the schema guard judged
+values differently from libxml2, blind spots in that final check, values changed or
+dropped without a word, and a fix-XML tool that reported success on files that still
+failed. All are fixed except the decisions listed there; `tests/test_xsd_validity_second_pass.py`
+pins them.
+
 ## Question
 
 The SBA validates each uploaded file against two XSDs. Does every file this tool
@@ -267,3 +275,177 @@ completely.
    - Each comes with a regression test, and the fuzz runs above become a test that
      fails if any generated file is invalid.
 2. **After D1–D3:** V.5, the D2 safety net, and Media's half of V.2.
+
+## Second pass
+
+Date: 2026-10-14, against `master` at `721711b` (after PR #136), with the same two XSDs
+(byte-identical to the ones SBA supplied).
+
+### Short answer
+
+- **Every file the converters produced from realistic input already validated.** That
+  held before this pass and holds after it: across about 13,000 generated files (below),
+  no final file failed the XSDs.
+- **But "always validates" was carried by the final XSD check (D2), and D2 had gaps.**
+  The schema guard judged values in Python, not as libxml2 does, so D2 left whole records
+  out for one optional value. When libxml2 gave up on a value, or the file was not
+  well-formed, D2 did nothing at all, and the command line reported a clean conversion.
+- **Some inputs produced no file:** one Email cell hung the conversion for hours, an
+  exponent such as `1E+99999999` never finished, and a UTF-16 CSV with a stray byte
+  crashed the command line.
+- **Many values were changed or dropped without a word,** against the tool's rule that
+  every change is reported. Among them: training read every event value from its first
+  row, and footer rows from a Salesforce report became training events.
+- **The fix-XML tool reordered only `ClientIntake`,** said "Successfully fixed" (exit 0)
+  on files that still failed, and could turn a valid file into an invalid one.
+
+### Method
+
+1. **Eight independent lenses**, each required to ship a script that reproduces its
+   finding with the real code path and validates the final file with lxml:
+   - counseling structure;
+   - training structure;
+   - the guard against libxml2;
+   - every hard-coded value against the XSD;
+   - two new fuzz campaigns, through `run_conversion` (with and without column
+     mappings) and the CLI path;
+   - the D2 plumbing;
+   - the fix and validate tools.
+   The pipeline and fix-tool lenses ran twice, independently.
+2. **Every repro was run on the code before and after the fixes.** 98 findings came in,
+   many of them duplicates across lenses. Each reproduced on `721711b`.
+3. **An adversarial review of the fixes,** including a differential run of 2,250 generated
+   files through both the old and the new code. Every difference in XML or issues was
+   assigned to the commit that intended it. No file valid before became invalid. Its 31
+   findings were fixed or answered below.
+
+| Campaign | Files | Invalid final files |
+|---|---|---|
+| Training: realistic, adversarial, control/Unicode-heavy, 5,000- and 33,000-attendee events | 4,500+ | 0 |
+| Counseling and training-client through `run_conversion` and the CLI, mapped and unmapped (incl. 36k realistic rows) | 3,600+ | 0 |
+| Pipeline lens through `run_conversion`, all three converters | 660 | 0 |
+| Differential (old vs new), all three converters | 2,250 | 0 (old: 0) |
+| Same, schema guard switched off so D2 does all the work | 1,050 | new 0, old 146 |
+
+### Findings
+
+Each was fixed in this pass unless marked otherwise.
+
+**W.1 The schema guard judged values differently from libxml2 — `[FIXED]`.**
+SchemaGuard compiled XSD patterns with Python's `re` and checked numbers and dates with
+`Decimal` and `date.fromisoformat`. As a result:
+- **Email hang:** SBA's `EmailType` pattern backtracks exponentially in Python. A 74-character
+  Email cell took about 47 seconds per check, and a 90-character one never finished.
+- **Non-ASCII digits:** `１９１５３` in FIPS_Code, or a ZIP in Tamil or NKo digits, passed
+  the guard and failed the XSD. D2 then left out the whole record, or the whole training
+  event, for one optional value.
+- **ISO date forms:** ISO basic and week dates (`20250115`, `2025-W03-3`) passed as
+  `xs:date`.
+- **A different regex dialect:** in XSD, `^`, `$` and `\p{..}` mean something else, or
+  don't compile in Python, so a schema update could have stopped every conversion.
+- **A crash on long numbers:** a whole number of more than 4,300 digits written with `.0`
+  raised.
+
+*Fix:* the Python checks now only put values in canonical form and explain the problem;
+libxml2 makes the final call. Each value is validated against the element's own simple
+type, in a small schema compiled once per XSD. The cache is bounded and thread-safe. If
+libxml2 gives up on a value (about 2 s), the value counts as invalid.
+
+**W.2 Inputs that produced no file — `[FIXED]`.**
+- `clean_numeric` wrote exponents out in full. `1e5000` raised and cost the record;
+  `1E+99999999` never finished.
+- `'NaN%'` became a female share of 100.
+- A UTF-16 CSV with a stray byte or half an emoji crashed the command line; the web read
+  the same file.
+- The new date-time pattern (W.4) was quadratic on long whitespace; caught in review.
+- In the worker, any per-row exception became a `TypeError` that failed the whole job,
+  because the logger wrapper rejects `exc_info`.
+
+**W.3 Blind spots in the final XSD check (D2) — `[FIXED]`.**
+- **Errors with no line:** D2 left out only the records it could place by an error's line.
+  libxml2 giving up (as it does on the pathological email) reports no line and hides
+  every other error in the file, so the file stayed invalid and nothing was recorded.
+  Records are now checked one at a time when an error can't be placed. The file is
+  re-validated after every rewrite, and a failure no record explains becomes a
+  file-level error.
+- **Speed:** leaving out 20,000 records took 45 s, because the work was quadratic; it is
+  now one pass.
+- **Thread safety (found in review):** the per-record check shared one compiled schema
+  across worker threads. Two jobs could swap error messages, or crash.
+
+**W.4 Values changed or dropped without a report — `[FIXED]`.**
+Each now either keeps the value or records a warning naming the cell.
+
+*Counseling and training-client:*
+- **Demographic answers:** Gender, Ethnicity, Disability and Employee Owned answers it
+  can't map were dropped silently. "Decline to answer" and "Unknown" are now
+  `Prefer not to say`, as Race already did.
+- **Branch Of Service:** a 'Prefer not to say' branch, one of SBA's values, was reported
+  missing. A branch given without military service was dropped silently.
+- **Legal Entity:** dropped silently for a client not in business.
+- **FIPS_Code:** dropped silently when Rural_vs_Urban was not Rural or Urban.
+- **Dates:** unreadable optional dates were dropped silently. Salesforce Date/Time exports
+  (`1/15/2025 10:30 AM`, `…T14:30:00.000Z`) were not read at all, so the session date was
+  lost. A UTC timestamp's date is now flagged.
+- **Unreadable numbers:** employee counts and prep/travel hours were dropped silently. An
+  unreadable `% Female` was filed as 0, and an unreadable `(Meeting)` amount filed 0
+  instead of the intake value.
+- **OnFile:** a Client Signature answer other than yes/no was filed as 'No'.
+- **'Other' codes:** a Code of 'Other' was filed for "Other" text alone in five code lists.
+- **Contact hours:** training-client invented 0.5 contact hours with no warning on the row.
+
+*Training:*
+- **Event values from the first row only:** every event value came from the event's first
+  row. A Funding Source or Cosponsor on a later row was lost, a blank first row filed a
+  fabricated default, and rows that disagreed went unreported.
+- **LocationCode:** a `LocationCode` column was ignored; it is now honoured, as on the
+  counseling forms (decision D1 applies).
+- **ZIP:** a ZIP was taken from any five digits in the cell, so a phone number's first five
+  digits became the ZIP. A ZIP+4 lost its +4.
+- **Veteran Status:** a Yes/No checkbox counted no veterans.
+- **Race labels:** labels such as "African-American" and "Alaskan Native" counted in no
+  category, with nothing said.
+- **Cosponsor:** `N/A ` and `None` were filed as cosponsor names.
+
+**W.5 CSV shapes read wrongly without a report — `[FIXED]`.**
+- **Non-records:** a Salesforce report's title and footer lines, a second header row, and
+  `#N/A` IDs became training events (and counseling records).
+- **Unclosed quote:** it swallowed every following row.
+- **Long rows:** a row with more cells than the header lost the extra cells.
+- **Column mapping:** a mapping on a header with stray spaces was never applied.
+- **Training-client overwrites:** a blank counseling-named column erased the renamed
+  training value.
+- **Identifiers:** a cell of only control or zero-width characters became an empty or
+  invisible ID. IDs differing only by such a character were filed twice.
+- **Day-first dates:** `13/01/25` was read year-first.
+
+**W.6 The fix-XML and validate tools — `[FIXED]`.**
+- **Order:** the fixer reordered only `ClientIntake`. It now orders every sequence from the
+  XSD itself.
+- **Honest results:** both CLIs re-validate, say what still fails, and exit non-zero. The
+  web page now tells an order problem from a data problem.
+- **`--add-missing`:** it invented `CurrentlyInBusiness = 'No'` and could not supply Race.
+  It now files 'Undetermined' with a warning and reports Race as still missing.
+- **Parser mismatch:** the fixer parsed with expat and wrote with ElementTree, unlike the
+  validator. So it applied DTD attribute defaults, dropped a namespace declaration used
+  only in an `xsi:type` value, turned `&#13;` into LF, dropped comments, and reported
+  `changed` when nothing moved. It now uses lxml with the validator's settings, and
+  refuses DTDs that declare entities with a clear message.
+- **Encoding:** the web decoded uploads leniently. A Windows-1252 file declared UTF-8 was
+  called valid though SBA can't parse it, and `encoding = "…"` with spaces was ignored.
+  Such files are now refused with the line of the first bad character.
+- **Lone surrogates:** a lone surrogate in posted text was an HTTP 500.
+
+### Decisions (not changed)
+
+- **Blank Prep or Travel hours are still filed as 0.** The form asks for them, 0 is the
+  natural reading of a blank, and a warning on nearly every row would bury the report.
+- **A training event's location is still read from the `City`/`State`/`Zip` columns.** In
+  a campaign-member export these are each attendee's mailing address. The first complete
+  one is filed. Rows disagreeing about it are not reported, because they nearly always do.
+- **libxml2 rejects an `xs:date` padded with whitespace,** though XSD allows it. The
+  converters never write one, and the validator is not second-guessed.
+- **Training counts rows, not distinct people.** This was already open in
+  [`../converters.md`](../converters.md#known-gaps).
+- **Training race answers that fit no category are reported, not counted.** "Two or More
+  Races" and similar answers fit no single category, and no category is invented for them.

@@ -70,8 +70,11 @@ Inside `src/`, a conversion is always the same seven steps:
 1. **Read** — `BaseConverter._read_csv`: the bytes are decoded as UTF-8 (an
    Excel BOM dropped) or, failing that, Windows-1252, and read with
    `data_cleaning.NormalizedDictReader`, which normalizes header whitespace and
-   keeps a blank duplicate column from erasing a filled one. All three
-   converters use stdlib `csv`; there is no pandas anywhere in the project.
+   keeps a blank duplicate column from erasing a filled one. A cell holding no
+   value (an Excel error such as `#N/A`, or only invisible characters) is read
+   as blank, and a row with values past the last column, or a cell that
+   swallowed the rows after it, is reported. All three converters use stdlib
+   `csv`; there is no pandas anywhere in the project.
 2. **Resolve columns** — each converter maps CSV headers to the fields it needs.
    Counseling declares its vocabulary once in `CounselingConfig.COLUMN_MAPPING`;
    training resolves aliases through `TrainingConfig.COLUMN_MAPPING`.
@@ -81,7 +84,9 @@ Inside `src/`, a conversion is always the same seven steps:
    Salesforce fields.
 4. **Validate the row** — `src/data_validation.py` records every problem against
    a `ValidationTracker` with a severity and a category
-   (`src/config.py:ValidationCategory`).
+   (`src/config.py:ValidationCategory`). A row that is not a record — blank, a
+   repeat of the header row, a report's title or footer line — is skipped here,
+   with a warning naming it.
 5. **Build XML** — elements are created in the exact order the XSD's
    `xs:sequence` demands, which is what prevents the `cvc-complex-type.2.4.a`
    errors that dominate hand-built SBA XML. `src/xml_utils.emit_optional` is the
@@ -101,8 +106,11 @@ Inside `src/`, a conversion is always the same seven steps:
    translates each schema error back to a CSV row and column name. The
    converters run this check themselves as a safety net under step 6
    (`BaseConverter._write_valid_xml`): a record that still fails is left out
-   with an error naming its row, so the file produced is one SBA accepts. The
-   worker validates the file again for the results page.
+   with an error naming its row, so the file produced is one SBA accepts. A
+   failure no record explains is a file-level error in the command line's
+   report. The worker validates the file again for the results page, which
+   lists such a failure among its XSD errors instead (`caller_reports_xsd_errors`),
+   so it is not shown twice.
 
 Step 7 is the part worth protecting. An unmapped lxml error reads
 `Line 20: Element 'ZipCode': '' is not a valid value`. Mapped, it reads
@@ -208,7 +216,7 @@ finishes its current phase first.
 | Any user → any resource | Every owned resource is read with `findFirst({ where: { id, userId } })` and mutated with a `userId`-scoped `updateMany` |
 | Download path | `realpath` + `DATA_DIR` prefix check with a separator suffix (`lib/paths.ts`), defeating symlink and `/data-evil` escapes |
 | CLI output path | The same confinement in `src/path_safety.py`, widened only by `SBA_OUTPUT_BASE` |
-| XML parsing | `defusedxml` everywhere, `resolve_entities=False` on every lxml parse — XXE is closed |
+| XML parsing | `defusedxml` for ElementTree, `resolve_entities=False` on every lxml parse, and a document that declares entities refused by the validator and the fixer — XXE is closed |
 | Response headers | CSP with `frame-ancestors 'none'`, HSTS, nosniff, Permissions-Policy (`next.config.ts`) |
 
 Details and the reporting process are in [SECURITY.md](./SECURITY.md).
@@ -247,7 +255,7 @@ Details and the reporting process are in [SECURITY.md](./SECURITY.md).
 | `data_validation.py` | Per-row validation and the preview data-quality report |
 | `validation_report.py` | Issue tracking; CSV and HTML reports |
 | `xml_utils.py` | `create_element` / `emit_optional` |
-| `xml_validator.py` | XSD validation and element-order repair |
+| `xml_validator.py` | XSD validation, and element-order repair read from the XSD itself |
 | `xsd_error_mapping.py` | Maps schema errors back to CSV rows and column names |
 | `fix_sba_xml.py` | CLI wrapper around the order repair |
 | `path_safety.py` | Output-path confinement |

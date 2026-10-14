@@ -8,7 +8,9 @@ from __future__ import annotations
 import codecs
 import csv
 import logging
+import math
 import re
+import unicodedata
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -32,6 +34,11 @@ PHONE_NUMBER_DIGITS = 10
 PHONE_WITH_COUNTRY_CODE_DIGITS = 11
 PERCENTAGE_MIN = 0
 PERCENTAGE_MAX = 100
+# Largest power of ten clean_numeric reads (see there). Far beyond any facet in
+# SBA's schemas, so a number merely too large for its field ('1E+40') reaches
+# the schema guard and is reported as over the maximum; a thousand digits is
+# still cheap to write out.
+NUMERIC_MAX_EXPONENT = 1000
 
 
 def is_empty(value: Any) -> bool:
@@ -40,6 +47,59 @@ def is_empty(value: Any) -> bool:
         return True
     s = str(value).strip()
     return s == "" or s.lower() == "nan"
+
+
+# What Excel (and Google Sheets) write in a cell whose formula failed: a
+# VLOOKUP that found nothing, a deleted reference. Not a value -- "#N/A" in the
+# Class/Event ID column was filed as an event called "#N/A".
+EXCEL_ERROR_VALUES = frozenset({
+    "#N/A", "#VALUE!", "#REF!", "#NAME?", "#DIV/0!", "#NULL!", "#NUM!",
+    "#SPILL!", "#CALC!", "#ERROR!",
+})
+
+# What a decoder reads bytes that aren't text as.
+REPLACEMENT_CHARACTER = "\ufffd"
+
+# Characters nobody sees: controls (Cc), format characters (Cf -- the
+# zero-width space, a BOM, direction marks, the word joiner) and the halves of
+# a damaged UTF-16 character (Cs). str.strip() keeps all of them, so a cell of
+# nothing else was read as filled in.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs"})
+
+
+def is_excel_error(value: Any) -> bool:
+    """True for a cell holding one of EXCEL_ERROR_VALUES."""
+    text = str(value).strip() if value else ""
+    return text.startswith("#") and text.upper() in EXCEL_ERROR_VALUES
+
+
+def is_invisible(value: Any) -> bool:
+    """True for a cell with nothing a reader can see: only whitespace and
+    invisible characters (see _INVISIBLE_CATEGORIES), or nothing at all."""
+    text = str(value) if value else ""
+    if text.isprintable():  # the usual case, decided without a per-character scan
+        return not text.strip()
+    return all(ch.isspace() or ch in "￾￿" or unicodedata.category(ch) in _INVISIBLE_CATEGORIES
+               for ch in text)
+
+
+def is_blank_cell(value: Any) -> bool:
+    """True for a cell that holds no value: blank, invisible, only what bytes
+    that aren't text were read as ('�', see decode_csv_bytes), or an Excel
+    error. Every reader treats these as blank, so each column's own blank-cell
+    handling (an error for a missing ID, a reported default) applies; a
+    Contact ID of '�' was filed as the client's ID."""
+    text = str(value) if value else ""
+    if REPLACEMENT_CHARACTER in text:
+        text = text.replace(REPLACEMENT_CHARACTER, "")
+    return is_invisible(text) or is_excel_error(value)
+
+
+def remove_format_chars(text: str) -> str:
+    """`text` without invisible format characters (Unicode category Cf)."""
+    if text.isprintable():
+        return text
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
 DEFAULT_STATE_MAPPINGS = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
@@ -250,17 +310,51 @@ def format_date(date_str: str | None, input_formats: list[str] | None = None, de
     if input_formats is None or not input_formats:
         input_formats = DEFAULT_DATE_FORMATS
 
-    for fmt in input_formats:
-        try:
-            dt_object = _two_digit_year_in_past(datetime.strptime(date_str, fmt), fmt)
-            result = dt_object.strftime('%Y-%m-%d')
-            _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
-            return result
-        except ValueError:
-            continue
+    for candidate in dict.fromkeys((date_str, date_part(date_str))):
+        for fmt in input_formats:
+            try:
+                dt_object = _two_digit_year_in_past(datetime.strptime(candidate, fmt), fmt)
+                result = dt_object.strftime('%Y-%m-%d')
+                _logger.debug("Parsed date '%s' with format '%s' -> '%s'", date_str, fmt, result)
+                return result
+            except ValueError:
+                continue
 
     _logger.debug("Failed to parse date '%s' with any known format", date_str)
     return default_return
+
+
+# A time after the date, as Salesforce writes a Date/Time field: "1/15/2025
+# 10:30 AM" in a report export, "2025-01-15T14:30:00.000Z" from the API.
+_TRAILING_TIME = re.compile(
+    r"(?P<date>.+?),?[ T]\s*\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:[AaPp]\.?[Mm]\.?)?"
+    r"\s*(?P<zone>Z|[+-]\d{2}:?\d{2})?")
+# Longer than any date with a time ("September 30, 2025, 11:59:59.999 PM
+# +05:30" is 41). A longer cell isn't tried, so a crafted one can't make the
+# regex above slow; it is simply not a date.
+_MAX_DATE_TIME = 48
+
+
+def _trailing_time(date_str: str):
+    text = date_str.strip()
+    return _TRAILING_TIME.fullmatch(text) if len(text) <= _MAX_DATE_TIME else None
+
+
+def date_part(date_str: str) -> str:
+    """`date_str` without a trailing time of day ("1/15/2025, 10:30 AM",
+    "Jan 15, 2025 10:30 AM"). The forms record a date, and the date kept is
+    the one written; has_zoned_time says when that may not be the local one."""
+    match = _trailing_time(date_str)
+    return match.group("date") if match else date_str
+
+
+def has_zoned_time(date_str: str | None) -> bool:
+    """True for a date written with a UTC time or a time-zone offset, as
+    Salesforce's API and Data Loader export a Date/Time field
+    ("2025-01-15T23:30:00.000Z"). The date written is the UTC one: an evening
+    session in the US can carry the next day's date."""
+    match = _trailing_time(str(date_str or ""))
+    return bool(match and match.group("zone"))
 
 
 def _two_digit_year_in_past(parsed: datetime, fmt: str) -> datetime:
@@ -286,7 +380,7 @@ def is_ambiguous_date(date_str: str | None) -> bool:
     """
     if is_empty(date_str):
         return False
-    s = str(date_str).strip()
+    s = date_part(str(date_str).strip())
 
     def _try(formats):
         for fmt in formats:
@@ -308,9 +402,11 @@ def normalize_header(name: str) -> str:
     single space, so a stray trailing/leading or doubled space in an exported
     header can't silently break a column lookup. Must be applied identically on
     every read path (the converters, the CONV-1 required-column check, and the
-    preview/diff readers) so they all agree on the column set.
+    preview/diff readers) so they all agree on the column set. Invisible format
+    characters go too: a zero-width space, or the BOM a second export pasted
+    below the first brings with it, made "Contact ID" a different column.
     """
-    return re.sub(r'\s+', ' ', str(name)).strip()
+    return re.sub(r'\s+', ' ', remove_format_chars(str(name))).strip()
 
 
 def normalize_row_keys(row: dict) -> dict:
@@ -347,6 +443,16 @@ class NormalizedDictReader:
     Otherwise it matches DictReader followed by normalize_row_keys: headers
     normalized, blank lines skipped, a short row padded with "", extra trailing
     cells dropped.
+
+    Two shapes of row that lose data without an error are recorded for the
+    caller to report, numbered as the converters number rows (1 for the first
+    data row): ``long_rows``, (row, the values past the last column), for a row
+    with more values than the header has columns -- the mark of a comma that
+    isn't inside quotes, which shifts every later value one column over; and
+    ``swallowed_rows``, (row, column, lines), for a cell holding what look like
+    further rows -- the mark of a quotation mark opened and never closed, which
+    reads every following line into the one cell until the next quotation mark.
+    A short row is not recorded: exports leave trailing blank cells off.
     """
 
     def __init__(self, lines):
@@ -355,16 +461,45 @@ class NormalizedDictReader:
         self.fieldnames = [normalize_header(name) for name in header]
         self.duplicates = {name: count for name, count in Counter(self.fieldnames).items()
                            if count > 1}
+        self.long_rows: list[tuple[int, list[str]]] = []
+        self.swallowed_rows: list[tuple[int, str, int]] = []
 
     def __iter__(self):
+        width = len(self.fieldnames)
+        number = 0
         for cells in self._reader:
             if not cells:
                 continue
+            number += 1
             row = dict.fromkeys(self.fieldnames, "")
-            for name, value in zip(self.fieldnames, cells, strict=False):
-                if str(value).strip() or not str(row[name]).strip():
-                    row[name] = value
+            # Cell by cell only for a repeated header: is_blank_cell on every
+            # cell of a 20,000-row file doubled the time it took to read.
+            if self.duplicates:
+                for name, value in zip(self.fieldnames, cells, strict=False):
+                    if not is_blank_cell(value) or is_blank_cell(row[name]):
+                        row[name] = value
+            else:
+                row.update(zip(self.fieldnames, cells, strict=False))
+            swallowed = self._swallowed(number, row)
+            extra = [value for value in cells[width:] if not is_invisible(value)]
+            if extra and not swallowed:  # the swallowed rows explain those
+                self.long_rows.append((number, extra))
             yield row
+
+    def _swallowed(self, number: int, row: dict) -> bool:
+        """Record, and return whether, a cell of this row holds lines with as
+        many commas as a row of this file has -- at least four, so a line of a
+        note listing a few things is not taken for a row."""
+        delimiters = max(len(self.fieldnames) - 1, 4)
+        found = False
+        for name, value in row.items():
+            if "\n" not in value:
+                continue
+            lines = sum(1 for line in value.split("\n")[1:] if line.count(",") >= delimiters)
+            if lines:
+                self.swallowed_rows.append((number, name, lines))
+                found = True
+        return found
 
 
 def duplicate_header_message(name: str, count: int) -> str:
@@ -382,6 +517,32 @@ codecs.register_error(
 )
 
 
+# decode_csv_bytes' encodings for a UTF-16 file with bytes that aren't text:
+# some read as '�', an odd number of bytes (the last left out), or both.
+UTF16_DAMAGED = "utf-16 (damaged)"
+UTF16_ODD_LENGTH = "utf-16 (odd length)"
+UTF16_DAMAGED_ODD_LENGTH = "utf-16 (damaged, odd length)"
+
+_ODD_LENGTH = ("The file is UTF-16 but has an odd number of bytes, so one of them is stray; the "
+               "last byte was left out")
+_GARBLED = ("If the values from some row on look garbled, the stray byte is there: export the "
+            "file again.")
+_ENCODING_WARNINGS = {
+    UTF16_DAMAGED: ("The file is UTF-16 but has bytes that are not text (a stray byte, or half of "
+                    "an emoji); they were replaced with '�'. Check the values around them."),
+    UTF16_ODD_LENGTH: f"{_ODD_LENGTH}. {_GARBLED}",
+    UTF16_DAMAGED_ODD_LENGTH: f"{_ODD_LENGTH}, and bytes that are not text were replaced with '�'. {_GARBLED}",
+    "windows-1252": ("The file is not UTF-8, so it was read as Windows-1252 (Excel's \"CSV (Comma "
+                     "delimited)\"). Check that accented names came through correctly."),
+}
+
+
+def encoding_warning(encoding: str) -> str | None:
+    """The file-level warning for how decode_csv_bytes had to read a file,
+    or None when it was plain UTF-8 or UTF-16."""
+    return _ENCODING_WARNINGS.get(encoding)
+
+
 def decode_csv_bytes(data: bytes) -> tuple[str, str]:
     """Decode a CSV the way spreadsheet tools write it; returns (text, encoding).
 
@@ -392,7 +553,19 @@ def decode_csv_bytes(data: bytes) -> tuple[str, str]:
     normalized to "\n", as reading the file in text mode did.
     """
     if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        text, encoding = data.decode("utf-16"), "utf-16"
+        # An odd number of bytes: one is stray, most often one added at the
+        # end (a newline written as a single byte). Decoded, it was a last
+        # line of '�', read as a row; it is left out instead.
+        odd = len(data) % 2 == 1
+        if odd:
+            data = data[:-1]
+        try:
+            text, encoding = data.decode("utf-16"), UTF16_ODD_LENGTH if odd else "utf-16"
+        except UnicodeDecodeError:
+            # A stray byte or half an emoji: replaced with U+FFFD, as the web's
+            # TextDecoder does, rather than failing the whole file.
+            text = data.decode("utf-16", errors="replace")
+            encoding = UTF16_DAMAGED_ODD_LENGTH if odd else UTF16_DAMAGED
     else:
         try:
             text, encoding = data.decode("utf-8-sig"), "utf-8"
@@ -442,8 +615,10 @@ def map_gender_to_sex(gender_value: str | None) -> str:
     
     gender_str = str(gender_value).lower()
     # Whole words as well as the substrings: "F", "M", "Woman" and "Man" were
-    # left out of the filing with no issue, though config lists them.
-    words = set(re.findall(r"[a-z]+", gender_str))
+    # left out of the filing with no issue, though config lists them. Words of
+    # any alphabet: splitting on [a-z] cut "préfère" into "pr", "f", "re", and
+    # the stray "f" counted a declined answer as Female.
+    words = set(re.findall(r"[^\W\d_]+", gender_str))
 
     if "female" in gender_str or words & set(DEMOGRAPHIC_GENDER_KEYWORDS["female"]):
         return "Female"
@@ -508,10 +683,11 @@ def classify_races(value: str | None, keyword_map: dict) -> set:
     Each token is matched against keyword_map ({category: [keywords]}); blank and
     "Prefer not to say" tokens contribute nothing. A set is returned so a multi-race
     person counts once toward each of their categories and never twice toward one.
+    Punctuation reads as a space, so "African-American" matches 'african american'.
     """
     categories = set()
     for token in split_multi_value(value):
-        token_lower = token.lower()
+        token_lower = " ".join(re.sub(r"[^\w\s]|_", " ", token.lower()).split())
         if "prefer not" in token_lower:
             continue
         for category, keywords in keyword_map.items():
@@ -543,11 +719,17 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
     Categories may overlap: "Service Disabled Veteran" yields both the veteran and
     service-disabled-veteran keys (service-disabled veterans are a subset of all
     veterans). Blank, "No military service" and "Prefer not to say" yield an empty set.
+
+    A "Veteran Status" checkbox exports as Yes/No (true/false, 1/0): yes is a
+    veteran and no is no service, as map_military_status_to_xsd files them on
+    the counseling form. Training counted no veterans for it.
     """
     if is_empty(value):
         return set()
+    if is_affirmative(value):
+        return {"veteran"} & set(keyword_map)
     v = str(value).strip().lower()
-    if ("prefer not" in v or "no military" in v or v in {"none", "n/a", "na"}
+    if ("prefer not" in v or "no military" in v or v in {"none", "n/a", "na"} or is_negative(value)
             or _NEGATED_VETERAN.search(v)):
         return set()
     categories = set()
@@ -564,34 +746,45 @@ def classify_military(value: str | None, keyword_map: dict) -> set:
 # value can't be mapped, which the caller treats as "omit the element" (all
 # three are minOccurs="0") rather than emitting something invalid.
 
+def declines_to_answer(value: str | None) -> bool:
+    """True for an answer that declines a demographic question: "Decline to
+    answer", "Refused", "Unknown", "Not stated" -- the wordings Race files as
+    "Prefer not to say", the value SBA renamed "Unknown/Not Stated" to."""
+    return not is_empty(value) and bool(_RACE_REFUSAL.search(str(value).strip().lower()))
+
+
 def map_ethnicity_to_xsd(value: str | None) -> str:
     """Map an ethnicity value onto the XSD enumeration.
 
     Delegates the hispanic/non-hispanic decision to classify_ethnicity so the
-    "Not Hispanic or Latino" trap is handled in exactly one place.
+    "Not Hispanic or Latino" trap is handled in exactly one place. A refusal
+    is read only from a label that gives no answer: "Hispanic or Latino
+    (origin unknown)" answers the question, and was filed as "Prefer not to
+    say" for its "unknown".
     """
     if is_empty(value):
         return ""
-    if "prefer not" in str(value).strip().lower():
-        return "Prefer not to say"
     bucket = classify_ethnicity(value)
     if bucket == "hispanic":
         return "Hispanic or Latino"
     if bucket == "non_hispanic":
         return "Non Hispanic or Latino"
+    if declines_to_answer(value):
+        return "Prefer not to say"
     return ""
 
 
 def map_disability_to_xsd(value: str | None) -> str:
-    """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to say)."""
+    """Map a disability value onto the XSD enumeration (Yes/No/Prefer not to
+    say); a refusal, as for ethnicity, only when the label gives no answer."""
     if is_empty(value):
         return ""
-    if "prefer not" in str(value).strip().lower():
-        return "Prefer not to say"
     if is_affirmative(value):
         return "Yes"
     if is_negative(value):
         return "No"
+    if declines_to_answer(value):
+        return "Prefer not to say"
     return ""
 
 
@@ -731,6 +924,16 @@ def clean_numeric(value: str | int | float | None) -> str:
         return ""
     if not dec.is_finite():  # reject NaN / Infinity rather than emitting them
         return ""
+    # Before the bound: a zero's exponent counts too, so "0E+5000" and "0."
+    # with 33 zeros were refused as no number at all.
+    if dec.is_zero():
+        return "0"
+    # An exponent is only ever a few digits of real data ("1.5E+6"). "1e5000"
+    # is not an amount, and writing out "1E+99999999" in full never finishes.
+    # The bound used to be 10^30, and an amount of "1E+40" was then filed as
+    # a fabricated 0 instead of being omitted as over the schema's maximum.
+    if abs(dec.adjusted()) > NUMERIC_MAX_EXPONENT:
+        return ""
 
     # Integer check BEFORE normalize(): Decimal('100').normalize() is Decimal('1E+2'),
     # so take the integral branch first to keep whole numbers as plain integers.
@@ -752,6 +955,10 @@ def clean_percentage(value: str | int | float | None) -> str:
 
     try:
         float_val = float(value_str)
+        if math.isnan(float_val):
+            # max()/min() pass NaN through in one order and drop it in the
+            # other: "NaN%" came out as 100.
+            raise ValueError(value_str)
         # Ensure it's between 0 and 100
         float_val = float(max(PERCENTAGE_MIN, min(PERCENTAGE_MAX, float_val)))
 
@@ -761,6 +968,20 @@ def clean_percentage(value: str | int | float | None) -> str:
         return str(float_val)
     except (ValueError, TypeError):
         return "0"
+
+
+def is_percentage(value: str | int | float | None) -> bool:
+    """True when ``clean_percentage`` reads ``value`` as a number, rather than
+    falling back to 0 for text such as "N/A" or "Majority"."""
+    if is_empty(value):
+        return False
+    value_str = str(value).strip()
+    if value_str.endswith('%'):
+        value_str = value_str[:-1].strip()
+    try:
+        return not math.isnan(float(value_str))
+    except (ValueError, TypeError):
+        return False
 
 
 def percentage_was_clamped(value: str | int | float | None) -> bool:

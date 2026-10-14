@@ -353,3 +353,15 @@ def test_clean_file_has_no_value_checks():
     checks = _checks_by_key(read_csv_preview(csv, "counseling"))
     value_prefixes = ("truncated_value_", "invalid_value_", "downgraded_value_", "standardized_value_")
     assert not [k for k in checks if k.startswith(value_prefixes)]
+
+
+def test_rows_an_unclosed_quote_swallowed_and_long_rows_are_reported():
+    # The conversion reports both (BaseConverter._report_row_shapes); the
+    # preview said nothing, though whole rows were missing.
+    header = "Class/Event ID,Class/Event Name,Start Date,City,State/Province,Zip/Postal Code\n"
+    swallowed = header + 'EVT-1,"Workshop,2025-02-03,Ames,IA,50010\nEVT-2,Intro,2025-02-04,Ames,IA,50010\n'
+    checks = _checks_by_key(read_csv_preview(swallowed, "training"))
+    assert checks["unclosed_quote"]["severity"] == "error"
+    assert checks["unclosed_quote"]["column"] == "Class/Event Name"
+    long_row = header + "EVT-1,Doe, LLC,2025-02-03,Ames,IA,50010\n"
+    assert _checks_by_key(read_csv_preview(long_row, "training"))["extra_values"]["count"] == 1

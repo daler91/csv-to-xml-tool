@@ -16,6 +16,7 @@ from ..services.conversion_service import EmptyCSVError, run_conversion, unreada
 from ..services.column_requirements import RequiredColumnsMissingError
 from ..services import redis_client
 from ..services.progress import registry as progress_registry
+from ..services.xsd_validation import unpaired_surrogate_error
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def _read_text(path: str) -> str:
         504: {"description": "The conversion passed CONVERSION_DEADLINE_SECONDS"},
         422: {
             "description": "Unprocessable CSV: required columns missing, the file is empty, "
-            "or it cannot be parsed as CSV"
+            "it cannot be parsed as CSV, or it holds a character no file can (a lone surrogate)"
         },
         500: {"description": "Internal conversion error"},
     },
@@ -73,6 +74,13 @@ async def convert(req: ConvertRequest):
         # cancelled, so it never applies to a fresh legitimate run, and clearing
         # it could wipe a cancel that landed in the gap before the worker started.
         await asyncio.to_thread(progress_registry.clear, job_id)
+
+        # The input, not the worker, is at fault, so 422 as for an unreadable
+        # CSV. Staging it raised UnicodeEncodeError, a ValueError, which
+        # answered a 400 "Invalid request parameters" that named nothing.
+        problem = unpaired_surrogate_error(req.csv_content, "CSV")
+        if problem:
+            raise HTTPException(status_code=422, detail=problem)
 
         # The web sends the CSV content in the request body and persists the XML
         # we return — web and worker are separate Railway services and cannot

@@ -84,6 +84,20 @@ holds headers and every line has the same number of fields. A stray unquoted
 comma inside a value is the usual culprit. **Try again** first in case the worker
 was momentarily busy.
 
+### Rows are missing from the output, or values are in the wrong columns
+
+Look for these in the issues list:
+
+- **"... cell runs on over N more line(s) that look like rows"** (an error) —
+  a quotation mark in that cell is opened and never closed, so every line up to
+  the next quotation mark was read into the one cell. Close or remove it.
+- **"... has more values than the header has columns"** — a comma inside a
+  value that isn't quoted (`Doe, LLC`) split it in two and moved every later
+  value one column over. Quote the value or remove the comma.
+- **"... was skipped"** — the row is blank, repeats the header row, or holds a
+  single value like a report's title or footer line. If it is a real record,
+  fill in its other columns.
+
 ### The conversion succeeded but XSD validation failed
 
 Expected, and useful. The results page lists each schema error mapped back to a
@@ -91,7 +105,10 @@ Expected, and useful. The results page lists each schema error mapped back to a
 and use **Re-upload** to compare the two runs.
 
 If the errors are about element *order* rather than values, the file may have
-been produced elsewhere; `/validate` → auto-fix reorders counseling-format XML.
+been produced elsewhere; `/validate` → auto-fix reorders counseling-format XML
+(and `python -m src.fix_sba_xml` either form) to the schema's order. If an
+element is still "not expected" after that, it is missing, repeated, or under
+the wrong parent, which reordering can't fix.
 
 ### The progress bar sits at 0%
 

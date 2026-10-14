@@ -2,8 +2,9 @@
 """
 SBA XML Fixer - A utility to fix common XML issues in SBA counseling records.
 
-This script fixes element ordering issues in SBA counseling XML files according to the
-SBA_NEXUS_Counseling XSD schema.
+This script puts the elements of SBA counseling (Form 641) and training (Form 888)
+XML files in the order their XSD requires, then checks each result against that
+XSD. It exits non-zero when a file could not be fixed or still fails the schema.
 """
 
 import os
@@ -21,7 +22,8 @@ from logging_util import ConversionLogger # Import ConversionLogger
 from path_safety import output_base, resolve_within
 
 # Import necessary functions from xml_validator
-from xml_validator import fix_client_intake_element_order as validator_fix_order
+from xml_validator import fix_and_revalidate as validator_fix_and_revalidate
+from xml_validator import log_fix_result
 from xml_validator import process_directory as validator_process_directory
 
 
@@ -89,18 +91,22 @@ def process_single_file(args, logger, mimic_original_add_missing):
         except OSError as e:
             logger.warning(f"[fix-sba-xml wrapper] Could not create backup: {str(e)}")
 
-    fix_success = validator_fix_order(
+    result = validator_fix_and_revalidate(
         xml_file=args.file,
         output_file=output_file_path,
         add_missing_elements_flag=mimic_original_add_missing # Match original behavior
     )
 
-    if fix_success:
-        logger.info(f"[fix-sba-xml wrapper] Successfully fixed XML file: {output_file_path} (via xml_validator)")
+    # It used to say "Successfully fixed" whenever the file was rewritten,
+    # however the result then validated.
+    if log_fix_result(result, args.file, output_file_path, logger):
+        logger.info(f"[fix-sba-xml wrapper] Fixed XML file: {output_file_path} passes SBA's schema (via xml_validator)")
         return 0
+    if result.ok:
+        logger.error(f"[fix-sba-xml wrapper] {output_file_path} still fails SBA's schema (via xml_validator)")
     else:
-        logger.error("[fix-sba-xml wrapper] Failed to fix XML file (via xml_validator)")
-        return 1
+        logger.error(f"[fix-sba-xml wrapper] Failed to fix XML file {args.file} (via xml_validator)")
+    return 1
 
 
 def process_directory(args, logger, always_fix, mimic_original_add_missing):
@@ -117,17 +123,21 @@ def process_directory(args, logger, always_fix, mimic_original_add_missing):
          os.makedirs(output_dir)
          logger.info(f"[fix-sba-xml wrapper] Created output directory: {output_dir}")
 
-    count = validator_process_directory(
+    summary = validator_process_directory(
         input_dir=args.directory,
         output_dir=output_dir, # Pass output dir. If None, xml-validator will modify in-place.
         recursive=args.recursive,
         pattern=args.pattern,
-        xsd_file=None, # fix-sba-xml didn't use XSD for its directory processing.
+        xsd_file=None, # Each fixed file is checked against the XSD its root element belongs to.
         fix=always_fix,
         add_missing_elements_flag=mimic_original_add_missing # Match original behavior
     )
-    logger.info(f"[fix-sba-xml wrapper] Successfully processed {count} XML files (via xml_validator)")
-    return 0
+    logger.info(f"[fix-sba-xml wrapper] {summary.describe()} (via xml_validator)")
+    for path in summary.invalid:
+        logger.error(f"[fix-sba-xml wrapper] Still fails SBA's schema: {path}")
+    for path in summary.failed:
+        logger.error(f"[fix-sba-xml wrapper] Could not be fixed: {path}")
+    return 0 if summary.ok else 1
 
 
 def main():

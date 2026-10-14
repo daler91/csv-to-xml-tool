@@ -262,8 +262,10 @@ audit entry.
 ### `POST /api/fix-xml`
 
 Same shape, but `schemaType` accepts **`counseling` | `training-client` only** —
-auto-fix understands counseling-format XML. Returns `changed`, the
-`fixed_xml_content`, and the re-validation result. Writes an `xml_autofix` entry.
+auto-fix is offered for counseling-format XML. Returns `changed`, the
+`fixed_xml_content`, `fix_error`, and the re-validation result. Writes an
+`xml_autofix` entry, with `refused: true` when the worker could not process the
+file.
 
 Both routes return **400** for a worker-side client error, **502** when the
 worker is unreachable, and use a 60-second worker timeout.
@@ -331,7 +333,9 @@ stays side-effect free.
 detail, column}]}` and lists only checks with a non-zero count.
 
 A CSV that cannot be parsed at all (typically an unclosed quote, which turns the
-rest of the file into one oversized cell) is a `422` whose detail says so.
+rest of the file into one oversized cell) is a `422` whose detail says so. An
+unclosed quote that swallows fewer rows parses; the conversion then records an
+error naming the row and column where it opened.
 
 ### `POST /convert`
 
@@ -348,7 +352,7 @@ rest of the file into one oversized cell) is a `422` whose detail says so.
 | 200 | Converted (possibly with `xsd_valid: false`) |
 | 400 | Invalid request parameters |
 | 409 | Cancelled by the user mid-conversion |
-| 422 | Unprocessable CSV — required columns missing, the file is empty/headers-only, or it cannot be parsed as CSV (e.g. an unclosed quote) |
+| 422 | Unprocessable CSV — required columns missing, the file is empty/headers-only, it cannot be parsed as CSV (e.g. an unclosed quote), or it holds a lone UTF-16 surrogate (a JSON `\ud800` escape), which no file can; the detail gives its line and column |
 | 500 | Internal conversion error |
 | 504 | The conversion passed `CONVERSION_DEADLINE_SECONDS` (default 30 min, checked between phases); the web treats it as final, like its own timeout |
 
@@ -385,6 +389,12 @@ Redis is unavailable, so whether progress exists is unknown.
 
 → `is_valid`, `errors`, `error_count`, `error_details`.
 
+A document the validator cannot check is a result, not an error status:
+unparseable XML (`XML parse error: …`), a DOCTYPE that declares or uses entities
+(`DTD/entity declarations are not supported: …` — entities are never expanded),
+or text holding a lone UTF-16 surrogate, which no XML file can (the error gives
+its line and column).
+
 `error_details[].row_number` is the 1-based ordinal of the record element in the
 document, so an error can be traced to a record without counting lines. (There
 is no CSV here. In a `/convert` result, `xsd_error_details[].row_number` is the
@@ -395,10 +405,19 @@ first row — so a skipped row does not shift the numbers after it.)
 
 Same request shape; `schema_type` must be `counseling` or `training-client`.
 
-→ `changed`, `fixed_xml_content`, plus the re-validation result (`is_valid`,
-`errors`, `error_count`, `error_details`).
+→ `changed`, `fixed_xml_content`, `fix_error`, plus the re-validation result
+(`is_valid`, `errors`, `error_count`, `error_details`).
 
-Reordering only. It never invents an element to satisfy the schema.
+Reordering only. It never invents an element to satisfy the schema. Every
+`xs:sequence` is put in the order the counseling XSD lists it, not only
+`ClientIntake`'s; comments, processing instructions, the DOCTYPE and a carriage
+return written as `&#13;` come through unchanged.
+
+| Field | Meaning |
+|---|---|
+| `changed` | An element moved. Nothing else is ever changed |
+| `fixed_xml_content` | The reordered document; exactly the text sent when nothing moved; empty only when that text cannot be sent back (a lone surrogate) |
+| `fix_error` | Why the fixer could not process the document — unparseable, a DOCTYPE that declares entities (`DTD/entity declarations are not supported`), a root element the counseling XSD does not declare, a lone surrogate — or `null` when it ran. The validation result is then the original's |
 
 ### Unmatched paths
 

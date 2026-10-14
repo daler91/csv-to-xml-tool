@@ -250,9 +250,11 @@ class TestAddMissingRequiredElements(unittest.TestCase):
         # ET.SubElement raised AttributeError here, and it escaped the caller's
         # `except (OSError, ET.ParseError)` — so --add-missing crashed outright.
         client_intake = ET.Element("ClientIntake")
-        added = add_missing_required_elements(client_intake, "C-1")
+        with self.assertLogs(level="WARNING"):
+            added = add_missing_required_elements(client_intake, "C-1")
         self.assertTrue(added)
-        self.assertEqual(client_intake.find("CurrentlyInBusiness").text, "No")
+        # 'Undetermined', not 'No': the one answer that claims nothing.
+        self.assertEqual(client_intake.find("CurrentlyInBusiness").text, "Undetermined")
 
     def test_leaves_an_existing_element_alone(self):
         client_intake = ET.Element("ClientIntake")

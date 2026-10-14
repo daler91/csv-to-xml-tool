@@ -82,7 +82,64 @@ def test_bom_prefixed_training_csv_with_mapping_converts(tmp_path, monkeypatch):
     # mapping branch is exercised.
     monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
     result = _convert(
-        tmp_path, "﻿" + TRAINING_CSV, column_mapping={"city": "City"}
+        tmp_path, "\ufeff" + TRAINING_CSV, column_mapping={"city": "City"}
     )
     assert result["stats"]["successful"] == 1
     assert result["stats"]["errors"] == 0
+
+
+def test_mapping_renames_a_header_with_stray_whitespace(tmp_path, monkeypatch):
+    # The mapping page keys the mapping by the preview's normalized headers
+    # ("Co-sponsor"); the file's own header has a trailing space. It used to be
+    # renamed by its raw text, so it never was, and CosponsorsName vanished.
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    lines = TRAINING_CSV.splitlines()
+    csv_text = "\n".join([lines[0] + ",Co-sponsor ", *(line + ",Iowa SBDC" for line in lines[1:])]) + "\n"
+    result = _convert(tmp_path, csv_text, column_mapping={"Co-sponsor": "Cosponsor"})
+    root = ET.parse(result["xml_path"]).getroot()
+    assert root.findtext(".//CosponsorsName") == "Iowa SBDC"
+    assert [i for i in result["issues"] if i["field_name"] == "Co-sponsor"] == []
+
+
+def test_a_mapping_for_a_column_the_csv_lacks_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    result = _convert(tmp_path, TRAINING_CSV, column_mapping={"Partner Org": "Cosponsor"})
+    warning, = [i for i in result["issues"] if i["field_name"] == "Partner Org"]
+    assert "the CSV has no 'Partner Org' column" in warning["message"]
+
+
+def test_a_windows_1252_csv_converts_with_or_without_a_mapping(tmp_path, monkeypatch):
+    # The converter reads Windows-1252; run_conversion's own header reads were
+    # strict UTF-8 and raised UnicodeDecodeError first.
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    csv_path = os.path.join(str(tmp_path), "input.csv")
+    with open(csv_path, "wb") as f:
+        f.write(TRAINING_CSV.replace("Always Ready: Marketing", "Taller – José Muñoz").encode("cp1252"))
+    for mapping in (None, {"city": "City"}):
+        result = run_conversion(csv_path, os.path.join(str(tmp_path), "out.xml"), "training",
+                                column_mapping=mapping)
+        root = ET.parse(result["xml_path"]).getroot()
+        assert root.findtext(".//TrainingTitle") == "Taller – José Muñoz"
+        assert [i for i in result["issues"] if "Windows-1252" in i["message"]], mapping
+
+
+def test_an_error_in_one_event_does_not_fail_the_job(tmp_path, monkeypatch):
+    """The worker passed the ConversionLogger wrapper, whose error() takes no
+    exc_info, so the converters' per-row handler raised TypeError and the
+    whole job failed instead of one event being left out."""
+    from src.converters.training_converter import TrainingConverter
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    real = TrainingConverter._build_location_section
+
+    def fail_on_second(self, parent, rows):
+        if self.validator.current_record_id == "EVT-2":
+            raise ValueError("boom")
+        return real(self, parent, rows)
+
+    monkeypatch.setattr(TrainingConverter, "_build_location_section", fail_on_second)
+    csv = TRAINING_CSV + TRAINING_CSV.split("\n", 1)[1].replace("EVT-1", "EVT-2")
+    result = _convert(tmp_path, csv)
+    assert result["xsd_valid"] is True
+    errors = [i for i in result["issues"] if i["severity"] == "error"]
+    assert [e["record_id"] for e in errors] == ["EVT-2"]

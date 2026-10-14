@@ -5,6 +5,7 @@ import { getRequiredUser } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
 import { workerFetch, workerClientError } from "@/lib/worker-client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { decodeWindows1252 } from "@/lib/csv-decode";
 
 /**
  * Shared POST-handler factory for the ad-hoc XML tool routes
@@ -34,34 +35,61 @@ export interface XmlToolRouteOptions<T> {
 }
 
 /**
+ * An uploaded XML file whose bytes are not text in the encoding its BOM or
+ * declaration names (UTF-8 when it names none): SBA's parser rejects such a
+ * file outright, so it is refused here rather than repaired.
+ */
+export class XmlEncodingError extends Error {}
+
+/**
  * Decodes an uploaded XML file honoring its BOM / encoding declaration
  * instead of assuming UTF-8 — legacy Windows tools commonly emit UTF-16,
  * which a plain utf-8 decode mangles into false validation failures.
  * The declaration is rewritten to UTF-8 because the content travels on
  * as UTF-8 text from here (JSON body to the worker, which stages it as
  * utf-8): keeping a stale "UTF-16" declaration would itself break lxml.
+ *
+ * Bytes that are not text in that encoding throw XmlEncodingError. They
+ * used to be replaced with U+FFFD, so a file saved as Windows-1252 but
+ * declared UTF-8 was reported valid, though SBA can't parse it, and the
+ * auto-fix download carried the replacement characters.
  */
 export function decodeXmlUpload(bytes: Buffer): string {
-  let text: string | null = null;
-
+  let encoding = "utf-8";
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    text = tryDecode(bytes, "utf-16le");
+    encoding = "utf-16le";
   } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    text = tryDecode(bytes, "utf-16be");
+    encoding = "utf-16be";
   } else {
     // No BOM: trust an explicit non-UTF-8 encoding declaration if the
     // prolog is ASCII-readable (it is for every single-byte encoding and
-    // for UTF-8).
+    // for UTF-8). Only the XML declaration counts, not an attribute that
+    // happens to be called "encoding"; XML allows spaces around the "=".
     const prolog = bytes.subarray(0, 200).toString("latin1");
-    const declared = /encoding=["']([A-Za-z0-9._-]+)["']/.exec(prolog)?.[1];
-    if (declared && !/^utf-?8$/i.test(declared)) {
-      text = tryDecode(bytes, declared.toLowerCase());
-    }
+    const declaration = /^\s*<\?xml[^>]*>/.exec(prolog)?.[0] ?? "";
+    const declared = /\sencoding\s*=\s*["']([A-Za-z0-9._-]+)["']/.exec(declaration)?.[1];
+    const known = declared ? canonicalEncoding(declared) : null;
+    if (known && known !== "utf-8") encoding = known;
   }
 
-  text ??= bytes.toString("utf-8");
+  let text: string;
+  try {
+    // "ISO-8859-1", "latin1", "ascii" and "cp1252" are all windows-1252 to
+    // the WHATWG decoder; decodeWindows1252 says why it isn't TextDecoder.
+    text = encoding === "windows-1252"
+      ? decodeWindows1252(bytes)
+      : new TextDecoder(encoding, { fatal: true }).decode(bytes);
+  } catch {
+    const repaired = new TextDecoder(encoding).decode(bytes);
+    const at = repaired.indexOf("\ufffd");
+    const line = repaired.slice(0, Math.max(at, 0)).split("\n").length;
+    throw new XmlEncodingError(
+      `The file is not valid ${encoding.toUpperCase()} text (first unreadable character on ` +
+        `line ${line}), so SBA could not read it either. Save it as UTF-8 and upload it again.`
+    );
+  }
   // Strip a decoded BOM and restate the declaration as UTF-8.
-  return restateDeclarationAsUtf8(text.replace(/^﻿/, ""));
+  return restateDeclarationAsUtf8(text.replace(/^\ufeff/, ""));
 }
 
 /**
@@ -80,17 +108,18 @@ function restateDeclarationAsUtf8(text: string): string {
   // greedy run over a long whitespace stretch would backtrack quadratically.
   // Any extra whitespace before the attribute is simply left in place.
   const rewritten = declaration.replace(
-    /\sencoding=["'][^"']*["']/,
+    /\sencoding\s*=\s*["'][^"']*["']/,
     ' encoding="UTF-8"'
   );
   return rewritten + text.slice(declaration.length);
 }
 
-function tryDecode(bytes: Buffer, encoding: string): string | null {
+/** The WHATWG name for an encoding label ("latin1" -> "windows-1252"), or null. */
+function canonicalEncoding(label: string): string | null {
   try {
-    return new TextDecoder(encoding, { fatal: false }).decode(bytes);
+    return new TextDecoder(label).encoding;
   } catch {
-    // Unknown label — fall through to utf-8.
+    // Unknown label — read as utf-8.
     return null;
   }
 }
@@ -166,6 +195,53 @@ export async function readCappedFormData(req: Request): Promise<FormData | NextR
   }).formData();
 }
 
+/** The upload's file and schemaType, or the 4xx response refusing them. */
+function checkUpload<T>(
+  formData: FormData,
+  options: XmlToolRouteOptions<T>
+): { file: File; schemaType: string } | NextResponse {
+  const file = formData.get("file");
+  const schemaType = formData.get("schemaType");
+
+  if (!isUploadedFile(file) || typeof schemaType !== "string" || !schemaType) {
+    return NextResponse.json(
+      { error: "File and schema type are required" },
+      { status: 400 }
+    );
+  }
+  if (!file.name.toLowerCase().endsWith(".xml")) {
+    return NextResponse.json(
+      { error: "Only XML files are accepted" },
+      { status: 400 }
+    );
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "File size exceeds 50MB limit" },
+      { status: 413 }
+    );
+  }
+  if (!options.schemaTypes.has(schemaType)) {
+    return NextResponse.json(
+      { error: options.schemaTypeError },
+      { status: 400 }
+    );
+  }
+  return { file, schemaType };
+}
+
+/** The upload decoded as text, or a 400 when its bytes aren't valid text. */
+async function readXmlContent(file: File): Promise<string | NextResponse> {
+  try {
+    return decodeXmlUpload(Buffer.from(await file.arrayBuffer()));
+  } catch (error) {
+    if (error instanceof XmlEncodingError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
+}
+
 export function createXmlToolRoute<T>(
   options: XmlToolRouteOptions<T>
 ): (req: Request) => Promise<NextResponse> {
@@ -190,37 +266,12 @@ export function createXmlToolRoute<T>(
 
       const formData = await readCappedFormData(req);
       if (formData instanceof NextResponse) return formData;
-      const file = formData.get("file");
-      const schemaType = formData.get("schemaType");
+      const upload = checkUpload(formData, options);
+      if (upload instanceof NextResponse) return upload;
+      const { file, schemaType } = upload;
 
-      if (!isUploadedFile(file) || typeof schemaType !== "string" || !schemaType) {
-        return NextResponse.json(
-          { error: "File and schema type are required" },
-          { status: 400 }
-        );
-      }
-      if (!file.name.toLowerCase().endsWith(".xml")) {
-        return NextResponse.json(
-          { error: "Only XML files are accepted" },
-          { status: 400 }
-        );
-      }
-      if (file.size > MAX_UPLOAD_BYTES) {
-        return NextResponse.json(
-          { error: "File size exceeds 50MB limit" },
-          { status: 413 }
-        );
-      }
-      if (!options.schemaTypes.has(schemaType)) {
-        return NextResponse.json(
-          { error: options.schemaTypeError },
-          { status: 400 }
-        );
-      }
-
-      const xmlContent = decodeXmlUpload(
-        Buffer.from(await file.arrayBuffer())
-      );
+      const xmlContent = await readXmlContent(file);
+      if (xmlContent instanceof NextResponse) return xmlContent;
 
       let result: T;
       try {

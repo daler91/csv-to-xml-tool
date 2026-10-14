@@ -12,6 +12,8 @@ import os
 import unittest
 import xml.etree.ElementTree as ET
 
+from defusedxml import ElementTree as SafeET
+
 import pytest
 
 # fastapi (and the worker stack imported below) is a worker dependency; skip this
@@ -166,7 +168,7 @@ def test_convert_end_to_end_content_to_valid_xml(monkeypatch):
     result = asyncio.run(convert_route.convert(req))
 
     assert result["xsd_valid"] is True, result["xsd_errors"]
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     records = root.findall("ManagementTrainingRecord")
     assert len(records) == 1
     nt = records[0].find("NumberTrained")
@@ -207,6 +209,25 @@ def test_validate_xsd_valid_content(monkeypatch):
     assert result["is_valid"] is True
     assert result["errors"] == []
     assert result["error_count"] == 0
+
+
+def test_validate_xsd_restates_a_stale_encoding_declaration(monkeypatch):
+    """The text arrives decoded; staged as UTF-8 under a declaration still
+    naming windows-1252, lxml read it as that: a valid file whose funding
+    source has an en dash came back invalid."""
+    from app.services import conversion_service
+
+    monkeypatch.setattr(conversion_service, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    csv = TRAINING_CSV.replace(",CORE,", ",Hurricane Dolly (TX) \u2013 1780,")
+    xml_content = asyncio.run(convert_route.convert(
+        ConvertRequest(job_id="jobV", csv_content=csv, converter_type="training")))["xml_content"]
+    assert "\u2013 1780</FundingSource>" in xml_content
+    stale = xml_content.replace("encoding='utf-8'", 'encoding = "windows-1252"', 1)
+    assert stale != xml_content
+
+    result = _validate(stale, schema_type="training")
+    assert result["is_valid"] is True, result["errors"]
 
 
 def test_validate_xsd_schema_violation(monkeypatch):
@@ -342,7 +363,7 @@ def test_convert_ignores_stale_event_id_mapping(monkeypatch):
     assert result["stats"]["errors"] == 0
     cats = [i["category"] for i in result["issues"]]
     assert "missing_required_field" not in cats
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     assert len(root.findall("ManagementTrainingRecord")) == 1
 
 
@@ -461,7 +482,7 @@ def _misordered_counseling_xml(monkeypatch):
     result = asyncio.run(convert_route.convert(req))
     assert result["xsd_valid"] is True, result["xsd_errors"]
 
-    root = ET.fromstring(result["xml_content"])
+    root = SafeET.fromstring(result["xml_content"])
     client_intake = root.find(".//ClientIntake")
     race = client_intake.find("Race")
     client_intake.remove(race)
@@ -484,7 +505,7 @@ def test_fix_xml_reorders_and_revalidates(monkeypatch):
     assert result["errors"] == []
     assert result["error_count"] == 0
     assert result["error_details"] == []
-    fixed_root = ET.fromstring(result["fixed_xml_content"])
+    fixed_root = SafeET.fromstring(result["fixed_xml_content"])
     assert fixed_root.find(".//ClientIntake")[0].tag == "Race"
 
 
@@ -560,3 +581,116 @@ def test_fix_xml_requires_worker_token(monkeypatch):
     result = json.loads(body)
     assert result["is_valid"] is False  # <a/> is well-formed but violates the XSD
     assert result["changed"] is False
+
+
+# --- /fix-xml and /validate-xsd: what the fixer moves and what it reports ---
+
+
+def _post_json(monkeypatch, path, body: bytes):
+    """POST a raw JSON body through the app, auth and response encoding included."""
+    import json
+
+    from app import main as worker_main
+    from app.core import auth as worker_auth
+
+    monkeypatch.setattr(worker_auth, "WORKER_AUTH_TOKEN", "test-token")
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    headers = {
+        "content-type": "application/json",
+        "content-length": str(len(body)),
+        "authorization": "Bearer test-token",
+    }
+    status, payload = _asgi_request(worker_main.app, "POST", path, body, headers)
+    return status, json.loads(payload)
+
+
+def _golden_counseling():
+    with open(os.path.join(_REPO_ROOT, "tests", "golden", "sample_counseling.xml"), encoding="utf-8") as f:
+        return f.read()
+
+
+def test_fix_xml_reorders_outside_client_intake(monkeypatch):
+    """Only ClientIntake's children used to be reordered: an element out of
+    place anywhere else came back changed=false, and the page then said the
+    problem was in the data."""
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    root = SafeET.fromstring(_golden_counseling())
+    counselor = root.find("CounselingRecord/CounselorRecord")
+    language = counselor.find("Language")
+    counselor.remove(language)
+    counselor.append(language)
+
+    result = _fix(ET.tostring(root, encoding="unicode"))
+
+    assert (result["changed"], result["is_valid"]) == (True, True), result["errors"]
+    assert result["fix_error"] is None
+    fixed = SafeET.fromstring(result["fixed_xml_content"]).find("CounselingRecord/CounselorRecord")
+    assert [child.tag for child in fixed][-1] == "CounselingHours"
+
+
+def test_fix_xml_returns_the_text_sent_when_nothing_moved(monkeypatch):
+    """`changed` compared two reserializations: a CR given as &#13; survived
+    one parse but not two, so it read as a change though nothing had moved,
+    and the CR came back as LF with the comment gone."""
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    content = _golden_counseling().replace(
+        "</CounselorRecord>",
+        "<CounselorNotes>Discussed loan options.&#13;\nFollow up in March.</CounselorNotes></CounselorRecord>",
+        1,
+    ).replace("<CounselingInformation>", "<CounselingInformation><!-- reviewed by J. Smith -->", 1)
+
+    result = _fix(content)
+
+    assert (result["changed"], result["is_valid"]) == (False, True), result["errors"]
+    assert result["fixed_xml_content"] == content
+
+
+def test_entity_declarations_get_a_clear_answer_from_both_routes(monkeypatch):
+    """An entity came back from /validate-xsd as an opaque error, and /fix-xml
+    refused it without a reason, which the page blamed on 'the data'."""
+    from src.xml_validator import ENTITIES_NOT_SUPPORTED
+
+    monkeypatch.setattr(validate_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    monkeypatch.setattr(fix_route, "SCHEMAS_DIR", _SCHEMAS_DIR)
+    body = _golden_counseling().split("?>", 1)[1].replace(
+        "<CounselorName>Pat Smith</CounselorName>", "<CounselorName>&counselor;</CounselorName>")
+    content = '<!DOCTYPE CounselingInformation [<!ENTITY counselor "Pat Smith">]>' + body
+
+    validated = _validate(content)
+    fixed = _fix(content)
+
+    assert validated["is_valid"] is False
+    assert validated["errors"][0].startswith(ENTITIES_NOT_SUPPORTED), validated["errors"]
+    assert fixed["changed"] is False
+    assert fixed["fix_error"].startswith(ENTITIES_NOT_SUPPORTED), fixed
+    assert fixed["fixed_xml_content"] == content
+
+
+def test_lone_surrogate_is_a_result_not_a_500(monkeypatch):
+    """A JSON "\\ud800" escape is a str Python can't encode as UTF-8: staging it
+    raised UnicodeEncodeError, a 500 from both routes."""
+    body = (b'{"job_id":"r","schema_type":"counseling",'
+            b'"xml_content":"<CounselingInformation>\\ud800</CounselingInformation>"}')
+
+    for path in ("/validate-xsd", "/fix-xml"):
+        status, result = _post_json(monkeypatch, path, body)
+        assert status == 200, (path, result)
+        assert result["is_valid"] is False
+        assert result["error_count"] == len(result["error_details"]) == 1
+        assert "unpaired UTF-16 surrogate (U+D800) at line 1, column 24" in result["errors"][0], result
+    assert (result["changed"], result["fixed_xml_content"]) == (False, "")
+    assert result["fix_error"] == result["errors"][0]
+
+
+def test_convert_answers_a_lone_surrogate_with_422(monkeypatch):
+    """It was a 400 "Invalid request parameters" that named nothing."""
+    req = ConvertRequest(job_id="jobSur", csv_content=COUNSELING_CSV.replace("Smith", "Smith\ud83d", 1),
+                         converter_type="counseling")
+    conversion = convert_route.convert(req)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(conversion)
+
+    assert exc.value.status_code == 422
+    assert "unpaired UTF-16 surrogate (U+D83D) at line 2, column 12" in exc.value.detail

@@ -12,6 +12,8 @@ from ..config import GeneralConfig, TrainingClientConfig, ValidationCategory
 from .. import data_cleaning
 from ..xml_utils import create_element
 
+_MEMBER_ID = 'Member ID'
+
 
 class TrainingClientConverter(CounselingConverter):
     """
@@ -22,12 +24,15 @@ class TrainingClientConverter(CounselingConverter):
     for fields not collected on the shorter training client form.
     """
     SCHEMA_TYPE = "training-client"
-    SESSION_NUMBER_FIELD = 'Member ID'
+    # After the rename: 'Activity ID' is the CSV's Class/Event ID.
+    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID', _MEMBER_ID)
+    SESSION_NUMBER_FIELD = _MEMBER_ID
     SESSION_NUMBER_BLANK = "No Member ID or Class/Event ID"
 
     def __init__(self, logger, validator):
         super().__init__(logger, validator)
         self.training_client_config = TrainingClientConfig()
+        self._defaulted = set()  # set per row by _preprocess_row
         # The shorter training-client form doesn't collect the fabrication-risk
         # counseling columns; _preprocess_row intentionally injects DEFAULTS for
         # them, so a per-row FABRICATED_DEFAULT warning for every injected value
@@ -62,13 +67,14 @@ class TrainingClientConverter(CounselingConverter):
         ]
         renamed = set(cfg.COLUMN_MAPPING.values())
         for column, value in cfg.DEFAULTS.items():
+            if not value:
+                continue
             # A column the CSV supplies (directly or via the rename) is the
-            # user's own data, not a constant.
-            if value and column not in headers and column not in renamed:
-                label = column
-                if column == 'Services Provided':
-                    label += " (for attendees whose event has no Training Topic)"
-                constants.append((label, value))
+            # user's own data; the default fills only its blank cells.
+            when = ["where the CSV's cell is blank"] if column in headers or column in renamed else []
+            if column == 'Services Provided':
+                when.append("for attendees whose event has no Training Topic")
+            constants.append((f"{column} ({' and '.join(when)})" if when else column, value))
         self.validator.add_issue(
             "file", "warning", ValidationCategory.FABRICATED_DEFAULT, "configured_defaults",
             "Emitted from configuration for every record (the training form has no column for "
@@ -77,15 +83,28 @@ class TrainingClientConverter(CounselingConverter):
             event_id="",
         )
 
+    def _check_renamed_columns(self, headers):
+        """Warn once for each training column whose counseling name the CSV
+        also has ('Start Date' and 'Date'): both are read as one column, and
+        which value a row files depends on which is filled."""
+        for column, target in self.training_client_config.COLUMN_MAPPING.items():
+            if column != target and column in headers and target in headers:
+                self.validator.add_issue(
+                    "file", "warning", ValidationCategory.INVALID_FORMAT, column,
+                    f"The CSV has both '{column}' and '{target}', which this form reads as the same "
+                    "column. Each row uses the last of them that has a value; check that this is the "
+                    "column you meant.", event_id="")
+
     def _preprocess_row(self, row):
         """Remap training client CSV columns to counseling-format columns."""
-        # Start with defaults for all absent counseling columns
-        remapped = dict(self.training_client_config.DEFAULTS)
-
-        # Map each CSV column to its counseling equivalent (or pass through as-is)
-        for csv_col, csv_val in row.items():
-            target_col = self.training_client_config.COLUMN_MAPPING.get(csv_col, csv_col)
-            remapped[target_col] = csv_val
+        # Over the defaults for all absent counseling columns, which a blank
+        # cell doesn't erase.
+        remapped = self.training_client_config.rename_columns(row, self.training_client_config.DEFAULTS)
+        # The columns this row takes from DEFAULTS, so no message quotes a
+        # configured value as the user's cell (see _csv_cell).
+        supplied = {self.training_client_config.COLUMN_MAPPING.get(column, column)
+                    for column, value in row.items() if str(value).strip()}
+        self._defaulted = set(self.training_client_config.DEFAULTS) - supplied
 
         # The event's Training Topic is what the attendee sought and received;
         # an explicit counseling-format column in the CSV still wins.
@@ -98,10 +117,13 @@ class TrainingClientConverter(CounselingConverter):
 
         return remapped
 
+    def _csv_cell(self, row, column):
+        return None if column in self._defaulted else row.get(column)
+
     def _partner_session_number(self, row):
         """Per-attendee campaign-member id; falls back to the event id (the
         remapped Class/Event ID) when the CSV has no Member ID."""
-        member_id = (row.get('Member ID') or '').strip()
+        member_id = (row.get(_MEMBER_ID) or '').strip()
         return member_id or super()._partner_session_number(row)
 
     def _check_session_column(self, headers):
@@ -111,10 +133,10 @@ class TrainingClientConverter(CounselingConverter):
 
     def _build_counselor_record_section(self, parent, row, record_id):
         counselor_record = super()._build_counselor_record_section(parent, row, record_id)
-        self._build_training_session(counselor_record, row)
+        self._build_training_session(counselor_record, row, record_id)
         return counselor_record
 
-    def _build_training_session(self, counselor_record, row):
+    def _build_training_session(self, counselor_record, row, record_id):
         """TrainingSession is the last child of CounselorRecord in the XSD
         sequence. Child order: DateTrainingStarted, PartnerTrainingNumber,
         EmployeesTrained, HoursTrained (all optional)."""
@@ -122,6 +144,8 @@ class TrainingClientConverter(CounselingConverter):
         date_started = data_cleaning.format_date(row.get('Date', ''))  # remapped 'Start Date'
         if date_started:
             create_element(training_session, 'DateTrainingStarted', date_started)
+        # DateCounseled, from the same cell, has usually said it already.
+        self._warn_zoned_time(record_id, 'Date', row.get('Date', ''), date_started, session=True)
         event_id = (row.get('Activity ID') or '').strip()  # remapped 'Class/Event ID'
         if event_id:
             create_element(training_session, 'PartnerTrainingNumber', event_id)

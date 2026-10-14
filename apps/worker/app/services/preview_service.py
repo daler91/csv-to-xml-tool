@@ -11,7 +11,7 @@ if _SRC_DIR not in sys.path:
 
 from src.config import CounselingConfig, TrainingConfig
 from src.data_cleaning import NormalizedDictReader
-from src.data_validation import analyze_data_quality
+from src.data_validation import analyze_data_quality, row_shape_checks
 
 from .column_requirements import (
     COUNSELING_REQUIRED,
@@ -337,6 +337,9 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
     total_rows = len(all_rows)
     rows = all_rows[:max_rows]
 
+    data_quality = analyze_data_quality(headers, all_rows, converter_type)
+    data_quality["checks"] += row_shape_checks(reader)
+
     expected = get_expected_columns(converter_type)
     matched, missing, extra, aliases = _match_columns(headers, converter_type)
 
@@ -393,5 +396,5 @@ def read_csv_preview(csv_content: str, converter_type: str, max_rows: int = 20) 
         # Feature 2.5: file-level data-quality report over the FULL row set
         # (not just the previewed rows) so the user sees conversion-impacting
         # problems before converting.
-        "data_quality": analyze_data_quality(headers, all_rows, converter_type),
+        "data_quality": data_quality,
     }

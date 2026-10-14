@@ -70,9 +70,13 @@ What it handles that hand-built XML usually gets wrong:
   | `Phone` | 10 |
   | `PartnerClientNumber`, `PartnerSessionNumber` | 20 |
 
-- **Part 3 impact fallbacks.** `Date Started (Meeting)`,
-  `Total No. of Employees (Meeting)`, `Gross Revenues/Sales (Meeting)` and
-  `Profit & Loss (Meeting)` fall back to their intake counterparts when blank.
+- **Part 3 impact fallbacks.** `Total No. of Employees (Meeting)`,
+  `Gross Revenues/Sales (Meeting)` and `Profit & Loss (Meeting)` fall back to
+  their intake counterparts, and `Business Start Date` to
+  `Date Started (Meeting)`, when blank — or when the cell isn't a number or a
+  date this tool can read, with a warning naming the cell passed over. With
+  nothing to fall back on, an unreadable revenue or profit cell is reported as
+  replaced with the `0` Part 3 files.
   Note that `Total Number of Employees`, `Gross Revenues/Sales` and
   `Profits/Losses` are *also* read on their own — they are fallback sources, not
   aliases. (Treating them as aliases is exactly the bug that once dropped three
@@ -93,10 +97,19 @@ Two behaviours to be aware of:
   the converter sorts explicitly. This is load-bearing: the earlier pandas
   implementation used `groupby(sort=True)`, and output has always been ordered.
   The characterization goldens in `tests/golden/` exist to pin this.
-- **Event-level fields come from the first row of each group**
-  (`training_converter.py:142`). If two rows for the same event disagree about
-  the event name or start date, the first row wins and the disagreement is not
-  reported. See [Known gaps](#known-gaps).
+- **Event-level fields come from the first row of each group that has them**
+  (`TrainingConverter._event_value`). A funding source or cosponsor only a
+  later row gives is still filed. A value the converter parses or the schema
+  checks — start date, funding source, training topic, event type,
+  `LocationCode` — comes from the first row where it is usable, so a first
+  row's `TBD` or `0` gives way to a later row's real date or code instead of
+  costing the event. If rows for the same event disagree, the disagreement is
+  reported as a warning naming the value filed; values are compared as they
+  would be filed, so `1/15/2025` and `2025-01-15`, or `249003` and
+  `249003.0`, agree. The location is the first row with a complete city,
+  state and ZIP, else the first with a city and state, filed without a ZIP;
+  the configured location is used only when no row gives both a city and a
+  state.
 
 Column matching for this converter is **alias-based**: `TrainingConfig.COLUMN_MAPPING`
 lists several accepted spellings per field (`Cosponsor` / `CosponsorsName` /
@@ -127,18 +140,21 @@ so the results page can show a before/after diff for each value.
 
 | Rule | Behaviour |
 |---|---|
-| Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD` |
-| Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE` |
+| Dates | Parsed against `DATE_INPUT_FORMATS` in order, emitted as `YYYY-MM-DD`. A time after the date, as Salesforce exports a Date/Time field (`1/15/2025 10:30 AM`, `2025-01-15T14:30:00.000Z`), is dropped; an optional date that can't be read is left out with a warning. A time in UTC or with an offset (the API and Data Loader form) keeps the date written, which for an evening session in the US is already the next day, so wherever such a date is filed an `AMBIGUOUS_DATE` warning names the value and the date filed |
+| Ambiguous dates | `03/04/2025` is read US-style (March 4) **and flagged** as `AMBIGUOUS_DATE`. A slash date only day-first can read (`13/01/25`, `15/01/2025`) is read day-first, before the year-first `%y/%m/%d` that used to turn `13/01/25` into 2013-01-25 |
 | Phone numbers | Reduced to digits; a leading country-code digit is dropped from an 11-digit number; too-short numbers are rejected rather than emitted malformed |
-| Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision |
+| Money | Parsed with `Decimal`, never `float`, so large financials do not lose precision. An exponent is written out (`1.5E+6` → `1500000`), so an amount too large for its field (`1E+40`) is omitted by the schema check as over the maximum; only a magnitude past 10^1000 is unreadable |
 | Percentages | Clamped to 0–100, recorded as `CLAMPED_VALUE` |
 | States | Standardized to the schema's spelling (`IA` → `Iowa`) |
 | Countries | Mapped to the schema's country codes; `EXPORT_COUNTRY_CODES` is pinned by a drift-guard test |
-| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described) |
+| Enumerations | Ethnicity, disability, military status and race are classified onto XSD values instead of passed through raw (a race outside the list is filed as self-described). An ethnicity or disability label that declines the question ("Decline to answer", "Unknown") is `Prefer not to say`, but one that also gives the answer ("Hispanic or Latino (origin unknown)") keeps it. Punctuation in a race answer reads as a space (`African-American`), and `Alaskan Native` is Native American/Alaska Native. Gender is read by whole words of any alphabet, so `Préfère ne pas répondre` is not Female |
 | Multi-value fields | Split on `;` (`MULTI_VALUE_DELIMITER`) |
-| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup |
+| Headers | Whitespace-normalized, so a trailing space in an export header does not break every lookup; invisible format characters are removed |
+| Cells | An Excel error (`#N/A`, `#REF!`, ...) or a cell of only invisible characters or `�` is blank; one file-level warning counts the Excel errors, and one per column names the rows whose cells held only invisible or unreadable characters |
+| Rows | A blank row, a repeat of the header row, or a title/footer line (one filled cell in a file of three or more columns) is skipped with a warning naming it; a row with values past the last column, and a cell that swallowed further rows (an unclosed quote), are reported |
+| Identifiers | `Contact ID`, `Activity ID`, `Member ID` and `Class/Event ID` lose invisible format characters, and control characters become a space, before they are compared or grouped, as `STANDARDIZED_VALUE` |
 | Empty optionals | **Omitted entirely** — never emitted as `<Element/>`, which would fail the element's pattern or type facet |
-| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
+| Schema facets | Checked on every element against the XSD itself (`src/schema_rules.py`): enumeration values matched case-insensitively (`english` → `English`, `Y` → `Yes`); text over the schema's length truncated as `TRUNCATED_VALUE` (a middle name keeps its initial; Contact and Activity IDs are never cut); control characters replaced; codes beyond the schema's repeat limit (Media allows 13) dropped as `DOWNGRADED_VALUE`; anything still invalid omitted as `INVALID_VALUE` where the element is optional. Whether a value is valid is decided by libxml2 against the element's own type, so the guard and SBA's validation never disagree about a pattern, a number or a date. Where it is required (an ID over 20 characters, a `LocationCode` that isn't a number), the record is **left out of the XML** with an error naming the row, and the rest of the file is filed |
 
 ### Issue categories
 
@@ -195,6 +211,10 @@ event type it doesn't recognize. Values configured rather than read — the loca
 code, sessions, hours, partner, fees and language for training; hours trained,
 employees trained, session type and every other default the shorter training-client
 form has no column for — are listed once per file in a `configured_defaults` warning.
+A training-client row's own cell is still reported when it can't be used (a `%
+Female` of `Majority` filed as `0`), and the 0.5 contact hours filed for a session
+type that needs them say the duration was blank, not that the configured `0` was
+the row's.
 
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at
@@ -214,7 +234,8 @@ TrainingConfig.DEFAULT_LOCATION                = {"city": "Des Moines", "state":
 TrainingConfig.DEFAULT_START_DATE              = "2023-12-12"
 ```
 
-Every XML file carries `<LocationCode>249003</LocationCode>`. Training files carry
+Every XML file carries `<LocationCode>249003</LocationCode>` unless the CSV has a
+`LocationCode` column (all three converters read one). Training files carry
 `<City>Des Moines</City>` and `<Code>Women's Business Center</Code>`. Any event
 with an unparseable start date becomes 2023-12-12.
 
@@ -222,8 +243,8 @@ This was reviewed and **accepted as correct for a single-organization
 deployment** ([`reviews/CODEBASE_ANALYSIS.md` §1.6](./reviews/CODEBASE_ANALYSIS.md)).
 What changed was visibility: `_warn_constant_defaults()` records one file-level
 `FABRICATED_DEFAULT` warning per conversion naming every value emitted from
-configuration, and per-event warnings fire when a blank cell falls back to the
-configured location, event title or start date.
+configuration, and per-event warnings fire when a blank or unusable cell falls
+back to the configured location, event title or start date.
 
 **If a second organization ever uses the same deployment, this is a data-integrity
 bug, not a configuration preference.** The web app has open signup, so a shared
@@ -263,8 +284,11 @@ From [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md), still ope
 
 - **Training demographics count rows, not distinct people.** Total is
   `max(len(rows), 1)`. An attendee listed twice is counted twice.
-- **Event-level fields are taken from the first row of the group.** Rows
-  disagreeing about event name, type or start date are silently overruled.
+- **A training event's location is read from the `City`/`State`/`Zip` columns**,
+  which in a campaign-member export are each attendee's mailing address. The
+  first complete address among the event's rows is filed as the event's. Rows
+  that give different addresses are not reported, since in such an export
+  they differ on nearly every event.
 - **The counseling converter still reads ~70 headers as string literals**
   (§5.2), so a differently-named column must be mapped, not auto-detected.
 - **`training` has no exact-match required-column check** in the worker, on

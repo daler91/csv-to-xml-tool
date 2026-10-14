@@ -68,8 +68,13 @@ class FixXmlRequest(BaseModel):
 
 
 class FixXmlResponse(BaseModel):
-    changed: bool  # whether the order-fix modified the document
+    changed: bool  # whether an element moved; nothing else is ever changed
+    # The reordered document, or exactly the text sent when nothing moved.
     fixed_xml_content: str
+    # Why the fixer could not process the document (unparseable, a DOCTYPE
+    # that declares entities, ...); null when it ran. Lets the web say that,
+    # rather than that the remaining errors are "in the data".
+    fix_error: str | None = None
     # Result of re-validating the fixed content against the counseling XSD:
     is_valid: bool
     errors: list[str]

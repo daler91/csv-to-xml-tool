@@ -71,15 +71,16 @@ class FixXmlTest(unittest.TestCase):
 
     def test_change_detection_runs_off_the_event_loop(self):
         """Two full parse/serialize passes -- about 10 s each on a 28 MB file --
-        used to run on the event loop, stalling /health and every poll."""
+        used to run on the event loop, stalling /health and every poll. The
+        fixer itself now says whether anything moved; it runs off the loop."""
         seen = []
-        real_changed = fix_route._changed
+        real_fix = fix_route.fix_element_order
 
-        def recording_changed(original, fixed):
+        def recording_fix(*args):
             seen.append(threading.current_thread() is threading.main_thread())
-            return real_changed(original, fixed)
+            return real_fix(*args)
 
-        with mock.patch.object(fix_route, "_changed", recording_changed):
+        with mock.patch.object(fix_route, "fix_element_order", recording_fix):
             _fix("<CounselingInformation/>")
 
         self.assertEqual(seen, [False])

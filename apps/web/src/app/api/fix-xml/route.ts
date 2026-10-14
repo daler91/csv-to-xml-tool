@@ -8,6 +8,8 @@ interface FixXmlResponse {
   errors: string[];
   error_count: number;
   error_details: XsdErrorDetail[];
+  /** Why the fixer could not process the file; absent on older workers. */
+  fix_error?: string | null;
 }
 
 /**
@@ -30,6 +32,7 @@ export const POST = createXmlToolRoute<FixXmlResponse>({
   auditMetadata: (result) => ({
     changed: result.changed,
     isValid: result.is_valid,
+    refused: Boolean(result.fix_error),
   }),
   unavailableError:
     "Auto-fix failed — the fix service may be busy. Try again in a moment.",

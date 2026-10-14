@@ -21,6 +21,7 @@ import { StatusIcon } from "@/components/status-icon";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { XsdErrorDetailList } from "@/components/xsd-error-details";
+import { describeFixOutcome } from "@/lib/fix-outcome";
 import { formatMegabytes } from "@/lib/limits";
 import type { XsdErrorDetail } from "@/types";
 
@@ -39,6 +40,8 @@ interface FixResult {
   errors: string[];
   error_count: number;
   error_details: XsdErrorDetail[];
+  /** Why the fixer could not process the file; absent on older workers. */
+  fix_error?: string | null;
 }
 
 const SCHEMA_OPTIONS = [
@@ -159,6 +162,7 @@ export function ValidateTool({ maxUploadBytes }: Readonly<{ maxUploadBytes: numb
 
   const canAttemptFix =
     result !== null && !result.is_valid && schemaType === "counseling";
+  const fixOutcome = fixResult ? describeFixOutcome(fixResult) : null;
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
@@ -281,49 +285,33 @@ export function ValidateTool({ maxUploadBytes }: Readonly<{ maxUploadBytes: numb
                 </Alert>
               )}
 
-              {fixResult && !fixResult.changed && (
-                <Alert variant="info" className="mt-3">
-                  No automatic fixes applied — the issues are in the data,
-                  not the element order.
-                </Alert>
-              )}
-
-              {fixResult && fixResult.changed && fixResult.is_valid && (
-                <Alert variant="success" className="mt-3">
-                  <p className="mb-2">
-                    Element order fixed — the corrected file now passes
-                    validation.
-                  </p>
-                  <Button variant="secondary" onClick={downloadFixedXml}>
-                    Download fixed XML
-                  </Button>
-                </Alert>
-              )}
-
-              {fixResult && fixResult.changed && !fixResult.is_valid && (
+              {/* The message follows from what the fixer did and what
+                  remains (src/lib/fix-outcome.ts), not from `changed` alone. */}
+              {fixResult && fixOutcome && (
                 <Alert
-                  variant="warning"
+                  variant={fixOutcome.variant}
                   className="mt-3"
-                  title={`Element order fixed, but ${fixResult.error_count} ${
-                    fixResult.error_count === 1 ? "issue remains" : "issues remain"
-                  } in the data`}
+                  title={fixOutcome.title}
                 >
-                  {fixResult.error_details.length > 0 ? (
-                    <XsdErrorDetailList details={fixResult.error_details} />
-                  ) : (
-                    <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
-                      {fixResult.errors.map((err) => (
-                        <li key={err} className="font-mono">
-                          {err}
-                        </li>
-                      ))}
-                    </ul>
+                  {fixOutcome.showErrors &&
+                    (fixResult.error_details.length > 0 ? (
+                      <XsdErrorDetailList details={fixResult.error_details} />
+                    ) : (
+                      <ul className="text-xs space-y-1 max-h-64 overflow-y-auto">
+                        {fixResult.errors.map((err) => (
+                          <li key={err} className="font-mono">
+                            {err}
+                          </li>
+                        ))}
+                      </ul>
+                    ))}
+                  {fixOutcome.offerDownload && (
+                    <div className="mt-2">
+                      <Button variant="secondary" onClick={downloadFixedXml}>
+                        Download fixed XML
+                      </Button>
+                    </div>
                   )}
-                  <div className="mt-2">
-                    <Button variant="secondary" onClick={downloadFixedXml}>
-                      Download fixed XML
-                    </Button>
-                  </div>
                 </Alert>
               )}
             </div>

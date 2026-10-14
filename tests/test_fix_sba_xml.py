@@ -9,6 +9,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # Import the module to test
 import src.fix_sba_xml as fix_sba_xml
 from src.path_safety import output_base, resolve_within
+from src.xml_validator import DirectorySummary, FixResult
+
+
+def _fixed(valid):
+    """A fix_and_revalidate result for a file it reordered."""
+    return FixResult(ok=True, xsd_file="schema.xsd", reordered=1, valid=valid,
+                     errors=[] if valid else ["Line 3: Element 'DateCounseled': bad"])
 
 class TestFixSBAXML(unittest.TestCase):
 
@@ -75,11 +82,11 @@ class TestFixSBAXML(unittest.TestCase):
             self.assertEqual(args.log_level, 'DEBUG')
             self.assertTrue(args.log_file)
 
-    @patch('src.fix_sba_xml.validator_fix_order')
+    @patch('src.fix_sba_xml.validator_fix_and_revalidate')
     @patch('shutil.copy2')
     def test_process_single_file_success(self, mock_copy2, mock_validator_fix_order):
         """Test successful single file processing."""
-        mock_validator_fix_order.return_value = True
+        mock_validator_fix_order.return_value = _fixed(valid=True)
         logger_mock = MagicMock()
 
         test_args = ['fix_sba_xml.py', '--file', 'test.xml']
@@ -95,13 +102,36 @@ class TestFixSBAXML(unittest.TestCase):
                 add_missing_elements_flag=False
             )
             mock_copy2.assert_called_once() # Backup should be created
-            logger_mock.info.assert_any_call("[fix-sba-xml wrapper] Successfully fixed XML file: test.xml (via xml_validator)")
+            logger_mock.info.assert_any_call(
+                "[fix-sba-xml wrapper] Fixed XML file: test.xml passes SBA's schema (via xml_validator)")
 
-    @patch('src.fix_sba_xml.validator_fix_order')
+    @patch('src.fix_sba_xml.validator_fix_and_revalidate')
+    @patch('shutil.copy2')
+    def test_process_single_file_still_invalid(self, mock_copy2, mock_validator_fix_order):
+        """Output that still fails the schema is a failure.
+
+        It used to log "Successfully fixed" and exit 0 whenever the file was
+        rewritten.
+        """
+        mock_validator_fix_order.return_value = _fixed(valid=False)
+        logger_mock = MagicMock()
+
+        test_args = ['fix_sba_xml.py', '--file', 'test.xml']
+        with patch.object(sys, 'argv', test_args):
+            args = fix_sba_xml.parse_arguments()
+
+            result = fix_sba_xml.process_single_file(args, logger_mock, mimic_original_add_missing=False)
+
+            self.assertEqual(result, 1)
+            logger_mock.error.assert_any_call("Error 1: Line 3: Element 'DateCounseled': bad")
+            logger_mock.error.assert_called_with(
+                "[fix-sba-xml wrapper] test.xml still fails SBA's schema (via xml_validator)")
+
+    @patch('src.fix_sba_xml.validator_fix_and_revalidate')
     @patch('shutil.copy2')
     def test_process_single_file_failure(self, mock_copy2, mock_validator_fix_order):
         """Test failed single file processing."""
-        mock_validator_fix_order.return_value = False
+        mock_validator_fix_order.return_value = FixResult(ok=False, error="XML parse error: boom")
         logger_mock = MagicMock()
 
         test_args = ['fix_sba_xml.py', '--file', 'test.xml']
@@ -112,13 +142,15 @@ class TestFixSBAXML(unittest.TestCase):
 
             self.assertEqual(result, 1)
             mock_validator_fix_order.assert_called_once()
-            logger_mock.error.assert_called_with("[fix-sba-xml wrapper] Failed to fix XML file (via xml_validator)")
+            logger_mock.error.assert_any_call("Could not fix test.xml: XML parse error: boom")
+            logger_mock.error.assert_called_with(
+                "[fix-sba-xml wrapper] Failed to fix XML file test.xml (via xml_validator)")
 
-    @patch('src.fix_sba_xml.validator_fix_order')
+    @patch('src.fix_sba_xml.validator_fix_and_revalidate')
     @patch('shutil.copy2')
     def test_process_single_file_no_backup(self, mock_copy2, mock_validator_fix_order):
         """Test that backup is not created when --no-backup is provided."""
-        mock_validator_fix_order.return_value = True
+        mock_validator_fix_order.return_value = _fixed(valid=True)
         logger_mock = MagicMock()
 
         test_args = ['fix_sba_xml.py', '--file', 'test.xml', '--no-backup']
@@ -129,11 +161,11 @@ class TestFixSBAXML(unittest.TestCase):
 
             mock_copy2.assert_not_called()
 
-    @patch('src.fix_sba_xml.validator_fix_order')
+    @patch('src.fix_sba_xml.validator_fix_and_revalidate')
     @patch('shutil.copy2')
     def test_process_single_file_different_output(self, mock_copy2, mock_validator_fix_order):
         """Test that backup is not created when output file is different."""
-        mock_validator_fix_order.return_value = True
+        mock_validator_fix_order.return_value = _fixed(valid=True)
         logger_mock = MagicMock()
 
         test_args = ['fix_sba_xml.py', '--file', 'test.xml', '--output', 'out.xml']
@@ -152,7 +184,8 @@ class TestFixSBAXML(unittest.TestCase):
     @patch('src.fix_sba_xml.validator_process_directory')
     def test_process_directory_success(self, mock_validator_process_directory):
         """Test successful directory processing."""
-        mock_validator_process_directory.return_value = 5 # Mock 5 files processed
+        files = [f"f{i}.xml" for i in range(5)]
+        mock_validator_process_directory.return_value = DirectorySummary(files=files, valid=files)
         logger_mock = MagicMock()
 
         test_args = ['fix_sba_xml.py', '--directory', 'test_dir', '--recursive', '--pattern', '*.xml']
@@ -171,7 +204,26 @@ class TestFixSBAXML(unittest.TestCase):
                 fix=True,
                 add_missing_elements_flag=False
             )
-            logger_mock.info.assert_any_call("[fix-sba-xml wrapper] Successfully processed 5 XML files (via xml_validator)")
+            logger_mock.info.assert_any_call(
+                "[fix-sba-xml wrapper] 5 file(s): 5 pass SBA's schema, 0 still fail it, "
+                "0 could not be fixed. (via xml_validator)")
+
+    @patch('src.fix_sba_xml.validator_process_directory')
+    def test_process_directory_names_what_still_fails(self, mock_validator_process_directory):
+        """It used to report every rewritten file as processed successfully, and exit 0."""
+        mock_validator_process_directory.return_value = DirectorySummary(
+            files=["a.xml", "b.xml", "c.xml"], valid=["a.xml"], invalid=["b.xml"], failed=["c.xml"])
+        logger_mock = MagicMock()
+
+        test_args = ['fix_sba_xml.py', '--directory', 'test_dir']
+        with patch.object(sys, 'argv', test_args):
+            args = fix_sba_xml.parse_arguments()
+
+            result = fix_sba_xml.process_directory(args, logger_mock, always_fix=True, mimic_original_add_missing=False)
+
+            self.assertEqual(result, 1)
+            logger_mock.error.assert_any_call("[fix-sba-xml wrapper] Still fails SBA's schema: b.xml")
+            logger_mock.error.assert_any_call("[fix-sba-xml wrapper] Could not be fixed: c.xml")
 
     def _assert_output_delegation(self, mock_exists, mock_makedirs, mock_vpd, expected_out):
         """The wrapper confines --output, creates it, and delegates with it."""
@@ -187,7 +239,7 @@ class TestFixSBAXML(unittest.TestCase):
     @patch('os.path.exists')
     def test_process_directory_with_output(self, mock_exists, mock_makedirs, mock_validator_process_directory):
         """Test directory processing with output directory creation."""
-        mock_validator_process_directory.return_value = 2
+        mock_validator_process_directory.return_value = DirectorySummary()
         mock_exists.return_value = False # Simulate output dir doesn't exist
         logger_mock = MagicMock()
 
@@ -208,7 +260,7 @@ class TestFixSBAXML(unittest.TestCase):
     @patch('os.path.exists')
     def test_process_directory_with_output_side_effect(self, mock_exists, mock_makedirs, mock_validator_process_directory):
         """Test directory processing with output directory creation and side effects."""
-        mock_validator_process_directory.return_value = 2
+        mock_validator_process_directory.return_value = DirectorySummary()
         # --output is confined within the base before use (path_safety); exists()
         # is checked against that confined path, so key the side effect off it.
         expected_out = resolve_within(output_base(), 'out_dir')

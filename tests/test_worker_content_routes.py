@@ -687,9 +687,10 @@ def test_convert_answers_a_lone_surrogate_with_422(monkeypatch):
     """It was a 400 "Invalid request parameters" that named nothing."""
     req = ConvertRequest(job_id="jobSur", csv_content=COUNSELING_CSV.replace("Smith", "Smith\ud83d", 1),
                          converter_type="counseling")
+    conversion = convert_route.convert(req)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(convert_route.convert(req))
+        asyncio.run(conversion)
 
     assert exc.value.status_code == 422
     assert "unpaired UTF-16 surrogate (U+D83D) at line 2, column 12" in exc.value.detail

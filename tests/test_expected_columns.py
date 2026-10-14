@@ -39,7 +39,8 @@ def _headers_read_by_converter() -> set[str]:
 
     Covers three access shapes:
 
-    * ``row.get('Header', ...)`` — the bulk of them, still literals.
+    * ``row.get('Header', ...)`` — the bulk of them, as literals or
+      module-level constants.
     * ``self._first_present(row, 'A', 'B', ...)`` — kept because the helper is
       still public API and callable with bare literals.
     * ``self._yes_no(row, 'Header', default, ...)`` and
@@ -51,22 +52,34 @@ def _headers_read_by_converter() -> set[str]:
       five real headers as unread and fail in the opposite direction.
     """
     tree = ast.parse(_CONVERTER.read_text())
+    # Module-level `_NAME = 'Header'` constants, so a header read through one
+    # counts like a literal.
+    constants = {
+        target.id: node.value.value
+        for node in tree.body if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+        for target in node.targets if isinstance(target, ast.Name)
+    }
+
+    def text(arg):
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+        if isinstance(arg, ast.Name):
+            return constants.get(arg.id)
+        return None
+
     headers: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr == "get" and node.args:
-            first = node.args[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                headers.add(first.value)
+            if (header := text(node.args[0])) is not None:
+                headers.add(header)
         elif node.func.attr in ("_yes_no", "_phone") and len(node.args) >= 2:
-            column = node.args[1]
-            if isinstance(column, ast.Constant) and isinstance(column.value, str):
-                headers.add(column.value)
+            if (header := text(node.args[1])) is not None:
+                headers.add(header)
         elif node.func.attr == "_first_present":
-            for arg in node.args[1:]:
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    headers.add(arg.value)
+            headers.update(h for h in map(text, node.args[1:]) if h is not None)
         elif node.func.attr in ("_mapped", "_mapped_parsed", "_part3_amount") and len(node.args) >= 2:
             key = node.args[1]
             if isinstance(key, ast.Constant) and isinstance(key.value, str):

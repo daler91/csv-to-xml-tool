@@ -195,6 +195,53 @@ export async function readCappedFormData(req: Request): Promise<FormData | NextR
   }).formData();
 }
 
+/** The upload's file and schemaType, or the 4xx response refusing them. */
+function checkUpload<T>(
+  formData: FormData,
+  options: XmlToolRouteOptions<T>
+): { file: File; schemaType: string } | NextResponse {
+  const file = formData.get("file");
+  const schemaType = formData.get("schemaType");
+
+  if (!isUploadedFile(file) || typeof schemaType !== "string" || !schemaType) {
+    return NextResponse.json(
+      { error: "File and schema type are required" },
+      { status: 400 }
+    );
+  }
+  if (!file.name.toLowerCase().endsWith(".xml")) {
+    return NextResponse.json(
+      { error: "Only XML files are accepted" },
+      { status: 400 }
+    );
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "File size exceeds 50MB limit" },
+      { status: 413 }
+    );
+  }
+  if (!options.schemaTypes.has(schemaType)) {
+    return NextResponse.json(
+      { error: options.schemaTypeError },
+      { status: 400 }
+    );
+  }
+  return { file, schemaType };
+}
+
+/** The upload decoded as text, or a 400 when its bytes aren't valid text. */
+async function readXmlContent(file: File): Promise<string | NextResponse> {
+  try {
+    return decodeXmlUpload(Buffer.from(await file.arrayBuffer()));
+  } catch (error) {
+    if (error instanceof XmlEncodingError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
+}
+
 export function createXmlToolRoute<T>(
   options: XmlToolRouteOptions<T>
 ): (req: Request) => Promise<NextResponse> {
@@ -219,43 +266,12 @@ export function createXmlToolRoute<T>(
 
       const formData = await readCappedFormData(req);
       if (formData instanceof NextResponse) return formData;
-      const file = formData.get("file");
-      const schemaType = formData.get("schemaType");
+      const upload = checkUpload(formData, options);
+      if (upload instanceof NextResponse) return upload;
+      const { file, schemaType } = upload;
 
-      if (!isUploadedFile(file) || typeof schemaType !== "string" || !schemaType) {
-        return NextResponse.json(
-          { error: "File and schema type are required" },
-          { status: 400 }
-        );
-      }
-      if (!file.name.toLowerCase().endsWith(".xml")) {
-        return NextResponse.json(
-          { error: "Only XML files are accepted" },
-          { status: 400 }
-        );
-      }
-      if (file.size > MAX_UPLOAD_BYTES) {
-        return NextResponse.json(
-          { error: "File size exceeds 50MB limit" },
-          { status: 413 }
-        );
-      }
-      if (!options.schemaTypes.has(schemaType)) {
-        return NextResponse.json(
-          { error: options.schemaTypeError },
-          { status: 400 }
-        );
-      }
-
-      let xmlContent: string;
-      try {
-        xmlContent = decodeXmlUpload(Buffer.from(await file.arrayBuffer()));
-      } catch (error) {
-        if (error instanceof XmlEncodingError) {
-          return NextResponse.json({ error: error.message }, { status: 400 });
-        }
-        throw error;
-      }
+      const xmlContent = await readXmlContent(file);
+      if (xmlContent instanceof NextResponse) return xmlContent;
 
       let result: T;
       try {

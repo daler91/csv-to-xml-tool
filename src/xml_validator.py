@@ -555,6 +555,38 @@ class DirectorySummary:
                 f"{len(self.invalid)} still fail it, {len(self.failed)} could not be fixed.")
 
 
+def _process_file(file_path, input_dir, output_dir, xsd_file, fix, add_missing_elements_flag,
+                  summary: DirectorySummary) -> None:
+    """Validate and/or fix one file of process_directory's, recording in
+    `summary` whether it passes the schema, still fails it, or could not be
+    fixed."""
+    logger.info(f"--- Processing file: {file_path} ---")
+    summary.files.append(file_path)
+    current_output_path = _resolve_output_path(file_path, input_dir, output_dir)
+
+    is_valid, checked_path = None, file_path
+    if xsd_file:
+        is_valid, _ = _validate_and_log(file_path, xsd_file, "original ")
+
+    if fix:
+        logger.info(f"Attempting to fix {file_path} -> {current_output_path}")
+        result = fix_and_revalidate(file_path, current_output_path, add_missing_elements_flag, xsd_file)
+        log_fix_result(result, file_path, current_output_path)
+        if not result.ok:
+            summary.failed.append(file_path)
+            return
+        # A file used to count as "processed successfully" once it was
+        # rewritten, however it then validated.
+        is_valid, checked_path = result.valid, current_output_path
+
+    if is_valid is None:
+        logger.info(f"File {file_path} found (no fix requested, no XSD for validation).")
+    elif is_valid:
+        summary.valid.append(checked_path)
+    else:
+        summary.invalid.append(checked_path)
+
+
 def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xml", xsd_file=None, fix=False, add_missing_elements_flag=False):
     """
     Process all XML files in a directory.
@@ -607,31 +639,7 @@ def process_directory(input_dir, output_dir=None, recursive=False, pattern="*.xm
 
     summary = DirectorySummary()
     for file_path in files:
-        logger.info(f"--- Processing file: {file_path} ---")
-        summary.files.append(file_path)
-        current_output_path = _resolve_output_path(file_path, input_dir, output_dir)
-
-        is_valid, checked_path = None, file_path
-        if xsd_file:
-            is_valid, _ = _validate_and_log(file_path, xsd_file, "original ")
-
-        if fix:
-            logger.info(f"Attempting to fix {file_path} -> {current_output_path}")
-            result = fix_and_revalidate(file_path, current_output_path, add_missing_elements_flag, xsd_file)
-            log_fix_result(result, file_path, current_output_path)
-            if not result.ok:
-                summary.failed.append(file_path)
-                continue
-            # A file used to count as "processed successfully" once it was
-            # rewritten, however it then validated.
-            is_valid, checked_path = result.valid, current_output_path
-
-        if is_valid is None:
-            logger.info(f"File {file_path} found (no fix requested, no XSD for validation).")
-        elif is_valid:
-            summary.valid.append(checked_path)
-        else:
-            summary.invalid.append(checked_path)
+        _process_file(file_path, input_dir, output_dir, xsd_file, fix, add_missing_elements_flag, summary)
 
     logger.info(f"Finished processing directory. {summary.describe()}")
     return summary

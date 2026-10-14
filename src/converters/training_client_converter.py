@@ -12,6 +12,8 @@ from ..config import GeneralConfig, TrainingClientConfig, ValidationCategory
 from .. import data_cleaning
 from ..xml_utils import create_element
 
+_MEMBER_ID = 'Member ID'
+
 
 class TrainingClientConverter(CounselingConverter):
     """
@@ -23,8 +25,8 @@ class TrainingClientConverter(CounselingConverter):
     """
     SCHEMA_TYPE = "training-client"
     # After the rename: 'Activity ID' is the CSV's Class/Event ID.
-    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID', 'Member ID')
-    SESSION_NUMBER_FIELD = 'Member ID'
+    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID', _MEMBER_ID)
+    SESSION_NUMBER_FIELD = _MEMBER_ID
     SESSION_NUMBER_BLANK = "No Member ID or Class/Event ID"
 
     def __init__(self, logger, validator):
@@ -121,7 +123,7 @@ class TrainingClientConverter(CounselingConverter):
     def _partner_session_number(self, row):
         """Per-attendee campaign-member id; falls back to the event id (the
         remapped Class/Event ID) when the CSV has no Member ID."""
-        member_id = (row.get('Member ID') or '').strip()
+        member_id = (row.get(_MEMBER_ID) or '').strip()
         return member_id or super()._partner_session_number(row)
 
     def _check_session_column(self, headers):

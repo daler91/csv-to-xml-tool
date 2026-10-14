@@ -4,6 +4,7 @@ Handles the conversion of SBA Management Training Reports from CSV to XML.
 
 from .. import data_validation
 import xml.etree.ElementTree as ET
+import functools
 import re
 from collections import defaultdict
 from typing import NamedTuple
@@ -25,7 +26,7 @@ _SHOWN_VALUES = 3
 # hyphen or a dash with spaces around it, a space, or nothing (503091234, a
 # ZIP+4 a spreadsheet stored as a number). [0-9], not \d: the XSD's \d, as
 # libxml2 has it, is ASCII only.
-_ZIP = re.compile(r'(?<![0-9])([0-9]{5})(?:\s*[-\u2013\u2014]\s*([0-9]{4})|\s?([0-9]{4}))?(?![0-9])')
+_ZIP = re.compile(r'(?<![0-9])([0-9]{5})(?:(?:\s*[-\u2013\u2014]\s*|\s?)([0-9]{4}))?(?![0-9])')
 # How Excel keeps a ZIP's leading zero: ="05030", or a leading apostrophe.
 _EXCEL_TEXT = re.compile(r'="(.*)"|\'(.*)', re.S)
 
@@ -111,42 +112,51 @@ class TrainingConverter(BaseConverter):
         value seen made a 20,000-row event take 20 seconds.
         """
         method, usable_as = self._EVENT_VALUE_CHECKS.get(key, (None, None))
-        check = getattr(self, method) if method else None
-        filed_as = {}  # value as written -> as filed, or '' when unusable
+        # value as written -> as filed, or '' when unusable; each distinct
+        # value is checked once.
+        filed_as = functools.cache(getattr(self, method) if method else str)
         shown = {}     # comparison key -> the value as first written
         first = filed = None  # (header, value)
-        for row in rows:
-            header, value = self._column_value(row, key)
-            value = value.strip()
-            if not value:
-                continue
-            if value not in filed_as:
-                filed_as[value] = check(value) if check else value
-            if first is None:
-                first = (header, value)
-            if filed is None and filed_as[value]:
+        for header, value in self._event_cells(rows, key):
+            first = first or (header, value)
+            if filed is None and filed_as(value):
                 filed = (header, value)
             if len(shown) <= _SHOWN_VALUES:
-                shown.setdefault((filed_as[value] or value).casefold(), value)
+                shown.setdefault((filed_as(value) or value).casefold(), value)
             elif filed:
                 break  # the value is found, and the warning can list no more
         if first is None:
             return ''
         header, value = filed or first
         if len(shown) > 1:
-            listed = ", ".join(f"'{v}'" for v in list(shown.values())[:_SHOWN_VALUES])
-            if len(shown) > _SHOWN_VALUES:
-                listed += ", ..."
-            if filed is None:
-                outcome = f"none of them is {usable_as}, so none was filed"
-            elif filed == first:
-                outcome = f"filed the first, '{value}'"
-            else:
-                outcome = f"filed '{value}', the first that is {usable_as}"
-            self.validator.add_issue(
-                str(event_id), "warning", ValidationCategory.INVALID_VALUE, header,
-                f"The event's rows give different values for this column ({listed}); {outcome}.")
+            self._report_event_disagreement(event_id, header, list(shown.values()),
+                                            filed, first, usable_as)
         return value
+
+    def _event_cells(self, rows, key):
+        """(header, value) for each of the event's rows that fills `key`."""
+        for row in rows:
+            header, value = self._column_value(row, key)
+            value = value.strip()
+            if value:
+                yield header, value
+
+    def _report_event_disagreement(self, event_id, header, values, filed, first, usable_as):
+        """Warn that an event's rows gave different `values` for a column,
+        and which was filed: `filed`, the first usable, or none of them."""
+        listed = ", ".join(f"'{v}'" for v in values[:_SHOWN_VALUES])
+        if len(values) > _SHOWN_VALUES:
+            listed += ", ..."
+        value = (filed or first)[1]
+        if filed is None:
+            outcome = f"none of them is {usable_as}, so none was filed"
+        elif filed == first:
+            outcome = f"filed the first, '{value}'"
+        else:
+            outcome = f"filed '{value}', the first that is {usable_as}"
+        self.validator.add_issue(
+            str(event_id), "warning", ValidationCategory.INVALID_VALUE, header,
+            f"The event's rows give different values for this column ({listed}); {outcome}.")
 
     def _header(self, key):
         """The CSV header to name in an issue about a COLUMN_MAPPING key: the
@@ -429,7 +439,7 @@ class TrainingConverter(BaseConverter):
             city=(self._get_column_value(row, 'city') or '').strip(),
             state=(self._get_column_value(row, 'state') or '').strip(),
             zip_code=zip_match.group(1) if zip_match else '',
-            zip4=(zip_match.group(2) or zip_match.group(3) or '') if zip_match else '',
+            zip4=(zip_match.group(2) or '') if zip_match else '',
             zip_cell=zip_cell,
             zip_header=zip_header or self._header('zip'),
             zip_written=zip_match.group(0) if zip_match else '',
@@ -439,58 +449,11 @@ class TrainingConverter(BaseConverter):
     def _build_location_section(self, parent, rows):
         training_location = create_element(parent, 'TrainingLocation')
         event_id = str(self.validator.current_record_id)
-
-        # The first row with a city, a state and a ZIP; else the first with a
-        # city and a state, filed without a ZIP (ZipCode is optional) rather
-        # than replaced, city and state too, by the configured location.
-        # Reading only the first row filed a default when it alone was
-        # incomplete. Rows that give different addresses are not reported: in
-        # a campaign-member export each row's City/State/Zip is that
-        # attendee's own mailing address, so they differ on nearly every event.
-        complete = partial = given = None
-        for row in rows:
-            loc = self._location(row)
-            given = given or (loc if loc.city or loc.state or loc.zip_cell else None)
-            if loc.city and loc.state:
-                if loc.zip_code:
-                    complete = loc
-                    break
-                partial = partial or loc
-        loc = complete or partial
-
+        loc, given = self._event_location(rows)
         if loc is None:
-            self.logger.info(f"Using default location for event {event_id}")
-            default = self.config.DEFAULT_LOCATION
-            where = f"{default['city']}, {default['state']} {default['zip']}"
-            if given is None:
-                self._warn_fabricated_default(event_id, 'Class/Event Location', where,
-                                              'TrainingLocation; no row gives a city, state or ZIP')
-            else:
-                parts = ", ".join(f"{self._header(key)} '{value}'" if value else f"{self._header(key)} blank"
-                                  for key, value in (('city', given.city), ('state', given.state),
-                                                     ('zip', given.zip_cell)))
-                self.validator.add_issue(
-                    event_id, "warning", ValidationCategory.FABRICATED_DEFAULT, 'Class/Event Location',
-                    f"No row gives both a city and a state (the first to give any of them has {parts}), "
-                    f"so the configured location '{where}' was filed instead.")
-            loc = _RowLocation(default['city'], default['state'], default['zip'], '', '', '', '', False)
-        elif not loc.zip_code:
-            if loc.zip_cell:
-                self.validator.add_issue(
-                    event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
-                    f"Could not read a 5-digit ZIP from '{loc.zip_cell}', so the location was filed "
-                    f"as '{loc.city}, {loc.state}' without one.")
-            else:
-                self.validator.add_issue(
-                    event_id, "warning", ValidationCategory.MISSING_FIELD, loc.zip_header,
-                    f"No ZIP code is given with '{loc.city}, {loc.state}', so the location was filed "
-                    "without one.")
-        elif loc.ignored:
-            # As counseling's _build_address says it.
-            self.validator.add_issue(
-                event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
-                f"Only '{loc.zip_written}' of '{loc.zip_cell}' is a ZIP or ZIP+4, so the rest was left "
-                "out of the XML.")
+            loc = self._default_location(event_id, given)
+        else:
+            self._report_location_zip(event_id, loc)
 
         create_element(training_location, 'City', loc.city)
         create_element(training_location, 'State', data_cleaning.standardize_state_name(loc.state))
@@ -500,6 +463,68 @@ class TrainingConverter(BaseConverter):
             create_element(training_location, 'Zip4Code', loc.zip4)
         country_element = create_element(training_location, 'Country')
         create_element(country_element, 'Code', self.config.DEFAULT_LOCATION['country'])
+
+    def _event_location(self, rows):
+        """(the row location to file or None, the first row giving any part).
+
+        The first row with a city, a state and a ZIP; else the first with a
+        city and a state, filed without a ZIP (ZipCode is optional) rather
+        than replaced, city and state too, by the configured location.
+        Reading only the first row filed a default when it alone was
+        incomplete. Rows that give different addresses are not reported: in
+        a campaign-member export each row's City/State/Zip is that
+        attendee's own mailing address, so they differ on nearly every event.
+        """
+        partial = given = None
+        for row in rows:
+            loc = self._location(row)
+            given = given or (loc if loc.city or loc.state or loc.zip_cell else None)
+            if loc.city and loc.state and loc.zip_code:
+                return loc, given
+            if loc.city and loc.state:
+                partial = partial or loc
+        return partial, given
+
+    def _default_location(self, event_id, given):
+        """The configured location, filed for an event with no row giving a
+        city and a state, and the warning that says so."""
+        self.logger.info(f"Using default location for event {event_id}")
+        default = self.config.DEFAULT_LOCATION
+        where = f"{default['city']}, {default['state']} {default['zip']}"
+        if given is None:
+            self._warn_fabricated_default(event_id, 'Class/Event Location', where,
+                                          'TrainingLocation; no row gives a city, state or ZIP')
+        else:
+            parts = ", ".join(f"{self._header(key)} '{value}'" if value else f"{self._header(key)} blank"
+                              for key, value in (('city', given.city), ('state', given.state),
+                                                 ('zip', given.zip_cell)))
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.FABRICATED_DEFAULT, 'Class/Event Location',
+                f"No row gives both a city and a state (the first to give any of them has {parts}), "
+                f"so the configured location '{where}' was filed instead.")
+        return _RowLocation(default['city'], default['state'], default['zip'], '', '', '', '', False)
+
+    def _report_location_zip(self, event_id, loc):
+        """Warn when the filed location's ZIP is missing, unreadable, or only
+        part of its cell."""
+        if loc.zip_code and loc.ignored:
+            # As counseling's _build_address says it.
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
+                f"Only '{loc.zip_written}' of '{loc.zip_cell}' is a ZIP or ZIP+4, so the rest was left "
+                "out of the XML.")
+        elif loc.zip_code:
+            return
+        elif loc.zip_cell:
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.INVALID_FORMAT, loc.zip_header,
+                f"Could not read a 5-digit ZIP from '{loc.zip_cell}', so the location was filed "
+                f"as '{loc.city}, {loc.state}' without one.")
+        else:
+            self.validator.add_issue(
+                event_id, "warning", ValidationCategory.MISSING_FIELD, loc.zip_header,
+                f"No ZIP code is given with '{loc.city}, {loc.state}', so the location was filed "
+                "without one.")
 
     def _resolve_column(self, rows, column_key):
         """Resolve a config column key to the actual CSV column name present in the rows."""

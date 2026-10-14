@@ -216,14 +216,19 @@ def _named_types_used(node, named: dict) -> list[str]:
     found: list[str] = []
     pending = [node]
     while pending:
-        for element in pending.pop().iter(etree.Element):
-            for attribute in ("type", "base", "itemType", "memberTypes"):
-                for reference in (element.get(attribute) or "").split():
-                    name = reference.rpartition(":")[2]
-                    if name in named and name not in found:
-                        found.append(name)
-                        pending.append(named[name])
+        for name in _type_references(pending.pop()):
+            if name in named and name not in found:
+                found.append(name)
+                pending.append(named[name])
     return found
+
+
+def _type_references(node):
+    """The local names of the types `node` and its descendants refer to."""
+    for element in node.iter(etree.Element):
+        for attribute in ("type", "base", "itemType", "memberTypes"):
+            for reference in (element.get(attribute) or "").split():
+                yield reference.rpartition(":")[2]
 
 
 def _local(tag: str) -> str:

@@ -52,6 +52,11 @@ _CONTROL_WHITESPACE = re.compile("[\x0b\x0c\x1c-\x1f\x85]")
 ProgressCallback = Callable[[int, int], None]
 
 
+def _first_few(items: list[str], limit: int) -> str:
+    """The first `limit` items, comma-separated, with ", ..." when more follow."""
+    return ", ".join(items[:limit]) + (", ..." if len(items) > limit else "")
+
+
 class EmptyCSVError(ValueError):
     """Raised when an input CSV has headers but no data rows (CONV-6).
 
@@ -162,11 +167,11 @@ class BaseConverter(abc.ABC):
             by_column.setdefault(column, []).append((number, value))
         for column, cells in by_column.items():
             codes = sorted({f"U+{ord(ch):04X}" for _, value in cells for ch in value if ch not in " \t\n\r"})
-            shown = ", ".join(codes[:5]) + (", ..." if len(codes) > 5 else "")
+            shown = _first_few(codes, 5)
             if len(cells) == 1:
                 where = f"Row {cells[0][0]}'s '{column}' cell holds"
             else:
-                numbers = ", ".join(str(number) for number, _ in cells[:5]) + (", ..." if len(cells) > 5 else "")
+                numbers = _first_few([str(number) for number, _ in cells], 5)
                 where = f"{len(cells)} '{column}' cells (rows {numbers}) hold"
             self.validator.add_issue(
                 "file", "warning", ValidationCategory.INVALID_VALUE, column,
@@ -191,7 +196,7 @@ class BaseConverter(abc.ABC):
         width = len(reader.fieldnames)
         if len(reader.long_rows) == 1:
             (number, extra), = reader.long_rows
-            shown = ", ".join(f"'{value}'" for value in extra[:3]) + (", ..." if len(extra) > 3 else "")
+            shown = _first_few([f"'{value}'" for value in extra], 3)
             verb = "was" if len(extra) == 1 else "were"
             what = (f"Row {number} has more values than the header has columns ({width}): {shown} "
                     f"past the last column {verb} dropped, and its other values may be in the wrong "

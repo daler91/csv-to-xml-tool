@@ -289,6 +289,19 @@ def _move_to_end(parent, tag):
     parent.append(child)
 
 
+def _golden_body():
+    """The golden counseling file without its XML declaration."""
+    with open(_GOLDEN_COUNSELING, encoding='utf-8', newline='') as f:
+        return f.read().split('?>', 1)[1]
+
+
+def _misordered_body():
+    """_golden_body with Race moved to the end of the first ClientIntake."""
+    tree = xml_validator.etree.parse(_GOLDEN_COUNSELING)
+    _move_to_end(tree.getroot().find('CounselingRecord/ClientIntake'), 'Race')
+    return xml_validator.etree.tostring(tree.getroot(), encoding='unicode')
+
+
 class _FixerCase(unittest.TestCase):
     """Writes a mutated golden file to a temp dir for the fixer."""
 
@@ -311,16 +324,6 @@ class _FixerCase(unittest.TestCase):
     def read(self, path):
         with open(path, encoding='utf-8', newline='') as f:
             return f.read()
-
-    def golden_body(self):
-        """The golden counseling file without its XML declaration."""
-        return self.read(_GOLDEN_COUNSELING).split('?>', 1)[1]
-
-    def misordered_body(self):
-        """golden_body with Race moved to the end of the first ClientIntake."""
-        tree = self.golden()
-        _move_to_end(tree.getroot().find('CounselingRecord/ClientIntake'), 'Race')
-        return xml_validator.etree.tostring(tree.getroot(), encoding='unicode')
 
 
 class TestFixEveryElementOrder(_FixerCase):
@@ -396,7 +399,7 @@ class TestFixChangesOnlyTheOrder(_FixerCase):
     def test_dtd_attribute_defaults_are_not_made_real(self):
         source = self.write('<?xml version="1.0" encoding="UTF-8"?>\n'
                             '<!DOCTYPE CounselingInformation [\n'
-                            '  <!ATTLIST CounselingRecord foo CDATA "bar">\n]>' + self.misordered_body())
+                            '  <!ATTLIST CounselingRecord foo CDATA "bar">\n]>' + _misordered_body())
         output = os.path.join(self.tmp, 'out.xml')
 
         self.assertTrue(xml_validator.fix_client_intake_element_order(source, output))
@@ -409,7 +412,7 @@ class TestFixChangesOnlyTheOrder(_FixerCase):
 
     def test_carriage_returns_comments_and_pis_come_through(self):
         notes = '<CounselorNotes>Discussed loan options.&#13;\nFollow up in March.</CounselorNotes>'
-        body = self.misordered_body().replace('</CounselorRecord>', notes + '</CounselorRecord>', 1)
+        body = _misordered_body().replace('</CounselorRecord>', notes + '</CounselorRecord>', 1)
         body = body.replace('<CounselingRecord>', '<!-- reviewed by J. Smith --><?review ok?><CounselingRecord>', 1)
         source = self.write('<?xml version="1.0" encoding="UTF-8"?>\n' + body)
         output = os.path.join(self.tmp, 'out.xml')
@@ -442,7 +445,7 @@ class TestEntityDeclarations(_FixerCase):
         return f'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE CounselingInformation [{subset}]>{body}'
 
     def test_validator_says_entities_are_not_supported(self):
-        body = self.golden_body().replace('<CounselorName>Pat Smith</CounselorName>',
+        body = _golden_body().replace('<CounselorName>Pat Smith</CounselorName>',
                                           '<CounselorName>&counselor;</CounselorName>')
         source = self.write(self.with_doctype('<!ENTITY counselor "Pat Smith">', body))
 
@@ -454,7 +457,7 @@ class TestEntityDeclarations(_FixerCase):
         self.assertIn('&counselor;', result['errors'][0])
 
     def test_fixer_refuses_a_declared_entity_and_says_why(self):
-        source = self.write(self.with_doctype('<!ENTITY nbsp "&#160;">', self.misordered_body()))
+        source = self.write(self.with_doctype('<!ENTITY nbsp "&#160;">', _misordered_body()))
         output = os.path.join(self.tmp, 'out.xml')
 
         result = xml_validator.fix_element_order(source, output)

@@ -26,11 +26,24 @@ def _session_type_key(value):
 
 _SESSION_TYPE_LOOKUP = {_session_type_key(t): t for t in CounselingConfig.VALID_SESSION_TYPES}
 
+# CSV columns read in more than one place.
+_CONTACT_ID = 'Contact ID'
+_ACTIVITY_ID = 'Activity ID'
+_LEGAL_ENTITY = 'Legal Entity of Business'
+_LEGAL_ENTITY_OTHER = 'Other legal entity (specify)'
+_BRANCH_OF_SERVICE = 'Branch Of Service'
+_TOTAL_EMPLOYEES = 'Total Number of Employees'
+
+# Military Status answers (casefolded) that name no military service.
+_NO_MILITARY_SERVICE = 'no military service'
+_PREFER_NOT_TO_SAY = 'prefer not to say'
+_NON_MILITARY_STATUSES = frozenset({'', _NO_MILITARY_SERVICE, _PREFER_NOT_TO_SAY})
+
 # Branch Of Service answers that name no branch. Beside a status with no
 # military service to file a branch for, leaving one out loses nothing, so it
 # isn't reported -- an export that fills the column for every client would
 # otherwise warn on every row.
-_NO_BRANCH = frozenset({'no military service', 'prefer not to say', 'n/a', 'na', 'none', 'no', '-',
+_NO_BRANCH = frozenset({_NO_MILITARY_SERVICE, _PREFER_NOT_TO_SAY, 'n/a', 'na', 'none', 'no', '-',
                         'not applicable'})
 
 
@@ -41,10 +54,10 @@ class CounselingConverter(BaseConverter):
     # Which schema's facets SchemaGuard enforces, and whose CSV column names
     # its issues use (training-client overrides this).
     SCHEMA_TYPE = "counseling"
-    IDENTIFIER_COLUMNS = ('Contact ID', 'Activity ID')
+    IDENTIFIER_COLUMNS = (_CONTACT_ID, _ACTIVITY_ID)
     # The column PartnerSessionNumber is read from, which a blank session
     # number is reported against, and how that warning starts.
-    SESSION_NUMBER_FIELD = 'Activity ID'
+    SESSION_NUMBER_FIELD = _ACTIVITY_ID
     SESSION_NUMBER_BLANK = "Blank Activity ID"
 
     def __init__(self, logger, validator):
@@ -70,8 +83,8 @@ class CounselingConverter(BaseConverter):
     # condition: (ClientIntake child, CSV column, why it is required).
     _CONDITIONAL_SECTIONS = (
         ('CounselingSeeking', 'Nature of the Counseling Seeking?', 'for a client who is in business'),
-        ('LegalEntity', 'Legal Entity of Business', 'for a client who is in business'),
-        ('BranchOfService', 'Branch Of Service', 'for a client with military service'),
+        ('LegalEntity', _LEGAL_ENTITY, 'for a client who is in business'),
+        ('BranchOfService', _BRANCH_OF_SERVICE, 'for a client with military service'),
     )
 
     def _conditionally_required(self, record):
@@ -81,8 +94,7 @@ class CounselingConverter(BaseConverter):
         if intake is None:
             return []
         in_business = intake.findtext('CurrentlyInBusiness') == 'Yes'
-        military = (intake.findtext('MilitaryStatus') or '').lower() not in (
-            '', 'no military service', 'prefer not to say')
+        military = (intake.findtext('MilitaryStatus') or '').lower() not in _NON_MILITARY_STATUSES
         applies = {'CounselingSeeking': in_business, 'LegalEntity': in_business, 'BranchOfService': military}
         return [section for section in self._CONDITIONAL_SECTIONS
                 if applies[section[0]] and intake.find(section[0]) is not None]
@@ -409,13 +421,13 @@ class CounselingConverter(BaseConverter):
         csv_row = row
         row = self._preprocess_row(row)
         cleaned_ids = self._clean_identifiers(row)
-        contact_id = row.get('Contact ID')
+        contact_id = row.get(_CONTACT_ID)
         if contact_id is not None:
             # A whitespace-only id was written to the filing as "   ";
             # trimmed, it fails as a missing id like a blank cell does.
-            row['Contact ID'] = contact_id = str(contact_id).strip()
+            row[_CONTACT_ID] = contact_id = str(contact_id).strip()
         record_id = contact_id if contact_id is not None else f"Row_{row_index}"
-        activity_id = row.get('Activity ID', '')
+        activity_id = row.get(_ACTIVITY_ID, '')
         # Set before validate_counseling_record so pre-validation issues
         # (including missing-Contact-ID "Row_N" ones) carry the event id.
         self.validator.set_current_event_id(activity_id)
@@ -577,12 +589,11 @@ class CounselingConverter(BaseConverter):
             )
         emit_optional(client_intake, 'MilitaryStatus', military_status_csv)
 
-        non_military_statuses = ['prefer not to say', 'no military service', '']
-        branch_csv = row.get('Branch Of Service', '').strip()
-        if military_status_csv and military_status_csv.lower() not in non_military_statuses:
+        branch_csv = row.get(_BRANCH_OF_SERVICE, '').strip()
+        if military_status_csv and military_status_csv.lower() not in _NON_MILITARY_STATUSES:
             # 'Prefer not to say' is one of SBA's branches, so only a blank
             # cell or "no military service" means no branch was given.
-            if branch_csv and branch_csv.lower() != 'no military service':
+            if branch_csv and branch_csv.lower() != _NO_MILITARY_SERVICE:
                 create_element(client_intake, 'BranchOfService',
                                data_cleaning.map_branch_of_service_to_xsd(branch_csv))
             else:
@@ -598,7 +609,7 @@ class CounselingConverter(BaseConverter):
                 why = f"{status_label} is '{military_status_raw}'"
             else:
                 why = f"{status_label} '{military_status_raw}' is filed as '{military_status_csv}'"
-            self._warn_not_filed(record_id, 'Branch Of Service', branch_csv, why)
+            self._warn_not_filed(record_id, _BRANCH_OF_SERVICE, branch_csv, why)
 
     def _build_media_and_internet(self, client_intake, row, record_id):
         media_codes = data_cleaning.split_multi_value(row.get('What Prompted you to contact us?', ''))
@@ -686,8 +697,8 @@ class CounselingConverter(BaseConverter):
             create_element(client_intake, 'Employee_Owned', 'No')
         else:
             self._warn_not_filed(record_id, 'Employee Owned', employee_owned_raw, "it is not Yes or No")
-        total_emp_intake = self._optional_number(row.get('Total Number of Employees', ''),
-                                                 'Total Number of Employees', record_id)
+        total_emp_intake = self._optional_number(row.get(_TOTAL_EMPLOYEES, ''),
+                                                 _TOTAL_EMPLOYEES, record_id)
         if total_emp_intake:
             create_element(client_intake, 'TotalNumberOfEmployees', total_emp_intake)
         # Read once for Part 2 and Part 3; the schema guard reports a negative.
@@ -726,15 +737,15 @@ class CounselingConverter(BaseConverter):
 
     def _build_legal_entity(self, client_intake, row, record_id):
         le_element = create_element(client_intake, 'LegalEntity')
-        le_codes = data_cleaning.split_multi_value(row.get('Legal Entity of Business', ''))
-        le_other = row.get('Other legal entity (specify)', '').strip()
+        le_codes = data_cleaning.split_multi_value(row.get(_LEGAL_ENTITY, ''))
+        le_other = row.get(_LEGAL_ENTITY_OTHER, '').strip()
         if le_codes:
             for code in le_codes:
                 create_element(le_element, 'Code', code)
         elif le_other:
             create_element(le_element, 'Code', 'Other')
-            self._warn_inferred_other(record_id, 'Legal Entity of Business', 'Other',
-                                      'Other legal entity (specify)')
+            self._warn_inferred_other(record_id, _LEGAL_ENTITY, 'Other',
+                                      _LEGAL_ENTITY_OTHER)
         else:
             self.validator.add_issue(record_id, "error", ValidationCategory.MISSING_REQUIRED, "LegalEntity", "Client is in business, but Legal Entity is missing.")
             create_element(le_element, 'Code', 'Other')
@@ -846,9 +857,9 @@ class CounselingConverter(BaseConverter):
             why = ("the client is recorded as not in business" if in_business_val == 'No'
                    else f"the client's business status is recorded as '{in_business_val}'")
             why += ", and SBA asks for it only of a business"
-            self._warn_not_filed(record_id, 'Legal Entity of Business', row.get('Legal Entity of Business', ''), why)
-            self._warn_not_filed(record_id, 'Other legal entity (specify)',
-                                 row.get('Other legal entity (specify)', ''), why)
+            self._warn_not_filed(record_id, _LEGAL_ENTITY, row.get(_LEGAL_ENTITY, ''), why)
+            self._warn_not_filed(record_id, _LEGAL_ENTITY_OTHER,
+                                 row.get(_LEGAL_ENTITY_OTHER, ''), why)
         self._build_rural_urban(client_intake, row, record_id)
         self._build_counseling_seeking(client_intake, row, record_id, in_business_val)
         self._build_export_countries(client_intake, row, record_id)
@@ -930,7 +941,7 @@ class CounselingConverter(BaseConverter):
         if total_employees:
             create_element(counselor_record, 'TotalNumberOfEmployees', total_employees)
         for column, raw in unread:
-            if column != 'Total Number of Employees':  # Part 2 reported the intake column
+            if column != _TOTAL_EMPLOYEES:  # Part 2 reported the intake column
                 self._optional_number(raw, column, record_id)
 
         exporting_employees2 = self._exporting_employees

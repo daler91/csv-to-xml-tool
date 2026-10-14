@@ -123,6 +123,8 @@ _COUNSELING_ELEMENT_FIELDS = {
     "CounselorNotes": ("Comments", "Comments"),
 }
 
+_ZIP_CODE = "Zip/Postal Code"
+
 # Derived from TrainingConfig.COLUMN_MAPPING (canonical alias per key). The
 # NumberTrained/* aggregates trace back to the per-attendee column they are
 # counted from.
@@ -138,8 +140,8 @@ _TRAINING_ELEMENT_FIELDS = {
     "CosponsorsName": ("Cosponsor", "Cosponsor"),
     "City": ("City", "City"),
     "State": ("State/Province", "State/Province"),
-    "ZipCode": ("Zip/Postal Code", "Zip/Postal Code"),
-    "Zip4Code": ("Zip/Postal Code (+4)", "Zip/Postal Code"),
+    "ZipCode": (_ZIP_CODE, _ZIP_CODE),
+    "Zip4Code": ("Zip/Postal Code (+4)", _ZIP_CODE),
     "NumberTrained/Female": ("Gender", "Gender"),
     "NumberTrained/Male": ("Gender", "Gender"),
     "NumberTrained/CurrentlyInBusiness": ("Currently in Business?", "Currently in Business?"),

@@ -279,16 +279,37 @@ def clean_phone_number(phone: str | None) -> str:
         "(123) 456-7890" -> "1234567890"
         "123.456.7890" -> "1234567890"
         "+1 (123) 456-7890" -> "1234567890"
+        "123-456-7890 ext 123" -> "1234567890"
         "555-0101" -> ""
+        "+44 20 7946 0958" -> ""
+
+    The number is read run by run of digits, so what follows it -- an
+    extension, a second number -- is cut off where it starts. Taking the
+    first ten digits of all of them filed a different number with no word
+    in the report: "+44 20 7946 0958" as 4420794609, "1234567890 x5" as
+    2345678905 (the 1 read as a country code), "1-515-555-1234 ext 12" as
+    1515555123. A number whose digits run on past ten, or that has a
+    country code other than 1, is not a US number and is left out instead.
     """
     if is_empty(phone):
         return ""
 
-    digits = ''.join(char for char in str(phone) if char.isdigit())
-    # Strip leading US country code
-    if len(digits) == PHONE_WITH_COUNTRY_CODE_DIGITS and digits.startswith('1'):
-        digits = digits[1:]
-    digits = digits[:PHONE_NUMBER_DIGITS]
+    text = str(phone).strip()
+    # ASCII digits only: the XSD's [0-9] does not match fullwidth ones.
+    runs = re.findall(r"[0-9]+", text)
+    if not runs:
+        return ""
+    if text.startswith("+") and not runs[0].startswith("1"):
+        return ""
+    if len(runs[0]) == PHONE_WITH_COUNTRY_CODE_DIGITS and runs[0].startswith("1"):
+        runs[0] = runs[0][1:]  # "15155551234"
+    elif runs[0] == "1" and len(runs) > 1:
+        runs.pop(0)  # "1-515-555-1234", "+1 (515) 555-1234"
+    digits = ""
+    for run in runs:
+        digits += run
+        if len(digits) >= PHONE_NUMBER_DIGITS:
+            break
     return digits if len(digits) == PHONE_NUMBER_DIGITS else ""
 
 def format_date(date_str: str | None, input_formats: list[str] | None = None, default_return: str = "") -> str:

@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from app.core import paths
 from app.core.paths import (
     REQUIRED_SCHEMA_FILES,
     XSD_MAP,
@@ -63,6 +64,54 @@ def test_every_xsd_map_target_exists():
     resolved = default_schemas_dir()
     for schema_type, filename in XSD_MAP.items():
         assert os.path.exists(os.path.join(resolved, filename)), f"{schema_type} -> {filename}"
+
+
+# --- the fallback walk in default_schemas_dir ---
+# The expected location is reached through the tracked apps/worker/schemas
+# symlink. Git on Windows checks a symlink out as a plain text file holding its
+# target unless symlink support is on, and then only the walk up the tree finds
+# the XSDs. These build that kind of checkout in a temp dir and point the
+# resolver's idea of where the app package lives at it; SCHEMAS_DIR is still
+# left alone.
+
+
+def _checkout(tmp_path, monkeypatch):
+    """An empty repo-shaped tree whose app package is <root>/apps/worker/app."""
+    root = tmp_path / "checkout"
+    app_package = root / "apps" / "worker" / "app"
+    app_package.mkdir(parents=True)
+    monkeypatch.setattr(paths, "_APP_PACKAGE_DIR", str(app_package))
+    return root
+
+
+def _fill_schemas(directory, names=REQUIRED_SCHEMA_FILES):
+    directory.mkdir(parents=True)
+    for name in names:
+        (directory / name).write_text("<xs:schema/>")
+    return directory
+
+
+def test_default_walks_up_past_a_symlink_checked_out_as_a_file(monkeypatch, tmp_path):
+    root = _checkout(tmp_path, monkeypatch)
+    (root / "apps" / "worker" / "schemas").write_text("../../schemas")
+    real = _fill_schemas(root / "schemas")
+    assert default_schemas_dir() == str(real)
+
+
+def test_default_walks_past_a_directory_holding_only_some_xsds(monkeypatch, tmp_path):
+    root = _checkout(tmp_path, monkeypatch)
+    _fill_schemas(root / "apps" / "worker" / "schemas", names=REQUIRED_SCHEMA_FILES[:1])
+    real = _fill_schemas(root / "schemas")
+    assert default_schemas_dir() == str(real)
+
+
+def test_default_reports_the_expected_path_when_nothing_holds_the_xsds(monkeypatch, tmp_path):
+    """Not the filesystem root the walk ended at: startup names this path."""
+    root = _checkout(tmp_path, monkeypatch)
+    expected = str(root / "apps" / "worker" / "schemas")
+    assert default_schemas_dir() == expected
+    with pytest.raises(RuntimeError, match="Schemas directory not found"):
+        verify_schemas_dir(default_schemas_dir())
 
 
 def test_verify_accepts_the_real_directory():

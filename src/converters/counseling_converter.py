@@ -492,8 +492,8 @@ class CounselingConverter(BaseConverter):
     def _build_client_request_section(self, parent, row, record_id):
         client_request = create_element(parent, 'ClientRequest')
         client_name = create_element(client_request, 'ClientNamePart1')
-        create_element(client_name, 'Last', row.get('Last Name', ''))
-        create_element(client_name, 'First', row.get('First Name', ''))
+        create_element(client_name, 'Last', row.get('Last Name', '').strip())
+        create_element(client_name, 'First', row.get('First Name', '').strip())
         emit_optional(client_name, 'Middle', row.get('Middle Name', ''))
         # Email is minOccurs="0" but pattern-constrained (EmailType), so a blank
         # cell must omit the element rather than emit <Email/>.
@@ -650,7 +650,7 @@ class CounselingConverter(BaseConverter):
         self._currently_exporting = exporting_val
         create_element(client_intake, 'CurrentlyExporting', exporting_val)
 
-        create_element(client_intake, 'CompanyName', row.get('Account Name', ''))
+        create_element(client_intake, 'CompanyName', row.get('Account Name', '').strip())
         business_type = row.get('Type of Business', '').strip()
         if business_type:
             create_element(client_intake, 'BusinessType', business_type)
@@ -879,8 +879,8 @@ class CounselingConverter(BaseConverter):
                           self._resolve_funding_source(funding_source, record_id))
 
         counselor_name_part3 = create_element(counselor_record, 'ClientNamePart3')
-        create_element(counselor_name_part3, 'Last', row.get('Last Name', ''))
-        create_element(counselor_name_part3, 'First', row.get('First Name', ''))
+        create_element(counselor_name_part3, 'Last', row.get('Last Name', '').strip())
+        create_element(counselor_name_part3, 'First', row.get('First Name', '').strip())
         emit_optional(counselor_name_part3, 'Middle', row.get('Middle Name', ''))
 
         emit_optional(counselor_record, 'Email', row.get('Email', ''))

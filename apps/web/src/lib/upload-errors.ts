@@ -31,14 +31,18 @@ export function uploadErrorMessage(
       return "Your session expired. Please sign in again to continue.";
     case 400: {
       const msg = (serverError || "").toLowerCase();
+      // "required" first: the route's missing-input message, "File and
+      // converter type are required", also contains "converter type", so
+      // checking that phrase first sent a user who forgot the file to the
+      // type picker and left this branch unreachable.
+      if (msg.includes("required")) {
+        return "Please select a file and a converter type before uploading.";
+      }
       if (msg.includes("csv")) {
         return "That file isn't a CSV. Export it from Excel (or Salesforce) as a .csv file and try again.";
       }
       if (msg.includes("converter type")) {
         return "Please pick a converter type before uploading.";
-      }
-      if (msg.includes("required")) {
-        return "Please select a file and a converter type before uploading.";
       }
       return (
         serverError ||

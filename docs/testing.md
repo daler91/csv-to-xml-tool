@@ -44,20 +44,20 @@ server.
 
 ## Current baseline
 
-Measured at commit `d0e71f0` on 2026-09-16. Re-measure with the commands above
-rather than trusting these numbers indefinitely.
+Measured at commit `3a47756` on 2026-10-16 (Python 3.13). Re-measure with the
+commands above rather than trusting these numbers indefinitely.
 
 | Check | Result |
 |---|---|
-| pytest | **374 passed** |
-| Coverage (`src/` + worker) | **88.8%** against a 70% gate |
-| vitest | **173 passed**, 23 files |
+| pytest | **704 passed** |
+| Coverage (`src/` + worker) | **97.4%** against a 70% gate |
+| vitest | **373 passed**, 38 files |
 | `tsc --noEmit` | clean |
 | `check-ui-classes.mjs` | clean |
 | `next build` | succeeds, 28 routes |
 | `ruff check .` | clean |
 
-The coverage gate is 70% while actual coverage is ~89%, so there is ~19 points of
+The coverage gate is 70% while actual coverage is ~97%, so there is ~27 points of
 headroom. Raise the floor when you add coverage; do not lower it.
 
 ## CI
@@ -154,11 +154,13 @@ columns. `expected_columns()` unions instead.
 Runs the converters end to end against the goldens; it is what proved the pandas
 removal left output byte-identical.
 
-**A caution about `importorskip`.** Six test files start with
+**A caution about `importorskip`.** Ten test files start with
 `pytest.importorskip("fastapi")` or `("fakeredis")`, so the worker route,
-registry, schema-path and column-mapping tests **skip entirely** if you have not
-installed `apps/worker/requirements-dev.txt`. A green local run with those
-dependencies missing is green because 79 tests did not run. CI installs them, so
+registry, schema-path, column-mapping, diff-service and expected-columns tests
+**skip entirely** if you have not installed `apps/worker/requirements-dev.txt`.
+A green local run with those dependencies missing is green because 129 tests did
+not run (measured at `3a47756`; pytest counts each skipped file as one skip, so
+the summary line shows 10). CI installs them, so
 CI is honest; your laptop may not be. Check the summary line for skips before
 trusting a local pass.
 

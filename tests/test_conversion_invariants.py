@@ -23,6 +23,7 @@ import csv
 import io
 import os
 import tempfile
+import unittest
 
 import pytest
 from defusedxml import ElementTree as ET_SAFE
@@ -36,6 +37,12 @@ from src.data_cleaning import normalize_header
 from src.logging_util import ConversionLogger
 from src.validation_report import ValidationTracker
 from src.xml_validator import validate_against_xsd
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
+check.maxDiff = None  # the XML diff is the point of a failure
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _SAMPLES = os.path.join(_REPO_ROOT, "apps", "web", "public", "samples")
@@ -78,7 +85,7 @@ def _with_rows(sample_text, add_columns, new_rows):
     for changes in new_rows:
         row = dict(zip(header, body[0], strict=True))
         unknown = set(changes) - set(header)
-        assert not unknown, f"not a column of this file: {unknown}"
+        check.assertFalse(unknown, f"not a column of this file: {unknown}")
         row.update(changes)
         body.append([row[c] for c in header])
     return _write_rows([header, *body])
@@ -275,7 +282,7 @@ def _convert_bytes(converter_type, data):
         logger = ConversionLogger(f"metamorphic_{converter_type}", log_to_file=False).logger
         converter_cls(logger, tracker).convert(csv_path, xml_path)
         result = validate_against_xsd(xml_path, xsd)
-        assert result["is_valid"], result["errors"][:5]
+        check.assertTrue(result["is_valid"], result["errors"][:5])
         with open(xml_path, "rb") as f:
             return f.read(), tracker
 
@@ -311,9 +318,9 @@ def test_each_base_files_every_record_and_its_hard_characters(converter_type):
     allowed, but must be the same for every variant.)"""
     text, xml, tracker = _baseline(converter_type)
     records = _expected_records(converter_type, text)
-    assert (tracker.total_records, tracker.successful_records) == (records, records)
+    check.assertEqual((tracker.total_records, tracker.successful_records), (records, records))
     for marker in FILED_MARKERS[converter_type]:
-        assert marker in xml.decode("utf-8")
+        check.assertIn(marker, xml.decode("utf-8"))
 
 
 @pytest.mark.parametrize("transform", TEXT_TRANSFORMS)
@@ -321,8 +328,8 @@ def test_each_base_files_every_record_and_its_hard_characters(converter_type):
 def test_text_variants_convert_identically(converter_type, transform):
     text, expected_xml, expected_tracker = _baseline(converter_type)
     xml, tracker = _convert_bytes(converter_type, TEXT_TRANSFORMS[transform](text).encode("utf-8"))
-    assert xml.decode("utf-8") == expected_xml.decode("utf-8")
-    assert _errors(tracker) == _errors(expected_tracker)
+    check.assertEqual(xml.decode("utf-8"), expected_xml.decode("utf-8"))
+    check.assertEqual(_errors(tracker), _errors(expected_tracker))
 
 
 @pytest.mark.parametrize("transform", BYTE_TRANSFORMS)
@@ -330,8 +337,8 @@ def test_text_variants_convert_identically(converter_type, transform):
 def test_encoding_variants_convert_identically(converter_type, transform):
     text, expected_xml, expected_tracker = _baseline(converter_type)
     xml, tracker = _convert_bytes(converter_type, BYTE_TRANSFORMS[transform](text))
-    assert xml.decode("utf-8") == expected_xml.decode("utf-8")
-    assert _errors(tracker) == _errors(expected_tracker)
+    check.assertEqual(xml.decode("utf-8"), expected_xml.decode("utf-8"))
+    check.assertEqual(_errors(tracker), _errors(expected_tracker))
 
 
 # --- the worker -------------------------------------------------------------
@@ -347,7 +354,7 @@ def _convert_in_worker(converter_type, text, column_mapping=None):
         with open(csv_path, "w", encoding="utf-8", newline="") as f:
             f.write(text)
         result = run_conversion(csv_path, xml_path, converter_type, column_mapping)
-        assert result["xsd_valid"], result["xsd_errors"][:5]
+        check.assertTrue(result["xsd_valid"], result["xsd_errors"][:5])
         with open(xml_path, "rb") as f:
             return f.read(), result
 
@@ -363,8 +370,8 @@ def test_the_worker_files_text_variants_as_the_cli_files_the_base(converter_type
     text, expected_xml, _ = _baseline(converter_type)
     _, worker_base = _convert_in_worker(converter_type, text)
     xml, result = _convert_in_worker(converter_type, TEXT_TRANSFORMS[transform](text))
-    assert xml.decode("utf-8") == expected_xml.decode("utf-8")
-    assert _worker_errors(result) == _worker_errors(worker_base)
+    check.assertEqual(xml.decode("utf-8"), expected_xml.decode("utf-8"))
+    check.assertEqual(_worker_errors(result), _worker_errors(worker_base))
 
 
 @pytest.mark.parametrize("converter_type", BASES)
@@ -377,11 +384,11 @@ def test_a_column_mapping_back_to_the_expected_names_converts_identically(conver
     header, *body = _read_rows(text)
     renamed = [f"  Our {name} " if name in expected_columns else name for name in header]
     mapping = {normalize_header(new): old for new, old in zip(renamed, header, strict=True) if new != old}
-    assert len(mapping) >= 10
+    check.assertGreaterEqual(len(mapping), 10)
 
     xml, result = _convert_in_worker(converter_type, _write_rows([renamed, *body]), mapping)
-    assert xml.decode("utf-8") == expected_xml.decode("utf-8")
-    assert not [i for i in result["issues"] if "nothing was renamed" in i["message"]]
+    check.assertEqual(xml.decode("utf-8"), expected_xml.decode("utf-8"))
+    check.assertFalse([i for i in result["issues"] if "nothing was renamed" in i["message"]])
 
 
 # --- a bad row costs only its own record -------------------------------------
@@ -494,7 +501,7 @@ def test_a_bad_row_changes_no_other_record(converter_type, bad_row):
 
     bad_key = BAD_IDENTITY[converter_type][RECORD_KEY_COLUMN[converter_type]]
     others = [_serialized(r) for r in _records(xml) if _key(r, converter_type) != bad_key]
-    assert others == [_serialized(r) for r in _records(expected_xml)]
+    check.assertEqual(others, [_serialized(r) for r in _records(expected_xml)])
 
     filed = any(_key(r, converter_type) == bad_key for r in _records(xml))
     known = [i["message"] for i in expected_tracker.issues]
@@ -503,4 +510,4 @@ def test_a_bad_row_changes_no_other_record(converter_type, bad_row):
         if i["message"] not in known
         and (i["record_id"] in (bad_key, "Row_2") or "Row 2" in i["message"] or "row 2" in i["message"])
     ]
-    assert filed or reported, "the bad row was neither filed nor reported"
+    check.assertTrue(filed or reported, "the bad row was neither filed nor reported")

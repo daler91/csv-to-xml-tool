@@ -22,7 +22,7 @@ describe("CONVERTER_TYPES", () => {
     );
     const literal = /^ConverterType = Literal\[([^\]]*)\]/m.exec(schemas);
     expect(literal, "ConverterType Literal not found in schemas.py").not.toBeNull();
-    const workerTypes = [...literal![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const workerTypes = [...(literal?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect([...values].sort()).toEqual([...workerTypes].sort());
   });
 

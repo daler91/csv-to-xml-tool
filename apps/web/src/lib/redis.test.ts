@@ -99,11 +99,11 @@ describe("getRedis", () => {
     // the client dead until a restart: rate limiting failed open and every
     // enqueue threw.
     (await loadModule()).getRedis();
-    const retry = clients[0].options.retryStrategy!;
+    const retry = clients[0].options.retryStrategy;
 
     let previous = 0;
     for (const attempt of [1, 2, 3, 4, 5, 10, 25, 100, 10_000]) {
-      const delay = retry(attempt);
+      const delay = retry?.(attempt);
       expect(typeof delay, `attempt ${attempt}`).toBe("number");
       expect(delay as number).toBeGreaterThanOrEqual(previous);
       expect(delay as number).toBeLessThanOrEqual(5000);

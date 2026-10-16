@@ -7,10 +7,11 @@ rather than growing without bound (QUAL-5), and importing the module touches
 neither the logging configuration nor the disk.
 """
 
-import importlib.util
+import ast
 import logging
 import os
 import re
+import unittest
 import uuid
 from logging.handlers import RotatingFileHandler
 
@@ -18,6 +19,11 @@ import pytest
 
 import src.logging_util
 from src.logging_util import ConversionLogger
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
 
 
 @pytest.fixture
@@ -51,9 +57,9 @@ def _file_handlers(conversion_logger):
 class TestWhereItLogs:
     def test_console_only_when_file_logging_is_off(self, base, make_logger):
         log = make_logger(log_to_file=False)
-        assert len(log.logger.handlers) == 1
-        assert not _file_handlers(log)
-        assert list(base.iterdir()) == []
+        check.assertEqual(len(log.logger.handlers), 1)
+        check.assertFalse(_file_handlers(log))
+        check.assertEqual(list(base.iterdir()), [])
 
     def test_a_timestamped_file_under_log_dir_by_default(self, base, make_logger):
         log = make_logger(log_dir="logs")
@@ -61,22 +67,22 @@ class TestWhereItLogs:
 
         [handler] = _file_handlers(log)
         path = handler.baseFilename
-        assert os.path.dirname(path) == os.path.realpath(base / "logs")
-        assert re.fullmatch(rf"{log.logger.name}_\d{{8}}_\d{{6}}\.log", os.path.basename(path))
+        check.assertEqual(os.path.dirname(path), os.path.realpath(base / "logs"))
+        check.assertTrue(re.fullmatch(rf"{log.logger.name}_\d{{8}}_\d{{6}}\.log", os.path.basename(path)))
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        assert "Logging to file:" in content
-        assert "first record" in content
+        check.assertIn("Logging to file:", content)
+        check.assertIn("first record", content)
 
     def test_an_explicit_log_file_path_gets_its_directory_created(self, base, make_logger):
         log = make_logger(log_file_path=os.path.join("nested", "deeper", "run.log"))
         log.info("first record")
-        assert "first record" in (base / "nested" / "deeper" / "run.log").read_text(encoding="utf-8")
+        check.assertIn("first record", (base / "nested" / "deeper" / "run.log").read_text(encoding="utf-8"))
 
     def test_an_explicit_log_file_path_logs_to_file_even_with_file_logging_off(self, base, make_logger):
         log = make_logger(log_to_file=False, log_file_path="run.log")
-        assert len(_file_handlers(log)) == 1
-        assert (base / "run.log").is_file()
+        check.assertEqual(len(_file_handlers(log)), 1)
+        check.assertTrue((base / "run.log").is_file())
 
 
 class TestConfinement:
@@ -95,13 +101,13 @@ class TestConfinement:
     ):
         with pytest.raises(ValueError, match="SBA_OUTPUT_BASE"):
             make_logger(**kwargs)
-        assert not (base.parent / escaped).exists()
+        check.assertFalse((base.parent / escaped).exists())
 
     def test_an_absolute_path_outside_the_base_is_refused(self, base, make_logger, tmp_path_factory):
         outside = tmp_path_factory.mktemp("outside")
         with pytest.raises(ValueError, match="SBA_OUTPUT_BASE"):
             make_logger(log_file_path=str(outside / "run.log"))
-        assert list(outside.iterdir()) == []
+        check.assertEqual(list(outside.iterdir()), [])
 
 
 class TestMessages:
@@ -111,8 +117,8 @@ class TestMessages:
         rebuilt = make_logger(logger_name=name, log_to_file=False)
 
         rebuilt.info("said once")
-        assert len(rebuilt.logger.handlers) == 1
-        assert capsys.readouterr().err.count("said once") == 1
+        check.assertEqual(len(rebuilt.logger.handlers), 1)
+        check.assertEqual(capsys.readouterr().err.count("said once"), 1)
 
     def test_warnings_and_errors_name_the_record_when_given_one(self, base, make_logger, caplog):
         log = make_logger(log_to_file=False)
@@ -122,12 +128,12 @@ class TestMessages:
             log.warning("file-level warning")
             log.error("file-level error")
 
-        assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        check.assertEqual([(r.levelno, r.getMessage()) for r in caplog.records], [
             (logging.WARNING, "[Record 003XX01] bad ZIP"),
             (logging.ERROR, "[Record 003XX02] no session date"),
             (logging.WARNING, "file-level warning"),
             (logging.ERROR, "file-level error"),
-        ]
+        ])
 
     def test_debug_lines_appear_only_at_debug_level(self, base, make_logger, caplog):
         default = make_logger(log_to_file=False)
@@ -137,8 +143,8 @@ class TestMessages:
             verbose.debug("kept at DEBUG")
 
         messages = [r.getMessage() for r in caplog.records]
-        assert "kept at DEBUG" in messages
-        assert "dropped at INFO" not in messages
+        check.assertIn("kept at DEBUG", messages)
+        check.assertNotIn("dropped at INFO", messages)
 
 
 class TestRotation:
@@ -147,29 +153,31 @@ class TestRotation:
         for line in range(60):
             log.info(f"line {line:02d} " + "x" * 80)
 
-        assert sorted(p.name for p in base.iterdir()) == ["run.log", "run.log.1", "run.log.2"]
-        assert (base / "run.log").stat().st_size <= 512
+        check.assertEqual(sorted(p.name for p in base.iterdir()), ["run.log", "run.log.1", "run.log.2"])
+        check.assertLessEqual((base / "run.log").stat().st_size, 512)
 
 
 class TestImport:
-    def test_importing_the_module_changes_no_logger_and_writes_nothing(self, tmp_path, monkeypatch):
+    def test_importing_the_module_runs_nothing_but_definitions(self):
         """There was once a module-level ConversionLogger, so merely importing
         this utility cleared the "conversion_logger" logger's handlers and
-        created a logs/ directory with a log file in it."""
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("SBA_OUTPUT_BASE", str(tmp_path))
-        logger = logging.getLogger("conversion_logger")
-        sentinel = logging.NullHandler()
-        logger.addHandler(sentinel)
-        try:
-            # A fresh execution of the module, without disturbing the copy the
-            # rest of the suite imported.
-            spec = importlib.util.spec_from_file_location(
-                "src._logging_util_fresh_import", src.logging_util.__file__
-            )
-            spec.loader.exec_module(importlib.util.module_from_spec(spec))
+        created a logs/ directory with a log file in it. Read from the source
+        rather than by running a fresh copy of the module, which is the
+        loading of code by path that the code scanners refuse."""
+        with open(src.logging_util.__file__, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
 
-            assert sentinel in logger.handlers
-            assert list(tmp_path.iterdir()) == []
-        finally:
-            logger.removeHandler(sentinel)
+        def is_docstring(node):
+            return isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+
+        for node in tree.body:
+            if is_docstring(node):
+                continue
+            check.assertIsInstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef, ast.Try), ast.dump(node)[:80])
+            if isinstance(node, ast.Try):  # the import fallback for standalone use
+                for inner in node.body + [s for handler in node.handlers for s in handler.body]:
+                    check.assertIsInstance(inner, (ast.Import, ast.ImportFrom), ast.dump(inner)[:80])
+            if isinstance(node, ast.ClassDef):
+                for inner in node.body:
+                    check.assertTrue(is_docstring(inner) or isinstance(inner, ast.FunctionDef),
+                                     ast.dump(inner)[:80])

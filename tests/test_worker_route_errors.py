@@ -15,6 +15,7 @@ branches, with the step that does the work replaced by one that raises.
 import asyncio
 import csv
 import os
+import unittest
 
 import pytest
 
@@ -39,6 +40,11 @@ from app.services.cancellation import registry as cancel_registry
 from app.services.column_requirements import RequiredColumnsMissingError
 from app.services.conversion_service import EmptyCSVError
 from app.services.progress import registry as progress_registry
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
 
 JOB_ID = "job-fails"
 
@@ -95,16 +101,16 @@ def _convert_failing_with(monkeypatch, error):
 )
 def test_convert_answers_each_failure_with_the_status_the_web_acts_on(monkeypatch, error, status):
     raised, _ = _convert_failing_with(monkeypatch, error)
-    assert raised.status_code == status
+    check.assertEqual(raised.status_code, status)
 
 
 def test_convert_names_the_missing_columns_for_the_user(monkeypatch):
     raised, _ = _convert_failing_with(
         monkeypatch, RequiredColumnsMissingError("counseling", ["Contact ID", "Date"])
     )
-    assert raised.status_code == 422
-    assert "Contact ID" in raised.detail
-    assert "Date" in raised.detail
+    check.assertEqual(raised.status_code, 422)
+    check.assertIn("Contact ID", raised.detail)
+    check.assertIn("Date", raised.detail)
 
 
 @pytest.mark.parametrize(
@@ -117,7 +123,7 @@ def test_convert_names_the_missing_columns_for_the_user(monkeypatch):
 )
 def test_convert_keeps_internals_out_of_a_generic_failure(monkeypatch, error, status, detail):
     raised, _ = _convert_failing_with(monkeypatch, error)
-    assert (raised.status_code, raised.detail) == (status, detail)
+    check.assertEqual((raised.status_code, raised.detail), (status, detail))
 
 
 @pytest.mark.parametrize(
@@ -132,9 +138,9 @@ def test_a_failed_conversion_leaves_nothing_behind(monkeypatch, error):
 
     _, staging_dir = _convert_failing_with(monkeypatch, error)
 
-    assert not os.path.exists(staging_dir)
-    assert progress_registry.get(JOB_ID) is None
-    assert cancel_registry.is_cancelled(JOB_ID) is False
+    check.assertFalse(os.path.exists(staging_dir))
+    check.assertIsNone(progress_registry.get(JOB_ID))
+    check.assertIs(cancel_registry.is_cancelled(JOB_ID), False)
 
 
 # --- /preview ---
@@ -151,11 +157,11 @@ def _preview_failing_with(monkeypatch, error):
 
 def test_preview_keeps_internals_out_of_a_worker_fault(monkeypatch):
     raised = _preview_failing_with(monkeypatch, RuntimeError(INTERNALS))
-    assert (raised.status_code, raised.detail) == (500, "Internal preview error")
+    check.assertEqual((raised.status_code, raised.detail), (500, "Internal preview error"))
 
 
 def test_preview_answers_a_bad_value_as_the_request_s_fault(monkeypatch):
-    assert _preview_failing_with(monkeypatch, ValueError("bad value")).status_code == 400
+    check.assertEqual(_preview_failing_with(monkeypatch, ValueError("bad value")).status_code, 400)
 
 
 # --- /validate-xsd and /fix-xml ---
@@ -168,7 +174,7 @@ def test_validate_refuses_an_unknown_schema_type_without_echoing_it():
         job_id=JOB_ID, xml_content="<a/>", schema_type="<script>alert(1)</script>"
     )
     raised = _raised(validate_route.validate_xsd(request))
-    assert (raised.status_code, raised.detail) == (400, "Unknown schema type")
+    check.assertEqual((raised.status_code, raised.detail), (400, "Unknown schema type"))
 
 
 def test_validate_keeps_internals_out_of_a_worker_fault_and_cleans_up(monkeypatch):
@@ -182,8 +188,8 @@ def test_validate_keeps_internals_out_of_a_worker_fault_and_cleans_up(monkeypatc
     request = ValidateXsdRequest(job_id=JOB_ID, xml_content="<a/>", schema_type="counseling")
 
     raised = _raised(validate_route.validate_xsd(request))
-    assert (raised.status_code, raised.detail) == (500, "Internal validation error")
-    assert not os.path.exists(seen["staging_dir"])
+    check.assertEqual((raised.status_code, raised.detail), (500, "Internal validation error"))
+    check.assertFalse(os.path.exists(seen["staging_dir"]))
 
 
 def test_fix_keeps_internals_out_of_a_worker_fault_and_cleans_up(monkeypatch):
@@ -197,5 +203,5 @@ def test_fix_keeps_internals_out_of_a_worker_fault_and_cleans_up(monkeypatch):
     request = FixXmlRequest(job_id=JOB_ID, xml_content="<a/>", schema_type="counseling")
 
     raised = _raised(fix_route.fix_xml(request))
-    assert (raised.status_code, raised.detail) == (500, "Internal fix error")
-    assert not os.path.exists(seen["staging_dir"])
+    check.assertEqual((raised.status_code, raised.detail), (500, "Internal fix error"))
+    check.assertFalse(os.path.exists(seen["staging_dir"]))

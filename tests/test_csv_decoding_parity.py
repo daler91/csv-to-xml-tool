@@ -20,12 +20,18 @@ import codecs
 import json
 import os
 import sys
+import unittest
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _REPO_ROOT not in sys.path:  # run directly to regenerate the table
     sys.path.insert(0, _REPO_ROOT)
 
 from src.data_cleaning import decode_csv_bytes  # noqa: E402
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
 
 TABLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "csv_decoding_cases.json")
 
@@ -72,21 +78,21 @@ def _load_table():
 
 
 def test_the_shared_table_holds_exactly_these_cases():
-    assert [(row["name"], row["hex"]) for row in _load_table()] == [
+    check.assertEqual([(row["name"], row["hex"]) for row in _load_table()], [
         (name, data.hex()) for name, data in CASES.items()
-    ]
+    ])
 
 
 def test_decode_csv_bytes_reads_each_case_as_the_table_says():
     for row in _load_table():
-        assert decode_csv_bytes(bytes.fromhex(row["hex"])) == (row["text"], row["encoding"]), row["name"]
+        check.assertEqual(decode_csv_bytes(bytes.fromhex(row["hex"])), (row["text"], row["encoding"]), row["name"])
 
 
 def test_a_stray_utf16_byte_never_becomes_a_character():
     for row in _load_table():
         if "stray byte" in row["name"]:
-            assert "�" not in row["text"], row["name"]
-            assert row["text"].rstrip("\n").endswith("Kraków"), row["name"]
+            check.assertNotIn("\ufffd", row["text"], row["name"])
+            check.assertTrue(row["text"].rstrip("\n").endswith("Kraków"), row["name"])
 
 
 if __name__ == "__main__":

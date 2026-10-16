@@ -28,7 +28,7 @@ beforeEach(() => {
 /** The arguments of the one findMany the route made. */
 function listQuery() {
   expect(db.job.findMany).toHaveBeenCalledTimes(1);
-  return db.job.findMany.mock.calls[0]![0]!;
+  return db.job.findMany.mock.calls[0]?.[0];
 }
 
 describe("GET /api/jobs", () => {
@@ -46,8 +46,8 @@ describe("GET /api/jobs", () => {
 
   it("lists only the signed-in user's jobs, newest first", async () => {
     await GET();
-    expect(listQuery().where).toEqual({ userId: TEST_USER.id });
-    expect(listQuery().orderBy).toEqual({ createdAt: "desc" });
+    expect(listQuery()?.where).toEqual({ userId: TEST_USER.id });
+    expect(listQuery()?.orderBy).toEqual({ createdAt: "desc" });
   });
 
   it("leaves server file paths and the bulky per-row JSON out of the list", async () => {
@@ -55,7 +55,7 @@ describe("GET /api/jobs", () => {
     // to thousands of entries per job; they belong to that job's own page, not
     // to every row of the dashboard.
     await GET();
-    const select = listQuery().select;
+    const select = listQuery()?.select;
     expect(select).toBeDefined();
     for (const field of [
       "inputFilePath",

@@ -13,6 +13,8 @@ each REFUSED list holds near misses that must clean to "" -- not a guess --
 so the converter reports them instead of filing a wrong value.
 """
 
+import unittest
+
 import pytest
 
 from src.data_cleaning import (
@@ -25,6 +27,11 @@ from src.data_cleaning import (
     map_gender_to_sex,
     standardize_state_name,
 )
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
 
 
 def _classes(table):
@@ -55,23 +62,23 @@ DATES_REFUSED = [
 
 @pytest.mark.parametrize("spelling, value", _classes(DATES))
 def test_a_date_reads_the_same_however_it_is_written(spelling, value):
-    assert format_date(spelling) == value
+    check.assertEqual(format_date(spelling), value)
 
 
 @pytest.mark.parametrize("spelling", DATES_REFUSED)
 def test_an_impossible_or_partial_date_is_refused_not_guessed(spelling):
-    assert format_date(spelling) == ""
+    check.assertEqual(format_date(spelling), "")
 
 
 def test_an_ambiguous_date_reads_month_first_and_says_so():
-    assert format_date("03/04/2025") == "2025-03-04"
-    assert is_ambiguous_date("03/04/2025")
-    assert not is_ambiguous_date("1/13/2025")
+    check.assertEqual(format_date("03/04/2025"), "2025-03-04")
+    check.assertTrue(is_ambiguous_date("03/04/2025"))
+    check.assertFalse(is_ambiguous_date("1/13/2025"))
 
 
 def test_a_two_digit_year_is_never_in_the_future():
     # strptime reads 68 as 2068; a business started in 1968 is the reading.
-    assert format_date("01/05/68") == "1968-01-05"
+    check.assertEqual(format_date("01/05/68"), "1968-01-05")
 
 
 AMOUNTS = {
@@ -89,12 +96,12 @@ AMOUNTS_REFUSED = ["abc", "USD 1500", "€1500", "1500-", "\u22121500", "1e5000"
 
 @pytest.mark.parametrize("spelling, value", _classes(AMOUNTS))
 def test_an_amount_reads_the_same_however_it_is_written(spelling, value):
-    assert clean_numeric(spelling) == value
+    check.assertEqual(clean_numeric(spelling), value)
 
 
 @pytest.mark.parametrize("spelling", AMOUNTS_REFUSED)
 def test_something_that_is_not_an_amount_is_refused(spelling):
-    assert clean_numeric(spelling) == ""
+    check.assertEqual(clean_numeric(spelling), "")
 
 
 PHONES = {
@@ -117,12 +124,12 @@ PHONES_REFUSED = [
 
 @pytest.mark.parametrize("spelling, value", _classes(PHONES))
 def test_a_phone_reads_the_same_however_it_is_written(spelling, value):
-    assert clean_phone_number(spelling) == value
+    check.assertEqual(clean_phone_number(spelling), value)
 
 
 @pytest.mark.parametrize("spelling", PHONES_REFUSED)
 def test_a_phone_that_is_not_a_us_number_is_refused_not_cut_to_ten_digits(spelling):
-    assert clean_phone_number(spelling) == ""
+    check.assertEqual(clean_phone_number(spelling), "")
 
 
 ANSWERS = {
@@ -136,7 +143,7 @@ ANSWERS = {
 @pytest.mark.parametrize("spelling, value", _classes(ANSWERS))
 def test_a_yes_no_answer_reads_the_same_in_any_case(spelling, value):
     read = "Yes" if is_affirmative(spelling) else "No" if is_negative(spelling) else "?"
-    assert read == value
+    check.assertEqual(read, value)
 
 
 GENDERS = {
@@ -148,7 +155,7 @@ GENDERS = {
 
 @pytest.mark.parametrize("spelling, value", _classes(GENDERS))
 def test_a_gender_answer_reads_the_same_however_it_is_written(spelling, value):
-    assert map_gender_to_sex(spelling) == value
+    check.assertEqual(map_gender_to_sex(spelling), value)
 
 
 STATES = {
@@ -160,4 +167,4 @@ STATES = {
 
 @pytest.mark.parametrize("spelling, value", _classes(STATES))
 def test_a_state_reads_the_same_however_it_is_written(spelling, value):
-    assert standardize_state_name(spelling) == value
+    check.assertEqual(standardize_state_name(spelling), value)

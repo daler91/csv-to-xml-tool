@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+import unittest
 
 import pytest
 
@@ -27,6 +28,11 @@ fakeredis = pytest.importorskip("fakeredis")
 from app import main as worker_main
 from app.core import auth as worker_auth
 from app.services import redis_client
+
+
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101); one instance serves every test.
+check = unittest.TestCase()
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _WEB_SRC = os.path.join(_REPO_ROOT, "apps", "web", "src")
@@ -193,13 +199,13 @@ def _post(path, payload):
     }
     asyncio.run(worker_main.app(scope, receive, send))
     status = next(m["status"] for m in messages if m["type"] == "http.response.start")
-    assert status == 200, b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    check.assertEqual(status, 200, b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body"))
     return json.loads(b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body"))
 
 
 def _broken(xml):
     """The converted XML with one value the counseling XSD rejects."""
-    assert "<ZipCode>50309</ZipCode>" in xml
+    check.assertIn("<ZipCode>50309</ZipCode>", xml)
     return xml.replace("<ZipCode>50309</ZipCode>", "<ZipCode>5O309</ZipCode>", 1)
 
 
@@ -207,7 +213,7 @@ def test_the_web_has_the_interfaces_these_tests_read():
     for name in ("ConvertResponse", "ValidationIssue", "CleaningDiffEntry", "XsdErrorDetail",
                  "PreviewResponse", "DataQualityReport", "DataQualityCheck", "FieldDescription",
                  "ValidateXsdResponse", "FixXmlResponse"):
-        assert INTERFACES.get(name), f"interface {name} not found in the web's source"
+        check.assertTrue(INTERFACES.get(name), f"interface {name} not found in the web's source")
 
 
 def test_every_response_has_the_shape_the_web_reads():
@@ -230,14 +236,14 @@ def test_every_response_has_the_shape_the_web_reads():
                                "schema_type": "counseling"})
     checker.interface(fixed, "FixXmlResponse", "/fix-xml")
 
-    assert checker.problems == []
+    check.assertEqual(checker.problems, [])
     # Each nested shape must have been seen at least once, or an empty list
     # would let these pass while checking nothing.
-    assert checker.checked >= {
+    check.assertGreaterEqual(checker.checked, {
         "ConvertResponse", "ValidationIssue", "CleaningDiffEntry", "XsdErrorDetail",
         "PreviewResponse", "DataQualityReport", "DataQualityCheck", "FieldDescription",
         "ValidateXsdResponse", "FixXmlResponse",
-    }
+    })
     # Inline element types are not in `checked`; these keep theirs non-empty.
-    assert preview["column_status"]["suggestions"]
-    assert validated["is_valid"] is False and validated["error_details"]
+    check.assertTrue(preview["column_status"]["suggestions"])
+    check.assertTrue(validated["is_valid"] is False and validated["error_details"])

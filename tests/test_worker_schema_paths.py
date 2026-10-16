@@ -9,6 +9,7 @@ string "Validation error" for every document.
 """
 
 import os
+import unittest
 
 import pytest
 
@@ -74,6 +75,10 @@ def test_every_xsd_map_target_exists():
 # resolver's idea of where the app package lives at it; SCHEMAS_DIR is still
 # left alone.
 
+# TestCase assertions rather than bare asserts, which the code scanners report
+# (Bandit B101) on new code.
+check = unittest.TestCase()
+
 
 def _checkout(tmp_path, monkeypatch):
     """An empty repo-shaped tree whose app package is <root>/apps/worker/app."""
@@ -95,21 +100,21 @@ def test_default_walks_up_past_a_symlink_checked_out_as_a_file(monkeypatch, tmp_
     root = _checkout(tmp_path, monkeypatch)
     (root / "apps" / "worker" / "schemas").write_text("../../schemas")
     real = _fill_schemas(root / "schemas")
-    assert default_schemas_dir() == str(real)
+    check.assertEqual(default_schemas_dir(), str(real))
 
 
 def test_default_walks_past_a_directory_holding_only_some_xsds(monkeypatch, tmp_path):
     root = _checkout(tmp_path, monkeypatch)
     _fill_schemas(root / "apps" / "worker" / "schemas", names=REQUIRED_SCHEMA_FILES[:1])
     real = _fill_schemas(root / "schemas")
-    assert default_schemas_dir() == str(real)
+    check.assertEqual(default_schemas_dir(), str(real))
 
 
 def test_default_reports_the_expected_path_when_nothing_holds_the_xsds(monkeypatch, tmp_path):
     """Not the filesystem root the walk ended at: startup names this path."""
     root = _checkout(tmp_path, monkeypatch)
     expected = str(root / "apps" / "worker" / "schemas")
-    assert default_schemas_dir() == expected
+    check.assertEqual(default_schemas_dir(), expected)
     with pytest.raises(RuntimeError, match="Schemas directory not found"):
         verify_schemas_dir(default_schemas_dir())
 

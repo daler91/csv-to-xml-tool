@@ -44,14 +44,14 @@ server.
 
 ## Current baseline
 
-Measured at commit `3a47756` on 2026-10-16 (Python 3.13). Re-measure with the
+Measured at commit `61935c5` on 2026-10-16 (Python 3.13). Re-measure with the
 commands above rather than trusting these numbers indefinitely.
 
 | Check | Result |
 |---|---|
-| pytest | **704 passed** |
-| Coverage (`src/` + worker) | **97.4%** against a 70% gate |
-| vitest | **373 passed**, 38 files |
+| pytest | **1018 passed** |
+| Coverage (`src/` + worker) | **97.5%** against a 70% gate |
+| vitest | **389 passed**, 38 files |
 | `tsc --noEmit` | clean |
 | `check-ui-classes.mjs` | clean |
 | `next build` | succeeds, 28 routes |
@@ -149,18 +149,47 @@ counseling, the Part 3 impact fields *fall back* to their intake counterpart, an
 *also* read on their own. Applying the `alts[0]` rule would drop three real
 columns. `expected_columns()` unions instead.
 
+### The conversion invariants
+
+Most conversion failures fixed in October 2026 were one file's formatting or
+one spelling of a value, each fixed for the case reported. These state the
+property such fixes share, so the next variant fails a test instead of a
+filing:
+
+- `test_conversion_invariants.py` — the same data written the ways real
+  exports write it (CRLF, every cell quoted, a Salesforce report footer, two
+  pasted exports, UTF-16, Windows-1252, stray spaces and zero-width characters
+  in headers, padded cells, …) must convert to **byte-identical XML** with no
+  new error, through the CLI converter and the worker alike, and a column
+  mapping naming every column back must be transparent. A bad row inserted
+  anywhere may cost only its own record, and must be filed or reported.
+- `test_value_spellings.py` — every spelling of one date, amount, phone,
+  Yes/No, gender or state cleans to the same value; near misses are refused,
+  not guessed.
+- `test_csv_decoding_parity.py` and `csv-decode.test.ts` — the web decodes
+  uploads itself, so both decoders are held to one table of bytes and texts,
+  `tests/fixtures/csv_decoding_cases.json`. Regenerate it with
+  `python tests/test_csv_decoding_parity.py` after changing a case or the
+  Python decoder on purpose.
+- `test_worker_web_contract.py` — the worker's JSON, from the real app, against
+  the TypeScript interfaces the web reads it with, field by field.
+
+When a conversion bug is fixed, add its variant to the first two files rather
+than a one-off test: a transformation, a bad row or a spelling.
+
 ### `test_converter_characterization.py`
 
 Runs the converters end to end against the goldens; it is what proved the pandas
 removal left output byte-identical.
 
-**A caution about `importorskip`.** Ten test files start with
+**A caution about `importorskip`.** Eleven test files start with
 `pytest.importorskip("fastapi")` or `("fakeredis")`, so the worker route,
-registry, schema-path, column-mapping, diff-service and expected-columns tests
+registry, schema-path, column-mapping, diff-service, expected-columns and
+worker-web contract tests
 **skip entirely** if you have not installed `apps/worker/requirements-dev.txt`.
-A green local run with those dependencies missing is green because 129 tests did
-not run (measured at `3a47756`; pytest counts each skipped file as one skip, so
-the summary line shows 10). CI installs them, so
+A green local run with those dependencies missing is green because 131 tests did
+not run (measured at `61935c5`; pytest counts each skipped file as one skip, so
+the summary line shows 11). CI installs them, so
 CI is honest; your laptop may not be. Check the summary line for skips before
 trusting a local pass.
 

@@ -14,7 +14,7 @@ cd apps/web && npm ci && cd ../..
 ```
 
 `apps/worker/requirements-dev.txt` pulls in `fastapi` and `fakeredis`. Without
-them, 129 tests **silently skip** rather than fail
+them, 131 tests **silently skip** rather than fail
 ([testing.md](./testing.md#test_converter_characterizationpy)). Install it.
 
 To add or bump a Python dependency, edit the matching `requirements*.in` file,

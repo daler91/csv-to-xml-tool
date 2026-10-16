@@ -23,7 +23,13 @@ absent.
    it falls back to Windows-1252; it used to stop at the first accented name.
    A damaged UTF-16 file converts with a file-level warning: bytes that are not
    text are read as `�`, and a stray byte that leaves the file an odd number of
-   bytes long is left out (it used to become a last row of `�`).
+   bytes long is left out (it used to become a last row of `�`). The web app
+   decodes the upload itself (`apps/web/src/lib/csv-decode.ts`) and leaves the
+   stray byte out too; it kept it until 2026-10, and in a file without a final
+   newline the `�` was filed as part of the last cell. Both decoders are held
+   to one table of cases, `tests/fixtures/csv_decoding_cases.json`. The web
+   does not pass on how it decoded a file, so its results page does not show
+   the encoding warnings the command line records.
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
    column name it no longer uses. The mapping is matched against the headers

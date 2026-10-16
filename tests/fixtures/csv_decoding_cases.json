@@ -1,0 +1,92 @@
+[
+ {
+  "name": "utf-8",
+  "hex": "436f6e746163742049442c4e616d652c436974790a432d312c4a6f73c3a9204d75c3b16f7ae280935065c3b1612c4d6f6e7472c3a9616c0a432d322ce2809c5a6fc3abe2809d204fe28099427269656e2c4b72616bc3b3770a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-8"
+ },
+ {
+  "name": "utf-8 with a BOM (Excel's CSV UTF-8)",
+  "hex": "efbbbf436f6e746163742049442c4e616d652c436974790a432d312c4a6f73c3a9204d75c3b16f7ae280935065c3b1612c4d6f6e7472c3a9616c0a432d322ce2809c5a6fc3abe2809d204fe28099427269656e2c4b72616bc3b3770a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-8"
+ },
+ {
+  "name": "utf-8 with CRLF line ends",
+  "hex": "436f6e746163742049442c4e616d652c436974790d0a432d312c4a6f73c3a9204d75c3b16f7ae280935065c3b1612c4d6f6e7472c3a9616c0d0a432d322ce2809c5a6fc3abe2809d204fe28099427269656e2c4b72616bc3b3770d0a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-8"
+ },
+ {
+  "name": "utf-8 with bare CR line ends",
+  "hex": "436f6e746163742049442c4e616d652c436974790d432d312c4a6f73c3a9204d75c3b16f7ae280935065c3b1612c4d6f6e7472c3a9616c0d432d322ce2809c5a6fc3abe2809d204fe28099427269656e2c4b72616bc3b3770d",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-8"
+ },
+ {
+  "name": "windows-1252 (Excel's CSV Comma delimited)",
+  "hex": "436f6e746163742049442c4e616d652c436974790a432d312c4a6f73e9204d75f16f7a965065f1612c4d6f6e7472e9616c0a432d322c935a6feb94204f92427269656e2c4b72616b6f770a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krakow\n",
+  "encoding": "windows-1252"
+ },
+ {
+  "name": "windows-1252 bytes it leaves undefined",
+  "hex": "412c420a818d8f909d2c809693940a",
+  "text": "A,B\n\u0081\u008d\u008f\u0090\u009d,\u20ac\u2013\u201c\u201d\n",
+  "encoding": "windows-1252"
+ },
+ {
+  "name": "latin-1 high bytes",
+  "hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0a",
+  "text": "\u00a0\u00a1\u00a2\u00a3\u00a4\u00a5\u00a6\u00a7\u00a8\u00a9\u00aa\u00ab\u00ac\u00ad\u00ae\u00af\u00b0\u00b1\u00b2\u00b3\u00b4\u00b5\u00b6\u00b7\u00b8\u00b9\u00ba\u00bb\u00bc\u00bd\u00be\u00bf\u00c0\u00c1\u00c2\u00c3\u00c4\u00c5\u00c6\u00c7\u00c8\u00c9\u00ca\u00cb\u00cc\u00cd\u00ce\u00cf\u00d0\u00d1\u00d2\u00d3\u00d4\u00d5\u00d6\u00d7\u00d8\u00d9\u00da\u00db\u00dc\u00dd\u00de\u00df\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5\u00e6\u00e7\u00e8\u00e9\u00ea\u00eb\u00ec\u00ed\u00ee\u00ef\u00f0\u00f1\u00f2\u00f3\u00f4\u00f5\u00f6\u00f7\u00f8\u00f9\u00fa\u00fb\u00fc\u00fd\u00fe\u00ff\n",
+  "encoding": "windows-1252"
+ },
+ {
+  "name": "utf-16 le (Excel's Unicode Text)",
+  "hex": "fffe43006f006e0074006100630074002000490044002c004e0061006d0065002c0043006900740079000a0043002d0031002c004a006f007300e90020004d007500f1006f007a00132050006500f10061002c004d006f006e0074007200e90061006c000a0043002d0032002c001c205a006f00eb001d2020004f00192042007200690065006e002c004b00720061006b00f30077000a00",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-16"
+ },
+ {
+  "name": "utf-16 be",
+  "hex": "feff0043006f006e0074006100630074002000490044002c004e0061006d0065002c0043006900740079000a0043002d0031002c004a006f007300e90020004d007500f1006f007a20130050006500f10061002c004d006f006e0074007200e90061006c000a0043002d0032002c201c005a006f00eb201d0020004f20190042007200690065006e002c004b00720061006b00f30077000a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-16"
+ },
+ {
+  "name": "utf-16 le with CRLF line ends",
+  "hex": "fffe43006f006e0074006100630074002000490044002c004e0061006d0065002c0043006900740079000d000a0043002d0031002c004a006f007300e90020004d007500f1006f007a00132050006500f10061002c004d006f006e0074007200e90061006c000d000a0043002d0032002c001c205a006f00eb001d2020004f00192042007200690065006e002c004b00720061006b00f30077000d000a00",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-16"
+ },
+ {
+  "name": "utf-16 le, a stray byte after the last newline",
+  "hex": "fffe43006f006e0074006100630074002000490044002c004e0061006d0065002c0043006900740079000a0043002d0031002c004a006f007300e90020004d007500f1006f007a00132050006500f10061002c004d006f006e0074007200e90061006c000a0043002d0032002c001c205a006f00eb001d2020004f00192042007200690065006e002c004b00720061006b00f30077000a000a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w\n",
+  "encoding": "utf-16 (odd length)"
+ },
+ {
+  "name": "utf-16 le, a stray byte and no final newline",
+  "hex": "fffe43006f006e0074006100630074002000490044002c004e0061006d0065002c0043006900740079000a0043002d0031002c004a006f007300e90020004d007500f1006f007a00132050006500f10061002c004d006f006e0074007200e90061006c000a0043002d0032002c001c205a006f00eb001d2020004f00192042007200690065006e002c004b00720061006b00f30077000a",
+  "text": "Contact ID,Name,City\nC-1,Jos\u00e9 Mu\u00f1oz\u2013Pe\u00f1a,Montr\u00e9al\nC-2,\u201cZo\u00eb\u201d O\u2019Brien,Krak\u00f3w",
+  "encoding": "utf-16 (odd length)"
+ },
+ {
+  "name": "utf-16 le, half an emoji",
+  "hex": "fffe41002c0042000a0031002c003dd878000a00",
+  "text": "A,B\n1,\ufffdx\n",
+  "encoding": "utf-16 (damaged)"
+ },
+ {
+  "name": "empty",
+  "hex": "",
+  "text": "",
+  "encoding": "utf-8"
+ },
+ {
+  "name": "only a utf-8 BOM",
+  "hex": "efbbbf",
+  "text": "",
+  "encoding": "utf-8"
+ }
+]

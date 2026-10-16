@@ -37,9 +37,14 @@ export function decodeCsvBuffer(bytes: Buffer): { text: string; encoding: CsvEnc
 }
 
 function decode(bytes: Buffer, encoding: string): string {
+  // An odd number of bytes: one is stray, most often a newline appended as a
+  // single byte. Decoded, it became a trailing U+FFFD -- a last row of '�',
+  // or, in a file without a final newline, part of the last cell, which was
+  // then filed. Left out, as the converters' decode_csv_bytes leaves it.
+  const even = bytes.length % 2 === 1 ? bytes.subarray(0, bytes.length - 1) : bytes;
   // ignoreBOM keeps a leading BOM in the output for UTF-16 too; the worker's
   // utf-8-sig read strips only a UTF-8 BOM, so drop the decoded one here.
-  return new TextDecoder(encoding, { fatal: false, ignoreBOM: false }).decode(bytes);
+  return new TextDecoder(encoding, { fatal: false, ignoreBOM: false }).decode(even);
 }
 
 // Code points for bytes 0x80-0x9F, where windows-1252 differs from ISO-8859-1.

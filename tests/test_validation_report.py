@@ -1,5 +1,7 @@
 import unittest
+import contextlib
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -310,3 +312,41 @@ class TestReportEncoding(unittest.TestCase):
         tracker.add_issue("r1", "warning", "invalid_format", "Mailing Zip/Postal Code", "bad zip")
         tracker.add_issue("r1", "warning", "invalid_format", "Email", "bad email")
         self.assertEqual([i["field_name"] for i in tracker.issues], ["Zip code", "Email"])
+
+
+class TestPrintSummary(unittest.TestCase):
+    """print_summary is what the CLI shows at the end of every run."""
+
+    def _printed(self, tracker):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            tracker.print_summary()
+        return out.getvalue()
+
+    def test_reports_the_counts_and_the_success_rate(self):
+        tracker = ValidationTracker()
+        for success in (True, True, False):
+            tracker.record_processed(success=success)
+        tracker.add_issue("r1", "error", "missing_data", "Email", "missing")
+        tracker.add_issue("r2", "warning", "invalid_format", "Zip", "bad ZIP")
+
+        printed = self._printed(tracker)
+        self.assertIn("Total records processed: 3", printed)
+        self.assertIn("Successfully processed: 2 (66.7%)", printed)
+        self.assertIn("Failed records: 1", printed)
+        self.assertIn("Errors: 1", printed)
+        self.assertIn("Warnings: 1", printed)
+
+    def test_lists_the_commonest_category_first(self):
+        tracker = ValidationTracker()
+        tracker.add_issue("r1", "warning", "rare_problem", "A", "m")
+        for record in ("r2", "r3", "r4"):
+            tracker.add_issue(record, "warning", "common_problem", "B", "m")
+
+        printed = self._printed(tracker)
+        self.assertLess(printed.index("common_problem: 3"), printed.index("rare_problem: 1"))
+
+    def test_an_empty_run_prints_a_zero_rate_and_no_category_sections(self):
+        printed = self._printed(ValidationTracker())
+        self.assertIn("Successfully processed: 0 (0.0%)", printed)
+        self.assertNotIn("by category", printed)

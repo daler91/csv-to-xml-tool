@@ -6,6 +6,12 @@ companion to that review — every item here references a finding in
 `UX_REVIEW.md` by its section number (e.g. "§3.5" points to
 `UX_REVIEW.md` finding 3.5).
 
+> **Status at `7b14f3b` (2026-10-17):** every finding this plan schedules is `[RESOLVED]` in
+> `UX_REVIEW.md` except §10.3, a Phase 6 watch item that is still open. §6.7 is in no phase.
+> Two follow-ups the plan deferred are still open: Sentry wiring for the error boundary (Phase 3,
+> Phase 6) and card layouts for tables at phone width (Phase 2). The phases never got their
+> merged-PR links (Tracking Progress, step 2).
+
 ## How to Read This Plan
 
 - **Phases are releasable slices, not sprints.** Each phase is a
@@ -195,6 +201,8 @@ is all mechanical.
 Collapsing table columns into card layouts on the smallest screens
 (§7.4 stretch goal) is deferred to Phase 6.
 
+**Still open at `7b14f3b`:** Phase 6 didn't pick this up. The dashboard and audit tables still only scroll sideways (`overflow-x-auto`).
+
 ---
 
 ## Phase 3 — Recoverable Errors & Live Feedback
@@ -330,6 +338,9 @@ that turns "feels broken" into "feels solid".
 
 - Error-boundary Sentry wiring. TODO comment only; the actual Sentry
   setup is a separate infra ticket.
+
+  **Still open at `7b14f3b`:** `components/error-boundary.tsx:32` still has the
+  `TODO(phase-6)`, and `package.json` has no Sentry dependency.
 - Toast queue / dismissal animations — ship the simplest possible
   version first.
 

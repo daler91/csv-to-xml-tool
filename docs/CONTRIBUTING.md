@@ -53,9 +53,16 @@ These each exist because breaking them shipped a real defect.
 
 ### 1. The three sample CSVs must validate clean
 
-`TestShippedSamplesValidate` in `tests/test_integration_xsd.py` is the gate. If
+`TestShippedSamplesValidate` in `tests/test_integration_xsd.py` checks them. If
 your change makes a sample produce schema-invalid XML, the change is wrong — the
 samples are the first thing a new user converts.
+
+The samples are a smoke test, not a compliance test: `counseling-sample.csv`
+carries 16 of the 74 counseling columns in three rows. What covers every column
+is `tests/test_xsd_validity_fuzz.py`, which fills each column a converter reads
+with the schema's own values, near misses and junk, and requires every file to
+validate without the converters' final XSD check stepping in. A change that
+breaks it is wrong for the same reason.
 
 ### 2. A blank cell never becomes an empty element
 
@@ -204,5 +211,5 @@ Concrete, scoped, and already diagnosed (each re-checked at `7b14f3b`):
   absent today, and a real gap.
 
 The larger open items — the inverted converter abstraction (§5.1) and routing
-counseling's remaining ~65 header literals through `COLUMN_MAPPING` (§5.2) — are
-worth scoping deliberately rather than picking up opportunistically.
+through `COLUMN_MAPPING` the 64 of 74 counseling headers still read as literals
+(§5.2) — are worth scoping deliberately rather than picking up opportunistically.

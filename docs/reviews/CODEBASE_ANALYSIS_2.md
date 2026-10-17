@@ -544,11 +544,23 @@ went from 173 to 237 tests. `GET /api/jobs/[jobId]` still returns `inputFilePath
 (absolute server paths) plus the full `issues` and `cleaningDiffs` arrays on every 1–5 s progress
 poll — not a bug, but unnecessary disclosure and payload, and still open.
 
+**Still open at `7b14f3b`:** the disclosure. `GET` (`jobs/[jobId]/route.ts:37-75`) still returns
+the whole row on every poll. The `[templateId]` gap was a misreading: its `DELETE` has been tested
+in `mapping-templates/route.test.ts` since `0b90719`, before this pass.
+
 ---
 
 ## Tier 5 — Tests, docs, process
 
-### 5.1 The suite has structural blind spots — `[OPEN]`
+### 5.1 The suite has structural blind spots — `[PARTIAL]`
+
+> **Partly fixed in `784c68b`, `a509014`, `50dd8d5`:** test 2 is
+> `test_yes_no_answers_are_read_in_any_case`. Test 1 is covered by `tests/test_xsd_validity_fuzz.py`,
+> which fills every column with the schema's own values, cut-short and over-long text and junk, and
+> requires every file to validate without the final XSD check stepping in. **Still open:** test 3
+> landed only as `test_every_listed_fabrication_is_reported`. It blanks the columns in
+> `COUNSELING_FABRICATION_DEFAULTS` and checks each one is reported, so a fabrication outside that
+> list still goes unnoticed.
 
 Every counseling fixture in the repository — `test_integration_xsd.py`, `test_counseling_converter.py`,
 `test_converter_characterization.py`, the goldens — uses canonical values: `Middle Name=''`, exactly
@@ -564,22 +576,52 @@ Every counseling fixture in the repository — `test_integration_xsd.py`, `test_
    whose value did not come from the row must correspond to a `FABRICATED_DEFAULT` or
    `DOWNGRADED_VALUE` issue. Covers all of Tier 2.
 
-### 5.2 The sample gate proves less than it appears to — `[OPEN]`
+### 5.2 The sample gate proves less than it appears to — `[FIXED]`
+
+> **Fixed in `a509014` and the 2026-10-17 documentation audit:** the pairing landed — the seeded
+> fuzz test (5.1) fills every column each converter reads — and `docs/CONTRIBUTING.md` and
+> `docs/testing.md` now describe `TestShippedSamplesValidate` as the smoke test it is, beside the
+> fuzz test. `counseling-sample.csv` still carries 16 of 74 columns in 3 rows, deliberately: it is
+> what a new user converts first.
 
 `TestShippedSamplesValidate` is described in `CONTRIBUTING.md` as the gate. `counseling-sample.csv`
 carries **16 of the 74** counseling columns and three rows; it exercises none of the address, phone,
 Part 3, certification or referral paths. It is a smoke test, not a compliance test. Pair it with 5.1.
 
-### 5.3 Documentation claims that the code does not meet — `[PARTIAL]`
+### 5.3 Documentation claims that the code does not meet — `[FIXED]`
+
+**Fixed in `90763c4`:** the web Dockerfile runs `npm ci --ignore-scripts` (3.4), so the first
+register's 2.3 claim holds. The other three rows were fixed in the third pass.
 
 | Claim | Where | Reality |
 |---|---|---|
 | ~~"long text truncated at the schema's limits"~~ | `README.md:73` | True since the third pass's `schema_rules.py` (1.1) |
 | ~~"Every change is recorded, so the results page can show a before/after diff"~~ | `converters.md` | True since the third pass (2.6, 2.8) |
 | ~~Fabricated-defaults table lists nine columns~~ | `converters.md` | Corrected in the third pass (2.1–2.5, 2.7) |
-| `CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci` | `reviews/CODEBASE_ANALYSIS.md:315` | Dockerfile still uses `npm install` (3.4) |
+| ~~`CODEBASE_ANALYSIS.md` 2.3 `[FIXED] (most)` including `npm ci`~~ | `reviews/CODEBASE_ANALYSIS.md:315` | True since `90763c4` (3.4) |
 
-### 5.4 Still open from the first pass, unchanged
+### 5.4 Still open from the first pass, unchanged — `[PARTIAL]`
+
+> **Fixed since:** the audit action labels (`629e206`, third-pass D.8), and event fields taken from
+> the first row (`2a794b0`, XSD validity second pass W.4).
+>
+> **Still open at `7b14f3b`:**
+> - Training counts rows, not people (`training_converter.py:782`), now a recorded decision.
+> - 3.10: no Origin check; `trustHost: true` in `lib/auth.config.ts`; no JWT `maxAge`.
+> - 3.11: `worker-client.ts:20` still omits the header for an empty token. Responses are cast, not
+>   validated; `test_worker_web_contract.py` checks their shapes in tests only.
+> - 5.1/5.2: each converter still has its own `convert()`, and there are two registries
+>   (`src/main.py`, `conversion_service.py`). 64 of the 74 headers `counseling_converter.py`
+>   reads are literals, not `COLUMN_MAPPING` lookups.
+> - 5.5: there is still no formatter, type checker or ESLint.
+> - 5.6, except the audit labels: `results/page.tsx` is 721 lines and re-declares both types;
+>   `DATA_DIR` is defined 5×; "50MB" is in 9 user-facing strings; the DDL still has two sources.
+> - SIGTERM only stops claiming. The in-flight job is not drained, and neither `setInterval` is
+>   cleared.
+> - Redis has no persistence in `docker-compose.yml`.
+> - `run.py`'s `_pick_xsd` still looks only beside `run.py`. The converter's own XSD check
+>   (`8be1055`) now validates every file anyway.
+> - `Job.processedRows` is still never written.
 
 For completeness, and so this register can stand alone: 1.7 (training aggregation counts rows, not
 people; event fields from the first row), 3.10 (no CSRF/Origin check, `trustHost`), 3.11
@@ -595,6 +637,10 @@ discovery, audit action labels, `Job.processedRows`, training aggregation).
 
 Ordered by risk to the filing per unit of effort. Each step is independently shippable, and each
 should land with the test from 5.1 that would have caught it.
+
+**Status at `7b14f3b`:** Phases 1–4 are done, and every Tier 1–4 item is `[FIXED]` (Tiers 1–2 in
+PR #131). In Phase 5 the 5.3 claims are now true, and two of the three 5.1 tests have landed. The
+generic audit-completeness test has not.
 
 ### Phase 1 — Stop producing invalid or wrong filings (Tier 1)
 

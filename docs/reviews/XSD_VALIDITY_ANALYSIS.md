@@ -267,8 +267,13 @@ completely.
   self-described with that exact text (recommended: no guessing). The alternative is
   both the `Middle Eastern` and `North African` codes. Training counts are the separate
   open question from the last review.
+  - **Still open at `7b14f3b`:** training still counts "Middle Eastern or North African"
+    under both `MiddleEastern` and `NorthAfrican`, because `classify_races` matches both
+    keywords (`CODEBASE_ANALYSIS_3.md` D.9).
 
 ## Suggested order
+
+> **Done** (PR #135): every step below landed. See each finding for its commit.
 
 1. **No decision needed:** V.1 (self-describe and refusal wordings), V.2 for
    CounselingSeeking, V.3, V.4 and V.6's reporting.
@@ -437,6 +442,11 @@ Each now either keeps the value or records a warning naming the cell.
 - **Lone surrogates:** a lone surrogate in posted text was an HTTP 500.
 
 ### Decisions (not changed)
+
+**Re-checked at `7b14f3b`:** all five still hold as decided. A blank Prep or Travel hours cell
+is still filed as `0` (`counseling_converter.py:1095-1096`), and `_event_location` still files
+the first complete location. Training still counts `max(len(rows), 1)`, and
+`_report_uncounted` still gives one warning per event.
 
 - **Blank Prep or Travel hours are still filed as 0.** The form asks for them, 0 is the
   natural reading of a blank, and a warning on nearly every row would bury the report.

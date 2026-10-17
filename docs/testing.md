@@ -124,6 +124,21 @@ bundled XSDs. **This is the single most important test in the repo.** Two of the
 three samples once failed — a first-time user following the README got an invalid
 federal filing — and this test is what makes that impossible to reintroduce.
 
+It proves less than its importance suggests: `counseling-sample.csv` carries 16
+of the 74 counseling columns in three rows, so it never reaches the address,
+Part 3, certification or referral paths. Read it with the next one.
+
+### `tests/test_xsd_validity_fuzz.py` — every column, every converter
+
+The method of [`reviews/XSD_VALIDITY_ANALYSIS.md`](./reviews/XSD_VALIDITY_ANALYSIS.md)
+kept as a regression test. A seeded generator fills every column each converter
+reads with the schema's own values (exact, lower-cased, cut short, joined into
+long multi-selects), near misses and junk. Every file must validate, and the
+converters' final XSD check (`BaseConverter._write_valid_xml`) must never have
+had to step in: the schema guard and the converters are meant to handle each
+case themselves. `test_xsd_validity.py` and `test_xsd_validity_second_pass.py`
+pin each finding of that analysis individually.
+
 ### `tests/golden/` — characterization goldens
 
 Nine committed XML files that pin converter output byte-for-byte. They were

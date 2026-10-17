@@ -1179,7 +1179,9 @@ formatted JSON tree in the row below.
 
 ---
 
-### 9.3 Upload help text hides the limits **[P3]**
+### 9.3 Upload help text hides the limits **[P3]** **[RESOLVED]**
+
+**Fixed in `2b7ab37` and `89d9355`:** the text went from `text-gray-400` to `text-gray-600` (`2b7ab37`, with §8.4). `89d9355` (§6.5) moved it out of the dropzone to directly under the "CSV File" label, wired through `aria-describedby`. It stays `text-xs`, and since `aac0e6e` the figure comes from the server's `MAX_UPLOAD_BYTES` (`convert-form.tsx:177-178`).
 
 **Where:** `apps/web/src/app/convert/page.tsx:145-147`
 
@@ -1309,6 +1311,8 @@ guardrail is warranted.
 tracking. If/when mapping gains autosave, this becomes moot.
 
 **Effort:** N/A (watch)
+
+**Still open at `7b14f3b`:** both Sign Out buttons, desktop and mobile sheet (`nav.tsx:58`, `:144`), still call `signOut()` straight away. Only the mapping page's Cancel checks for unsaved changes (§9.5).
 
 ---
 

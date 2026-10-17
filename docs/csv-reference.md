@@ -37,7 +37,9 @@ absent.
    column name it no longer uses. The mapping is matched against the headers
    as normalized in step 1, as the mapping page shows them, so a header with a
    stray space is still renamed; a mapping entry for a column the CSV doesn't
-   have is reported as a warning.
+   have is reported as a warning. A mapping is a flat object of column names to
+   expected names, at most 200 entries of at most 200 characters each; the web
+   refuses anything else when it is saved (`apps/web/src/lib/column-mapping.ts`).
 4. **Mapping entries whose target is not an expected column are dropped.** A
    mapping that renamed a real header to an internal key (`{"Class/Event ID":
    "event_id"}`) would rename the column out from under the converter, so such
@@ -77,29 +79,49 @@ absent.
   a row of the file — is reported as an error naming the row and column: a
   quotation mark was opened and never closed, and the rows it swallowed are
   missing from the XML. (Past 131,072 characters the file can't be read at all.)
+- **A value may be written the ways exports write it.** Dates (`1/13/2025`,
+  `13/01/2025`, `Jan 13, 2025`, Salesforce date-times), amounts (`$1,500.00`,
+  `(1,500)`, `1.5E3`), phones (`(515) 555-1234`, `+1 515 555 1234 x12`), Yes/No
+  answers in any case (`y`, `true`, `1`), genders (`F`, `Woman`) and state names
+  or codes all read as one value; a near miss — `02/30/2025`, `USD 1500`, a
+  phone that isn't ten US digits — is refused and reported rather than guessed.
+  The rules are in [converters.md](./converters.md#the-cleaning-rules); each
+  spelling is pinned in `tests/test_value_spellings.py`.
 
 ## Requirement tiers
 
 Defined once in `apps/worker/app/services/column_requirements.py` and shared by
-the mapping page and the conversion.
+the mapping page and the conversion; the fabrication-risk columns come from
+`COUNSELING_FABRICATION_DEFAULTS` in `src/config.py`.
 
 | Tier | Column missing means | Where it shows |
 |---|---|---|
-| **Required** | Conversion fails with HTTP 422 naming the columns | Red on the mapping page; the convert button is blocked |
-| **Conditional** | Warning — needed only when a related field has a particular value | Amber on the mapping page |
-| **Fabrication-risk** | Warning — the converter will emit a non-empty default into your filing | Amber on the mapping page |
-| **Optional** | Element is omitted | Not flagged |
-| **Extra** | Column is ignored entirely | Listed as "extra" on the preview page |
+| **Required** | Conversion fails with HTTP 422 naming the columns | Red `Required` badge on the mapping page. Convert stays enabled; the job fails |
+| **Conditional** | Warning — needed only when a related field has a particular value | Amber `Conditional` badge, with the rule, on the mapping page |
+| **Fabrication-risk** | Warning — the converter will emit a non-empty default into your filing | No badge of its own (shown `Optional`; `Duration (hours)` `Required`); a file-level warning at conversion |
+| **Optional** | Element is omitted, or filed with a configured default (`LocationCode`, `Rural_vs_Urban`) | `Optional` badge |
+| **Extra** | Column is ignored entirely | Counted under "Extra" on the preview page |
+
+These tiers are the web app's. The command line checks no header row: a missing
+column's values are defaulted, left out or reported row by row
+([cli.md](./cli.md#what-it-checks-and-what-it-does-not)).
 
 Extra columns are harmless. The preview page also runs a fuzzy match (difflib,
 0.6 cutoff) between missing and extra columns and suggests renames — that is what
-catches `Zip Code` vs `Zip/Postal Code`.
+catches `Zip Code` vs `Zip/Postal Code`. Each missing column gets its closest
+extra one, so one extra column can be offered for several (`Mailing Zip Code`
+for `Mailing City`, `Mailing Country`, `Mailing Street` and
+`Mailing Zip/Postal Code`); check a suggestion before applying it.
 
 ---
 
 ## Counseling (Form 641)
 
-**Required (12).** Missing any of these fails the conversion:
+**Required (12).** Missing any of these fails a web conversion. The command
+line needs only `Contact ID` and converts without the rest: `Race` is filed as
+`Prefer not to say` and contact hours as 0.5, each with a warning per row;
+`Type of Session`, `Language(s) Used` and `Currently In Business?` take
+`Telephone`, `English` and `No` without one; the others are left out.
 
 `Contact ID` · `Race` · `Ethnicity:` · `Gender` · `Disability` ·
 `Veteran Status` · `Currently In Business?` · `Type of Session` ·
@@ -133,8 +155,26 @@ or of `Retired` (not a recognized status), or a `FIPS_Code` beside a blank
 `Rural_vs_Urban`. A `Branch Of Service` that names no branch (`N/A`, `None`,
 `No military service`, `Prefer not to say`) is left out without one.
 
-**Fabrication-risk (9).** Absent → a non-empty value is invented. See
+**Fabrication-risk (12).** Absent → a non-empty value is invented:
+`Gross Revenues/Sales` · `Profits/Losses` · `SBA Loan Amount` ·
+`Non-SBA Loan Amount` · `Amount of Equity Capital Received` ·
+`Business Ownership - % Female(old)` · `Mailing Country` ·
+`Conduct Business Online?` · `8(a) Certified?(old)` ·
+`Are you currently exporting?(old)` · `Duration (hours)` (for session types
+that need contact hours; also required) · `Services Provided`. See
 [converters.md](./converters.md#fabricated-defaults) for the exact values.
+
+**Multi-value columns.** Ten columns take several answers joined with `;`, as
+Salesforce exports a multi-select: `Race`, `What Prompted you to contact us?`,
+`Legal Entity of Business`, `Nature of the Counseling Seeking?`,
+`Export Countries`, `Services Provided`, `Language(s) Used`,
+`Certifications (SDB, HUBZONE, etc)`, `SBA Financial Assistance` and
+`Referred Client to`. Each answer is filed as its own code, except that
+`Nature of the Counseling Seeking?` and `Services Provided` keep only the first:
+the schema allows one code there, and the rest are named in a warning
+(`CounselingConverter._cap_single_code`). Elsewhere, answers past the schema's
+`maxOccurs` (13 for the media codes) are dropped with a warning. Any other
+column is one value.
 
 **Full expected set (74 columns).** These are the headers the converter reads;
 anything else is extra.
@@ -187,7 +227,7 @@ Other legal entity (specify)
 </details>
 
 The canonical list is `CounselingConfig.COLUMN_MAPPING` in `src/config.py`
-(73 declared entries; `expected_columns()` unions the fallback chains to 74).
+(72 declared entries; `expected_columns()` unions the fallback chains to 74).
 Four other structures are keyed by these columns —
 `xsd_error_mapping._COUNSELING_ELEMENT_FIELDS`,
 `diff_service.COUNSELING_CLEANING_MAP`, the `column_requirements` tier sets and
@@ -197,7 +237,13 @@ cannot drift apart again.
 ### Sample
 
 `apps/web/public/samples/counseling-sample.csv` carries 16 columns — the 12
-required ones plus name, email and mailing state — and validates clean. Its
+required ones plus name, email and mailing state — and three rows. All 16 match,
+and its XML passes the XSD, but its report is not clean, from the data: the two
+clients in business give no `Legal Entity of Business` or
+`Nature of the Counseling Seeking?` and the veteran no `Branch Of Service` (five
+errors; the records are still filed), `Video` is filed as `Telephone`, the file
+has no `Activity ID`, and each fabrication-risk column it lacks is defaulted with
+a warning. Its January 2025 dates are also warned as before the current fiscal year. Its
 header row, wrapped here for readability but a single line in the file:
 
 ```
@@ -247,7 +293,10 @@ a date that parses, a code SBA accepts — and two spellings of one value
 The mapping page shows the first spelling of each as the "expected" name.
 
 An optional `LocationCode` column is also read, as on the counseling form; without
-it every event is filed under the configured location code.
+it every event is filed under the configured location code. It is not one of the
+mapping page's fields (`TrainingConverter._UNLISTED_COLUMNS`), so the preview
+counts it under "Extra" — which says extra columns are ignored — and a mapping
+onto it is dropped. Name the column `LocationCode` exactly.
 
 **No total columns are needed.** Supply one row per attendee; the converter
 computes female/male, race, ethnicity, veteran, disability and business-status
@@ -276,6 +325,16 @@ warning, because `FundingSource` is optional and a non-enumerated value would
 fail schema validation. The accepted list is `VALID_FUNDING_SOURCES` in
 `src/config.py`.
 
+### Sample
+
+`apps/web/public/samples/training-sample.csv` is a whole Salesforce
+campaign-member export: 28 columns, seven attendees of two events. Fifteen match
+a field (`city`, `State` and `Zip code` as aliases), `Cosponsor` is the one
+missing, and the other 13 — names, contact details, `Member ID`,
+`Class Teacher` and the like — are extra. It converts to two events that pass
+the XSD, with warnings for the `CORE` funding source (left out), the
+month-first reading of `2/3/2025` and `2/10/2025`, and the configured defaults.
+
 ---
 
 ## Training client (Form 641 from training rows)
@@ -285,25 +344,31 @@ fail schema validation. The accepted list is `VALID_FUNDING_SOURCES` in
 attendee at an event shares the event id as their session number; a row with
 neither is reported as a warning.
 
-**Expected set (28 columns),** in the order the converter declares them:
+**Expected set (22 columns),** the columns the converter reads, in the order
+`preview_service.TRAINING_CLIENT_EXPECTED` declares them:
 
 ```
-Class/Event ID              Related Record ID
-Member Type                 Training Topic
-First Name                  Class/Event Type
-Last Name                   Funding Source
-Member Status               Member ID
-Company                     Class Teacher
-Phone                       Contact ID
-Email                       Street
-Unique Campaign Members     city
-Currently in Business?      State
-Ethnicity                   Zip code
-Race                        Start Date
-Disabilities                Class/Event Name
-Gender
-Military Status
+Class/Event ID              Zip code
+Contact ID                  Currently in Business?
+Member ID                   Ethnicity
+First Name                  Race
+Last Name                   Disabilities
+Company                     Gender
+Phone                       Military Status
+Email                       Training Topic
+Street                      Funding Source
+city                        Class Teacher
+State                       Start Date
 ```
+
+The rest of a campaign-member export — `Member Type`, `Member Status`,
+`Unique Campaign Members`, `Related Record ID`, `Class/Event Type`,
+`Class/Event Name` — is extra; until 2026-09 the list also carried those six, so
+a file without them was told they were missing although nothing reads them. A
+column named as the counseling form names it (`LocationCode`,
+`Type of Session`, `Mailing Country`) is read too, over the default below, but
+the preview counts it under "Extra" all the same, and a mapping onto it is
+dropped.
 
 Note the inconsistent casing — `city` is lowercase while `State` and `Zip code`
 are not. That is what the Salesforce export produces, and the headers are matched
@@ -332,20 +397,47 @@ A blank cell never erases a value already there: with both `Start Date` and
 last of the two that has a value. A file with both gets one warning naming them.
 
 Everything the counseling schema needs but a training export does not carry is
-supplied from `TrainingClientConfig.DEFAULTS` — mostly empty strings, plus
-`Type of Session: Training`, `Language(s) Used: English`,
-`Services Provided: Business Start-up/Preplanning`, and zeroed hours and loan
-amounts. A default also fills the blank cells of such a column when the CSV has
-one; the file-level warning listing the defaults says so for that column.
+supplied from `TrainingClientConfig.DEFAULTS` — 51 columns, 32 of them empty
+strings. The rest: `Type of Session: Training`, `Language(s) Used: English`,
+`Services Provided: Business Start-up/Preplanning`, `Mailing Country: US`,
+`Undetermined` for `Rural_vs_Urban` and `Verified To Be In Business`, `No` for
+the yes/no columns, and zero for the female-ownership share, the loan and
+equity amounts and the hours. A default also fills the blank cells of such a
+column when the CSV has one; the file-level warning listing the defaults says
+so for that column.
+
+The event's `Training Topic` is filed as what the attendee sought and received
+(`Nature of the Counseling Seeking?`, `Services Provided`) unless the row fills
+those columns itself. A `Yes` in `Currently in Business?` is filed as `No`, with
+a warning, unless the row also gives a legal entity (`Legal Entity of Business`
+or `Other legal entity (specify)`, which the training form doesn't collect) and
+the counseling sought (which `Training Topic` supplies): SBA requires both for a
+client in business.
+
+### Sample
+
+`apps/web/public/samples/training-client-sample.csv` carries 20 columns, three
+attendees of one event. Sixteen of the 22 match; `Street`, `city`, `State`,
+`Zip code`, `Disabilities` and `Class Teacher` are missing, and `Member Type`,
+`Member Status`, `Class/Event Type` and `Class/Event Name` are extra. Its XML
+passes the counseling XSD; the report has one error (the veteran's missing
+`Branch Of Service`) and warnings for the seven-digit phones (`555-0101`, left
+out), `Federal` (not an SBA funding code), the two `Yes` business answers filed
+as `No`, the dates before the fiscal year, and the configured defaults.
 
 ---
 
 ## Data-quality checks on the preview
 
 Before you convert, the preview page reports counts for each problem it can see
-in the first rows, with a severity and the column responsible. It is generated by
-`src/data_validation.py` and only lists checks with a non-zero count, so an empty
-data-quality panel means nothing was detected — not that nothing was checked.
+across the whole file — the table beneath shows only the first 20 rows — with a
+severity and the column responsible. It is generated by
+`src/data_validation.analyze_data_quality` and only lists checks with a non-zero
+count, so an empty data-quality panel means nothing was detected — not that
+nothing was checked. Besides its own checks it runs the real converter over the
+rows into a scratch file and counts, per column and one per record, the value
+problems the conversion would report (`Video` as a session type, `CORE` as a
+funding source), so a value the schema rejects is seen before converting.
 It reads cells and rows as the conversion does (see
 [How cells and rows are read](#how-cells-and-rows-are-read)): an ID of `#N/A`
 counts as missing, and rows that are not records are counted under
@@ -359,4 +451,6 @@ instead of one silently shadowing the other. Conversion records a file-level
 warning naming each repeated header, and each row takes the last of those
 columns that has a value: a blank second `Date` column no longer erases the
 first (`src/data_cleaning.NormalizedDictReader`, used by the converters, the
-preview and the cleaning diff alike).
+preview and the cleaning diff alike). A web conversion adds a second, older
+warning that "only the last occurrence was used"
+(`conversion_service.run_conversion`); the per-row rule above is what happens.

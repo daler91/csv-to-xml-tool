@@ -11,12 +11,18 @@ the output against the bundled SBA schemas. Findings are not inferred from readi
 > records what remained after the remediation below, and its §5.4 lists which of these findings are
 > still open. New work should be tracked there.
 
+> **Markers re-verified 2026-10-17 at `7b14f3b`:** every finding not marked `[FIXED]` (1.7, 2.3,
+> 3.7, 3.10, 3.11, Tier 4's still-open items, 5.1–5.7) was re-checked against the code, and 13
+> `[FIXED]` markers were spot-checked (1.1, 1.2, 1.5, 2.1, 3.1, 3.2, 3.4, 3.5, 3.6, 3.8, 3.12,
+> 3.13, Tier 4). The lines **Fixed in `<sha>`** and **Still open at `7b14f3b`** under a finding
+> record what changed. The §2 baseline figures were not re-measured.
+
 ## How to use this document
 
 Each finding carries a status marker. **When you fix something, flip its marker to `[FIXED]`
 in the same commit** — the same convention `TECHNICAL_DEBT.md` and `UX_REVIEW.md` use.
 `ARCHITECTURE_REVIEW.md` lacks these markers, which is why ~20 of its 24 findings are now stale
-and actively misleading (see [5.7](#57-documentation-accuracy)). Please don't let this document
+and actively misleading (see [5.7](#57-documentation-accuracy--partially-fixed)). Please don't let this document
 become the next one.
 
 - **`[OPEN]`** — verified present at `bd390af`.
@@ -227,13 +233,17 @@ In a multi-tenant web app with open signup, this means every other organization'
 silently stamped with this organization's location code and partner code, and any unparseable date
 becomes 2023-12-12.
 
-### 1.7 Silent data loss in the training converter — `[FIXED]` (blank-ID + silent-success); `[OPEN]` (aggregation)
+### 1.7 Silent data loss in the training converter — `[FIXED]` (blank-ID + silent-success, event fields); `[OPEN]` (rows vs people)
 
 > Fixed: `validate_training_record` now uses `is_empty()`, so NaN event IDs are rejected and
 > recorded instead of being dropped by `groupby()`; `_read_and_validate_csv` raises `EmptyCSVError`
 > instead of returning `(None, None)`, so a conversion can no longer "succeed" with no output file.
 > **Still open:** demographics counting rows rather than distinct people, and event-level fields
 > being taken from an arbitrary `iloc[0]`.
+
+**Fixed in `2a794b0`:** `_event_value` takes each event-level value from the first row that gives a usable one (refined in `479a1fc`) and warns when the event's rows disagree. The location is the first row with a complete City/State/ZIP, and differing addresses are deliberately not reported (`converters.md`, Known gaps).
+
+**Still open at `7b14f3b`:** demographics still count rows. `'total': max(len(rows), 1)` is at `training_converter.py:782`, and there is no dedup by Contact ID. Reproduced: one attendee row given twice gives `<Total>2</Total>`.
 
 - **Blank event IDs vanish with zero warnings.** `pd.read_csv(dtype=str)` makes blank cells `NaN`
   (a float), and `validate_training_record` tests `if not record_id:` — but `not float('nan')` is
@@ -309,6 +319,10 @@ CI never builds either image, which is why this went unnoticed.
 > **Still open:** Redis has no persistence volume, so a restart drops queued jobs until the reaper
 > catches them.
 
+**Fixed in `90763c4`:** the web Dockerfile uses `npm ci --ignore-scripts`.
+
+**Still open at `7b14f3b`:** the `redis` service in `docker-compose.yml` still has no volume and no `appendonly`. Worker `/health` still returns 200 when degraded: the compose and Docker probes read the body, but Railway's `healthcheckPath` checks only the status code. Only the worker image has a `HEALTHCHECK`. `apps/web/Dockerfile` has none, although `6fad498`'s message says both images got one.
+
 - The worker healthcheck shells out to `curl`, which is **not installed in `python:3.12-slim`** —
   the check is permanently red.
 - `scripts/migrate.js:116` catches migration failure without exiting non-zero, and
@@ -338,12 +352,12 @@ several are availability- or DoS-grade.
 | 3.4 | **No rate limit or lockout on login.** Signup (5/min) and upload (10/min) are limited, but `/api/auth/callback/credentials` is not in the middleware matcher and is unlimited. bcrypt cost 12 is the only brake on online guessing. | `middleware.ts:3-16` | `[FIXED]` |
 | 3.5 | **Stored XSS in the HTML validation report.** `_generate_issues_table` interpolates `record_id`, `field_name`, and `message` — all carrying raw CSV content — into HTML **unescaped**. A CSV cell containing `<script>` lands executable in `reports/*.html`. | `validation_report.py:260-268` | `[FIXED]` |
 | 3.6 | **Non-ASCII `Authorization` header → 500, not 401.** Verified live: `secrets.compare_digest` raises on non-ASCII `str`, so `Bearer café` produces an unhandled `UnicodeEncodeError`. | `worker/app/core/auth.py:34` | `[FIXED]` |
-| 3.7 | **Body-size cap is bypassable.** Only `Content-Length` is inspected, so a chunked request skips the guard entirely and Starlette buffers the whole body. The cap is 100 MB — double the 50 MB upload limit it backstops. Worker peak memory is ~8-10× input, the thread pool is uncapped, and there is no worker-side rate limiting. | `worker/app/main.py:40-51` | `[PARTIAL]` — chunked bypass fixed; 100 MB cap, uncapped concurrency remain ([3rd pass C.4](./CODEBASE_ANALYSIS_3.md#c4-codebase_analysis-37-was-only-partly-fixed--open--lowmedium)) |
+| 3.7 | **Body-size cap is bypassable.** Only `Content-Length` is inspected, so a chunked request skips the guard entirely and Starlette buffers the whole body. The cap is 100 MB — double the 50 MB upload limit it backstops. Worker peak memory is ~8-10× input, the thread pool is uncapped, and there is no worker-side rate limiting. | `worker/app/main.py:40-51` | `[FIXED]` — chunked bypass fixed; concurrency capped and a worker deadline added in `d102b0e` (`MAX_CONCURRENT_REQUESTS`, default 4, and `CONVERSION_DEADLINE_SECONDS`). The 100 MB `MAX_REQUEST_BYTES` was kept on purpose, because JSON escaping can make the envelope larger than a 50 MB file ([3rd pass C.4](./CODEBASE_ANALYSIS_3.md#c4-codebase_analysis-37-was-only-partly-fixed--fixed--lowmedium)) |
 | 3.8 | **Unauthenticated API disclosure.** Verified live: the catch-all 404 returns the **complete route table**, and `/docs` + `/openapi.json` are public (HTTP 200). | `worker/app/main.py:74-84` | `[FIXED]` |
 | 3.9 | **8 authenticated handlers return 500 instead of 401** (`jobs` list; 2 of 3 in `jobs/[jobId]`; `cancel`, `start`, `download`, `preview`, `audit`). `upload-errors.ts:22` maps 401 → "session expired", a message the app can essentially never show. | 7 route files | `[FIXED]` |
-| 3.10 | No CSRF token or Origin check on state-changing routes — safe today only via NextAuth's default `SameSite=Lax`, an implicit dependency pinned nowhere. Also `trustHost: true` with no allowlist, and a 30-day non-revocable JWT with no `maxAge`. | `lib/auth.ts:8,36` | `[OPEN]` |
-| 3.11 | **Worker auth fails open**: `worker-client.ts:20` omits the header entirely when `WORKER_AUTH_TOKEN` is empty, with no startup assertion. Worker responses are `res.json() as T` with no validation before being written to disk and into JSONB. | `lib/worker-client.ts:20,32` | `[OPEN]` |
-| 3.12 | CSV formula injection is unguarded in the audit export and `save_issues_to_csv`. `upload/route.ts:117` stores the **raw** filename in audit metadata while the job row stores the sanitized one. | `api/audit/route.ts:47` | `[FIXED]` |
+| 3.10 | No CSRF token or Origin check on state-changing routes — safe today only via NextAuth's default `SameSite=Lax`, an implicit dependency pinned nowhere. Also `trustHost: true` with no allowlist, and a 30-day non-revocable JWT with no `maxAge`. | `lib/auth.ts:8,36` | `[OPEN]` — still open at `7b14f3b`: `trustHost: true` and the session config with no `maxAge` are now in `lib/auth.config.ts`. There is still no Origin check. |
+| 3.11 | **Worker auth fails open**: `worker-client.ts:20` omits the header entirely when `WORKER_AUTH_TOKEN` is empty, with no startup assertion. Worker responses are `res.json() as T` with no validation before being written to disk and into JSONB. | `lib/worker-client.ts:20,32` | `[OPEN]` — still open at `7b14f3b` (`worker-client.ts:20-22`, `:38`). Since `61935c5`, a CI test pins the worker's JSON shapes to the web's interfaces, but the responses still have no runtime validation. |
+| 3.12 | CSV formula injection is unguarded in the audit export and `save_issues_to_csv`. `upload/route.ts:117` stores the **raw** filename in audit metadata while the job row stores the sanitized one. | `api/audit/route.ts:47` | `[FIXED]` — the formula guard. At `7b14f3b` the `upload` audit entry still stores the raw `file.name` (`upload/route.ts`); the export's guard is what makes that safe to open in a spreadsheet. |
 | 3.13 | `job_id` reaches Redis keys and the log format unsanitized (log forging, key-namespace pollution). `core/security.py:9` contains a `sanitize_id()` written for exactly this — **it is never called anywhere**. | `worker/app/routes/convert.py:49` | `[FIXED]` |
 
 > **Note on 3.3 — `script-src 'unsafe-inline'`.** The CSP added for this finding keeps
@@ -372,6 +386,8 @@ Status: `[FIXED]` except where noted.
 > (enqueue rollback) cases, plus the unguarded `totalRows` write that reset the reaper's clock.
 >
 > **Still open:** SIGTERM does not drain in-flight jobs, and the 60s sweep interval is never cleared.
+
+**Still open at `7b14f3b`:** the SIGTERM handler `stopConsumer` (`job-consumer.ts:91`) only stops new claims and nothing waits for the job in flight. Neither `setInterval` in `startConsumer` (the stale-claim sweep and the hourly retention purge) is ever cleared.
 
 - **`--add-missing` crashes.** `xml_validator.py:128` calls `ET.SubElement`, but line 7 imports
   `defusedxml.ElementTree`, which **does not export `SubElement`** (verified). The resulting
@@ -450,6 +466,8 @@ the output is byte-identical.
 
 The template-method `convert()` and the shared registry remain open.
 
+**Still open at `7b14f3b`:** `BaseConverter` is now 454 lines. It shares the CSV read (`_read_csv`, `68b532c`) and the XSD-gated write and leave-out logic (`_write_valid_xml`, `8be1055`). `convert()` is still abstract, though, and counseling and training each write their own read → loop → write orchestration. The converter map is declared three times: `main.CONVERTERS`, `conversion_service.CONVERTER_MAP` and an inline dict in `data_validation.py:462`.
+
 ### 5.2 No column mapping in the counseling converter — [PARTIALLY FIXED]
 
 ~90 hardcoded header string literals inside `row.get(...)` calls. Three mutually incompatible
@@ -474,7 +492,9 @@ The converter still reads through header literals for the other 70 columns; only
 chains go through the config (via `_mapped`). Routing the remaining `row.get` calls through the
 mapping is the rest of this finding.
 
-### 5.3 Dead code
+**Still open at `7b14f3b`:** 67 of the 74 `COLUMN_MAPPING` headers still appear as string literals in `counseling_converter.py`, which has 81 `row.get(` calls, and 64 are read *only* that way. Five mapping keys are read through `_mapped`/`_mapped_parsed`/`_part3_amount`: `internet`, `business_start_date` and the three Part 3 impact fields, which between them reach the other 10 headers.
+
+### 5.3 Dead code — [PARTIALLY FIXED]
 
 `check_element_order` (58 LOC, no callers — and containing *two contradictory implementations in one
 body* with an unreachable `except`); `analyze_counseling_csv` / `analyze_training_csv` (written for
@@ -483,19 +503,29 @@ worker `sanitize_id` / `sanitize_filename` (never called — see 3.13); `Job.pro
 written); `components/ui/card.tsx`; the `@auth/prisma-adapter` dependency; and `patch_tests.diff`,
 a stale already-applied patch committed at the repo root.
 
-### 5.4 Python packaging and idiom
+**Fixed in `3b64422`:** everything listed except `Job.processedRows` was deleted.
+
+**Still open at `7b14f3b`:** `Job.processedRows` is still declared in `schema.prisma:32` and `migrate.js:46` but never written. `GET /api/jobs/[jobId]` (`route.ts:65`) only overlays the worker's live count onto the response.
+
+### 5.4 Python packaging and idiom — `[FIXED]`
 
 `from __future__ import annotations` sits **before** the module docstring in 5 modules, so
 `__doc__` is `None` and `help()` shows nothing. Import-time side effects: `logging_util.py:129`
 instantiates a global logger that clears handlers, and `config.py:69` freezes the fiscal year at
 import time.
 
-### 5.5 Tooling gaps
+**Fixed in `3b64422`:** `from __future__` was moved below the docstrings and the module-level logger removed. The fiscal year is now computed per call (`config.fiscal_year_start()`). Every `src/` module now has `__doc__` set except `xml_utils.py`, which has no docstring at all.
+
+### 5.5 Tooling gaps — [PARTIALLY FIXED]
 
 No Python linter, formatter, or type checker (no ruff/black/mypy, no `pyproject.toml`) and **no
 ESLint** — `npm run lint` is `tsc --noEmit` plus a class-name script. CI builds neither Docker image.
 
-### 5.6 Web duplication
+**Fixed in `e04ecaf`:** ruff runs in CI from `pyproject.toml`, deliberately limited to `F`, `E9` and `B`. Since `6fad498`, the `docker-build` CI job builds both images and runs `docker compose up --wait`.
+
+**Still open at `7b14f3b`:** there is no formatter (black/ruff-format), no Python type checker (mypy/pyright) and no ESLint. `npm run lint` is still `tsc --noEmit && node scripts/check-ui-classes.mjs`.
+
+### 5.6 Web duplication — [PARTIALLY FIXED]
 
 `results/page.tsx` is 685 LOC holding a page plus 7 components, and re-declares `ValidationIssue`
 and `CleaningDiffEntry` verbatim from `src/types/index.ts`. `DATA_DIR` is redefined 5×; "50MB" is
@@ -504,7 +534,16 @@ hardcoded in 9 user-facing strings; job-status sets are re-declared 7×. The Pri
 `conversion_failed` action **no code writes**, while 4+ actions that *are* written fall through to
 `"—"` and are missing from the filter dropdown.
 
-### 5.7 Documentation accuracy
+**Fixed in `629e206`:** the audit page has a label for each of the 17 actions the app writes and a summary for each one that carries metadata. Its filter leaves out `conversion_failed`, which nothing writes now.
+
+**Still open at `7b14f3b`:**
+- `results/page.tsx` is 721 LOC and still re-declares both types. Its `ValidationIssue` has drifted: `severity: string` where `types/index.ts` has `"error" | "warning"`.
+- `DATA_DIR` is still defined 5×.
+- "50MB" is still hardcoded in 9 user-facing strings: the 413 errors in `upload`, `start` and `preview` and twice in `xml-tool-route.ts`, `page.tsx:82`, and `help/page.tsx` ×3. The cap is overridable through `MAX_UPLOAD_BYTES`, and only the convert form and the validate tool use `formatMegabytes`.
+- `["queued", "converting"]` is still re-declared in at least 8 places.
+- `migrate.js` is still hand-written DDL beside `schema.prisma`, and no test checks one against the other.
+
+### 5.7 Documentation accuracy — [PARTIALLY FIXED]
 
 - **README** omits the `training-client` converter entirely, lists 4 of 20 test files, documents a
   `docker compose up` that cannot work (2.2), and never mentions `SBA_OUTPUT_BASE`.
@@ -517,6 +556,10 @@ hardcoded in 9 user-facing strings; job-status sets are re-declared 7×. The Pri
 - **`UX_REVIEW.md`** is well maintained (inline `[RESOLVED]` markers); only §6.7, §9.3, and §10.3
   appear still open.
 - No `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODEOWNERS`, or `CLAUDE.md`.
+
+**Fixed in `3b64422`:** the README, the `ARCHITECTURE_REVIEW.md` markers and banner, and `TECHNICAL_DEBT.md` #3/#11. `d0b80a4` added `docs/SECURITY.md` and `docs/CONTRIBUTING.md`. UX §9.3 has since been marked resolved.
+
+**Still open at `7b14f3b`:** the repo still has no `LICENSE`, `CODEOWNERS` or `CLAUDE.md`.
 
 ---
 

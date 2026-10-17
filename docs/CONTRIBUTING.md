@@ -13,9 +13,10 @@ pip install -r requirements.txt -r apps/worker/requirements-dev.txt
 cd apps/web && npm ci && cd ../..
 ```
 
-`apps/worker/requirements-dev.txt` pulls in `fastapi` and `fakeredis`. Without
-them, 140 tests **silently skip** rather than fail
-([testing.md](./testing.md#test_converter_characterizationpy)). Install it.
+`apps/worker/requirements-dev.txt` pulls in the worker's runtime dependencies
+(`fastapi`, `redis`, …) and `fakeredis`. Without it, pytest stops at collection;
+with only some of them, 140 tests **silently skip** and the run still passes
+([testing.md](./testing.md#a-caution-about-missing-dependencies)). Install it.
 
 To add or bump a Python dependency, edit the matching `requirements*.in` file,
 not the `.txt`: the `.txt` files are hash-locked lockfiles that CI and the
@@ -52,9 +53,16 @@ These each exist because breaking them shipped a real defect.
 
 ### 1. The three sample CSVs must validate clean
 
-`TestShippedSamplesValidate` in `tests/test_integration_xsd.py` is the gate. If
+`TestShippedSamplesValidate` in `tests/test_integration_xsd.py` checks them. If
 your change makes a sample produce schema-invalid XML, the change is wrong — the
 samples are the first thing a new user converts.
+
+The samples are a smoke test, not a compliance test: `counseling-sample.csv`
+carries 16 of the 74 counseling columns in three rows. What covers every column
+is `tests/test_xsd_validity_fuzz.py`, which fills each column a converter reads
+with the schema's own values, near misses and junk, and requires every file to
+validate without the converters' final XSD check stepping in. A change that
+breaks it is wrong for the same reason.
 
 ### 2. A blank cell never becomes an empty element
 
@@ -85,9 +93,12 @@ conversion reviving a cancelled job. Do not replace one with an `update`.
 
 ### 6. Do not weaken the XML parsing defaults
 
-`defusedxml` for ElementTree, `resolve_entities=False` for lxml. Everywhere.
-A document handed in by a user goes through `xml_validator._parser()`, and one
-whose DOCTYPE declares entities is refused (`_entity_problem`).
+Every XML parse is lxml with `resolve_entities=False`. Everywhere — the XSDs
+included. A document handed in by a user goes through `xml_validator._parser()`
+(which also sets `no_network=True`), and one whose DOCTYPE declares entities is
+refused (`_entity_problem`). The standard-library `ElementTree` only *builds*
+output and never parses; a test that parses with it uses `defusedxml`, as the
+existing ones do.
 
 ### 7. Keep the durability timeouts ordered
 
@@ -147,7 +158,7 @@ pile of review files.
 
 Guides use `kebab-case.md`; `CONTRIBUTING.md` and `SECURITY.md` keep their
 uppercase names for GitHub; registers under `reviews/` keep their original
-`UPPER_SNAKE_CASE.md` names because ~25 source comments reference them by name.
+`UPPER_SNAKE_CASE.md` names because ~50 source comments reference them by name.
 
 ## Tests
 
@@ -183,24 +194,34 @@ around them.
 | Job lifecycle | `apps/web/src/lib/job-*.ts` |
 | Worker HTTP | `apps/worker/app/routes/`, `apps/worker/app/main.py` |
 | UI flow | `apps/web/src/app/convert/` |
-| Known problems | [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md) |
+| Known problems | [`reviews/README.md`](./reviews/README.md#what-is-genuinely-still-open), then the register it points to |
+| Will SBA accept the file? | [`reviews/XSD_VALIDITY_ANALYSIS.md`](./reviews/XSD_VALIDITY_ANALYSIS.md), `src/schema_rules.py` |
 
 ## Good first contributions
 
-Concrete, scoped, and already diagnosed:
+Concrete, scoped, and already diagnosed (each re-checked at `7b14f3b`):
 
-- **Sync the audit page's action list with what the code writes** — it offers a
-  `conversion_failed` filter nothing writes, and six written actions render as
-  "—".
 - **Fix `run.py`'s XSD discovery** so the validation prompt finds `schemas/`
-  instead of only the launcher's own directory.
-- **Replace the 9 hardcoded "50MB" strings** with a value derived from
-  `MAX_UPLOAD_BYTES`.
-- **Split `convert/[jobId]/results/page.tsx`** (685 lines, a page plus seven
-  components, re-declaring two types that already exist in `types/index.ts`).
+  instead of only the launcher's own directory (`_pick_xsd`).
+- **Replace the 9 hardcoded "50MB" strings** — five API error messages
+  (`upload`, `jobs/[jobId]/start`, `jobs/[jobId]/preview`, two in
+  `lib/xml-tool-route.ts`), the landing page and three on `/help` — with a value
+  derived from `MAX_UPLOAD_BYTES`.
+- **Split `convert/[jobId]/results/page.tsx`** (721 lines, a page plus eight
+  helpers and components, re-declaring `ValidationIssue` and `CleaningDiffEntry`,
+  which already exist in `types/index.ts`).
 - **Add a formatter and a type checker** (`ruff format`, mypy) — deliberately
   absent today, and a real gap.
+- **Teach `lib/job-failure.ts:describeJobFailure` the worker's 504**, so a
+  conversion past its deadline says to split the file instead of "try again".
+- **Offer Cancel for a `queued` job** on the progress page; the cancel route
+  already accepts it.
+- **Reword the download route's 410**, which advises a re-run a finished job
+  cannot have; the user must re-upload.
+
+More, each diagnosed, in
+[documentation-audit.md](./documentation-audit.md#code-issues-found-during-the-audit).
 
 The larger open items — the inverted converter abstraction (§5.1) and routing
-counseling's remaining ~70 header literals through `COLUMN_MAPPING` (§5.2) — are
-worth scoping deliberately rather than picking up opportunistically.
+through `COLUMN_MAPPING` the 64 of 74 counseling headers still read as literals
+(§5.2) — are worth scoping deliberately rather than picking up opportunistically.

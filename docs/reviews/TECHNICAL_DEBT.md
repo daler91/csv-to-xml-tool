@@ -7,6 +7,11 @@ Items marked with **[RESOLVED]** have been addressed.
 > Last verified against the code on **2026-09-16** at `d0e71f0`. Items #5, #16, #18
 > and #19 are genuinely still open; everything else marked `[RESOLVED]` was
 > spot-checked. When you fix an item, flip its marker in the same commit.
+>
+> **Re-verified 2026-10-17 at `7b14f3b`:** the four open items (#5, #16, #18, #19) were
+> re-checked and all four are still open. `[RESOLVED]` items #1, #3, #4, #6, #8, #9, #12, #14,
+> #15 and #17 were spot-checked and their markers hold, though the text of #12 and #15 is out of
+> date (see below).
 
 ---
 
@@ -48,6 +53,8 @@ Moved all secrets to an `env_file` reference in `docker-compose.yml`. Created `.
 `apps/web/package.json` depends on `next-auth@5.0.0-beta.30`, a pre-release version. Beta APIs may change without notice, and security patches may lag behind stable releases.
 
 **Status:** Not yet resolved. Requires monitoring for a stable release.
+
+**Still open at `7b14f3b`:** `package.json` still asks for `^5.0.0-beta.30`, and the lockfile resolves it to `5.0.0-beta.32` (since `41146f4`). Both are pre-release.
 
 ---
 
@@ -104,6 +111,8 @@ security headers.
 
 Added `healthcheck` configurations for db (pg_isready), redis (redis-cli ping), and worker (curl /health). Updated `depends_on` with `condition: service_healthy`.
 
+_Updated 2026-10-17 (`7b14f3b`): the worker check has been a stdlib Python probe that reads the `/health` body since `6fad498`, because `python:3.12-slim` has no `curl`._
+
 ---
 
 ### 13. Large Functions Needing Decomposition **[RESOLVED]**
@@ -129,6 +138,9 @@ requires the token to parse as an IPv4/IPv6 address (`net.isIP`) and is shared b
 login throttle. The header remains spoofable without a trusted-proxy allowlist, which is why the
 login throttle keys primarily on the email._
 
+_Updated 2026-10-17 (`7b14f3b`): since `629e206` the helper takes the `X-Forwarded-For` entry
+`TRUSTED_PROXY_HOPS` (default 1) from the right, which is the one the proxy added, not the first._
+
 ---
 
 ### 16. Memory Risk with Large CSV Files
@@ -136,6 +148,13 @@ login throttle keys primarily on the email._
 Both converters load entire files into memory. With a 50MB upload limit, this could consume significant memory.
 
 **Status:** Not yet resolved. Would require significant architectural changes to implement streaming.
+
+**Still open at `7b14f3b`:** all three converters go through `BaseConverter._read_csv`, which reads the whole file and keeps every row in a list, and the XML tree is built in memory too. The whole file is also held in memory along the web path:
+- the upload route (`arrayBuffer()`) and `job-runner.ts:59`;
+- the CSV sent to the worker as a JSON string;
+- the worker's `conversion_service` and `column_requirements` (`.read()`).
+
+The worker's `MAX_CONCURRENT_REQUESTS` (default 4) now bounds how many of these run at once.
 
 ---
 

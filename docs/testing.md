@@ -37,15 +37,15 @@ version or hash that drifts from the lockfile fails the install. To change a
 dependency, edit the `.in` file and regenerate with the `uv pip compile`
 command in the `.txt` header (`pip install uv` if you don't have it).
 
-`apps/worker/requirements-dev.txt` matters: without it the worker route and
-registry tests under `tests/` error on a missing `fastapi` or `fakeredis` import.
-It pulls in `fakeredis`, an in-memory Redis, so the registry tests need no live
-server.
+`apps/worker/requirements-dev.txt` matters: it carries the worker's runtime
+dependencies (`fastapi`, `redis`, …) plus `fakeredis`, an in-memory Redis, so
+the registry tests need no live server. Without it the run stops at collection
+(see [the caution below](#a-caution-about-missing-dependencies)).
 
 ## Current baseline
 
-Measured at commit `e4f1a59` on 2026-10-17 (Python 3.13). Re-measure with the
-commands above rather than trusting these numbers indefinitely.
+Measured at commit `7b14f3b` on 2026-10-17 (Python 3.13, Node 22). Re-measure
+with the commands above rather than trusting these numbers indefinitely.
 
 | Check | Result |
 |---|---|
@@ -53,9 +53,11 @@ commands above rather than trusting these numbers indefinitely.
 | Coverage (`src/` + worker) | **97.5%** against a 70% gate |
 | vitest | **395 passed**, 38 files |
 | `tsc --noEmit` | clean |
-| `check-ui-classes.mjs` | clean |
+| `check-ui-classes.mjs` | clean, 108 files |
 | `next build` | succeeds, 28 routes |
 | `ruff check .` | clean |
+| `pip-audit` (both requirement files) | no known vulnerabilities |
+| `npm audit --audit-level=high` | 0 vulnerabilities |
 
 The coverage gate is 70% while actual coverage is ~97%, so there is ~27 points of
 headroom. Raise the floor when you add coverage; do not lower it.
@@ -79,9 +81,12 @@ headroom. Raise the floor when you add coverage; do not lower it.
 
 ### `web-lint`
 
-`npm ci` → `npm audit --audit-level=high` → `npm run lint` → `npm test` →
-`npm run build`. High and critical advisories fail the build; moderates are
-reported only.
+`npm ci --ignore-scripts` → `npm run generate` → `npm audit --audit-level=high`
+→ `npm run lint` → `npm test` → `npm run build`. `--ignore-scripts` keeps every
+package's lifecycle scripts off the runner, including the project's own
+`postinstall`, so the Prisma client is generated explicitly — the same two steps
+`apps/web/Dockerfile` takes. High and critical advisories fail the build;
+moderates are reported only.
 
 ### `docker-build`
 
@@ -119,6 +124,21 @@ bundled XSDs. **This is the single most important test in the repo.** Two of the
 three samples once failed — a first-time user following the README got an invalid
 federal filing — and this test is what makes that impossible to reintroduce.
 
+It proves less than its importance suggests: `counseling-sample.csv` carries 16
+of the 74 counseling columns in three rows, so it never reaches the address,
+Part 3, certification or referral paths. Read it with the next one.
+
+### `tests/test_xsd_validity_fuzz.py` — every column, every converter
+
+The method of [`reviews/XSD_VALIDITY_ANALYSIS.md`](./reviews/XSD_VALIDITY_ANALYSIS.md)
+kept as a regression test. A seeded generator fills every column each converter
+reads with the schema's own values (exact, lower-cased, cut short, joined into
+long multi-selects), near misses and junk. Every file must validate, and the
+converters' final XSD check (`BaseConverter._write_valid_xml`) must never have
+had to step in: the schema guard and the converters are meant to handle each
+case themselves. `test_xsd_validity.py` and `test_xsd_validity_second_pass.py`
+pin each finding of that analysis individually.
+
 ### `tests/golden/` — characterization goldens
 
 Nine committed XML files that pin converter output byte-for-byte. They were
@@ -133,16 +153,22 @@ tests would regenerate-and-skip: passing while asserting nothing.
 
 Several tests exist solely to stop two structures disagreeing:
 
-- `test_expected_columns.py` pins `preview_service.COUNSELING_EXPECTED`,
+- `test_counseling_column_mapping.py` pins `preview_service.COUNSELING_EXPECTED`,
   `xsd_error_mapping._COUNSELING_ELEMENT_FIELDS`,
-  `diff_service.COUNSELING_CLEANING_MAP`, the `column_requirements` tier sets and
-  `COUNSELING_FIELD_METADATA` to `CounselingConfig.COLUMN_MAPPING`.
-- `EXPORT_COUNTRY_CODES` is pinned against the schema enumeration.
+  `diff_service.COUNSELING_CLEANING_MAP`, the `column_requirements` tier sets,
+  `COUNSELING_FIELD_METADATA` and `COUNSELING_FABRICATION_DEFAULTS` to
+  `CounselingConfig.COLUMN_MAPPING`.
+- `test_expected_columns.py` parses `counseling_converter.py` with `ast` and
+  asserts the expected-column list is exactly the set of headers the converter
+  reads — through literals, module constants and the `_mapped` helpers alike.
+- `EXPORT_COUNTRY_CODES` is pinned against the schema enumeration
+  (`test_integration_xsd.py`).
 - `check-ui-classes.mjs` fails the web lint when a page hand-rolls classes that
   belong to a `components/ui/` primitive.
 
-One trap is stated explicitly in `test_expected_columns.py`: **counseling's lists
-are not aliases.** `TrainingConfig` derives expected columns as `alts[0]`, which
+One trap is stated explicitly beside `CounselingConfig.COLUMN_MAPPING` in
+`src/config.py`: **counseling's lists are not aliases.** `TrainingConfig`
+derives expected columns as `alts[0]`, which
 is right there because a list means "several spellings of one column". In
 counseling, the Part 3 impact fields *fall back* to their intake counterpart, and
 `Total Number of Employees`, `Gross Revenues/Sales` and `Profits/Losses` are each
@@ -182,16 +208,28 @@ than a one-off test: a transformation, a bad row or a spelling.
 Runs the converters end to end against the goldens; it is what proved the pandas
 removal left output byte-identical.
 
-**A caution about `importorskip`.** Eleven test files start with
-`pytest.importorskip("fastapi")` or `("fakeredis")`, so the worker route,
-registry, schema-path, column-mapping, diff-service, expected-columns and
-worker-web contract tests
-**skip entirely** if you have not installed `apps/worker/requirements-dev.txt`.
-A green local run with those dependencies missing is green because 140 tests did
-not run (measured at `e4f1a59`; pytest counts each skipped file as one skip, so
-the summary line shows 11). CI installs them, so
-CI is honest; your laptop may not be. Check the summary line for skips before
-trusting a local pass.
+### A caution about missing dependencies
+
+Measured at `7b14f3b`, with only `requirements.txt` installed:
+
+- **The run stops at collection.** `test_conversion_invariants.py` and
+  `test_conversion_service_mapping.py` import the worker without a guard, so
+  pytest reports `ModuleNotFoundError: No module named 'redis'` and
+  `Interrupted: 2 errors during collection`. That is the loud failure, and the
+  better one.
+- **Eleven more files skip wholesale.** They start with
+  `pytest.importorskip("fastapi")` or `("fakeredis")` — the worker route,
+  registry, schema-path, column-mapping, diff-service, expected-columns and
+  worker-web contract tests, 140 tests in all. Pytest counts each skipped file
+  once, so the summary line says `11 skipped`.
+
+Forced past the collection errors (`--continue-on-collection-errors`), the
+rest gives 742 passed, 2 failed (two tests elsewhere that drive the worker's
+conversion service) and 11 skipped. An environment that has `redis` but not
+`fastapi` or `fakeredis` still passes green — `887 passed, 11 skipped` — with
+those 140 tests unrun. CI
+installs everything, so CI is honest; your laptop may not be. Check the summary
+line for skips before trusting a local pass.
 
 This pattern previously guarded two whole files with `importorskip("pandas")`,
 which would have turned into silent skips the moment pandas was uninstalled —

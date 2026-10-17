@@ -17,6 +17,9 @@ Section 2 re-verifies the second pass's open items; everything from section 3 on
 Markers: **`[OPEN]`** verified present at `5d865e4`; **`[FIXED]`** resolved (keep the entry, add the
 commit). **Flip the marker in the same commit as the fix.**
 
+**Re-verified at `7b14f3b` (2026-10-17):** every finding is `[FIXED]` except D.7 and D.9, which stay
+`[PARTIAL]`. The second-pass items section 2 re-verified are fixed too (see the note there).
+
 ---
 
 ## Contents
@@ -84,6 +87,10 @@ The markers there are accurate; nothing has been remediated since.
 Tier 5 (test blind spots 5.1, sample gate 5.2, doc claims 5.3) is likewise unchanged. **This is the
 most important conclusion of this pass:** the remediation since the second pass went to the web and
 worker; the federal-filing correctness backlog has not moved.
+
+> **Since fixed:** every row of the table above is `[FIXED]` in `CODEBASE_ANALYSIS_2.md`, all in
+> PR #131 (`c51fdc7`…`02de20b`). Each repro, re-run at `7b14f3b`, gives valid XML with an issue
+> recorded. Of Tier 5, 5.3 is `[FIXED]` and 5.1 and 5.2 are `[PARTIAL]`.
 
 ---
 
@@ -369,20 +376,27 @@ one `normalize_yes_no` is also the fix for 2nd-pass 1.3. About 250 of `config.py
 facets in 2nd-pass 1.1, and the unused `MAX_FIELD_LENGTHS`) could be loaded from the schema, which
 would close the drift risk structurally. `DEMOGRAPHIC_KEYWORDS['gender'/'ethnicity']` is dead (A.6).
 
+**Still open at `7b14f3b`:** Yes/No is one helper now (`CounselingConverter._yes_no`, 2nd-pass 1.3),
+and `schema_rules` loads the other enumerations and the length facets from the XSD. The rest
+stands: `run.py:main` is 122 lines, `_build_business_fields` 93, `_build_training_record` 97; both
+helpers are still duplicated; `EXPORT_COUNTRY_CODES` is still hand-copied (`config.py:317-562`);
+`MAX_FIELD_LENGTHS` is read only for `CounselorNotes`; `DEMOGRAPHIC_KEYWORDS['ethnicity']` is unread.
+
 ---
 
 ## Recommended sequence
 
 1. ~~**Unblock CI (1.1).**~~ Done.
-2. **Stop invalid files (A.2, A.7, then 2nd-pass Tier 1).** A single sanitising pass in
+2. ~~**Stop invalid files (A.2, A.7, then 2nd-pass Tier 1).**~~ Done, except the third 5.1 test
+   (see 2nd-pass 5.1). A single sanitising pass in
    `create_element` for control characters, and facet-driven length/pattern enforcement loaded from
    the XSD, close the largest classes. Add the three tests from 2nd-pass 5.1 — they would have
    caught most of Tier A as well.
-3. **Stop silent wrong answers (A.1, A.4, A.6, 2nd-pass 1.3/1.5/1.6, Tier 2).** One shared
+3. ~~**Stop silent wrong answers (A.1, A.4, A.6, 2nd-pass 1.3/1.5/1.6, Tier 2).**~~ Done, except the generic audit-completeness test (2nd-pass 5.1). One shared
    `normalize_yes_no`, the gender abbreviations, accounting negatives, and an audit-completeness
    test.
-4. **Job pipeline (B.1, B.2, C.1).** Each is a small, local change: widen the PATCH guard, add
+4. ~~**Job pipeline (B.1, B.2, C.1).**~~ Done. Each is a small, local change: widen the PATCH guard, add
    backoff, reject bodies without `Content-Length`.
-5. **Worker availability (C.2, C.3, D.1, A.9's 500s).** `to_thread` for `/fix-xml`, a Redis circuit
+5. ~~**Worker availability (C.2, C.3, D.1, A.9's 500s).**~~ Done. `to_thread` for `/fix-xml`, a Redis circuit
    breaker, and map `csv.Error`/`EntitiesForbidden` to 4xx.
-6. **Privacy (B.3, B.4).** A global retention sweep and the temp-then-rename write.
+6. ~~**Privacy (B.3, B.4).**~~ Done. A global retention sweep and the temp-then-rename write.

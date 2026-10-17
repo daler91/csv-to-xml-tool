@@ -276,7 +276,7 @@ rather than 404, and a cancel Redis did not store answers 503.
 | Web → worker | Shared bearer token (`WORKER_AUTH_TOKEN`), fail-closed: unset token means the worker refuses functional requests (503). With `ENVIRONMENT=production` the unauthenticated docs, OpenAPI schema and 404 route list are off |
 | Any user → any resource | Every owned resource is first read with `findFirst({ where: { id, userId } })`, a 404 when it is not the caller's. The job PATCH, start and delete routes and the template delete repeat `userId` in their guarded write; cancel and preview write by `id` after that check |
 | Download path | `realpath` + `DATA_DIR` prefix check with a separator suffix (`lib/paths.ts`), defeating symlink and `/data-evil` escapes |
-| CLI output path | The same confinement in `src/path_safety.py`, widened only by `SBA_OUTPUT_BASE` |
+| CLI output path | The same confinement in `src/path_safety.py`, widened only by `SBA_OUTPUT_BASE`, for every conversion write and the fixer's and validator's `--directory` mode; their single-file mode writes where it is told ([cli.md](./cli.md#output-path-confinement)) |
 | XML parsing | Every parse is lxml with `resolve_entities=False` (and lxml's default `no_network`); ElementTree only builds output, and `defusedxml` is left to the tests. A document that declares entities is refused by the validator and the fixer (`xml_validator._entity_problem`) — XXE is closed |
 | Response headers | CSP with `frame-ancestors 'none'`, HSTS, nosniff, Permissions-Policy (`next.config.ts`) |
 

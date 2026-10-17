@@ -253,11 +253,13 @@ serve the download.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SBA_OUTPUT_BASE` | cwd (`src.main`) / the `run.py` folder | Directory all CLI writes (and the validator's `--directory`) are confined to |
+| `SBA_OUTPUT_BASE` | cwd (`src.main`, the fixer, the validator) / the `run.py` folder | Directory the conversion's writes, and the fixer's and validator's `--directory` mode, are confined to |
 
-Every CLI write — XML, reports, logs — is confined to this base, as is the
-directory the XML validator is pointed at. Passing a path outside it fails with
-*"Refusing to write outside …"*. See
+A conversion's writes — XML, reports, logs — are confined to this base, as are
+the folder the fixer and validator walk in `--directory` mode and their output
+directory. Passing a path outside it fails with *"Refusing to write outside …"*,
+as a Python traceback. The fixer's and validator's **single-file** mode is not
+confined: `--file`/`--xmlfile` and `--output` are used as given. See
 [cli.md](./cli.md#output-path-confinement).
 
 ---

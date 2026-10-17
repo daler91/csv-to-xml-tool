@@ -30,8 +30,8 @@ cp .env.example .env
 docker compose up
 ```
 
-Wait for the worker to report healthy, then open <http://localhost:3000>, create
-an account, and upload a CSV.
+Wait for the worker to report healthy, then open <http://localhost:3000>,
+**Create Account**, and upload a CSV.
 
 The example `.env` values are fine for a throwaway local stack — CI uses them
 verbatim. They are **not** fine for anything reachable from a network; see
@@ -44,29 +44,42 @@ verbatim. They are **not** fine for anything reachable from a network; see
 
 ### Your first conversion
 
-1. **Sign up.** Passwords need an uppercase letter, a digit and a special
-   character; the signup page states the rules before you submit.
-2. **Pick a converter type.** If you are not sure which, read
+1. **Sign up.** **Create Account** on the landing page. Passwords need at least
+   8 characters, an uppercase letter, a digit and a special character; the form
+   ticks each rule off as you type. You are signed in straight away.
+2. **Pick a converter type.** **New Conversion** on the dashboard, then one of
+   the three cards. If you are not sure which, read
    [converters.md](./converters.md) — choosing wrong is the single most common
    way to get a confusing result.
-3. **Upload a CSV** (drag and drop, or browse). `.csv` only, 50 MB max.
-4. **Check the preview.** The mapping page tells you which expected columns were
-   matched, which are missing, and which extra columns will be ignored. Missing
-   *required* columns stop the conversion; missing *conditional* ones only warn.
-5. **Map columns if needed.** If your export uses different header names, map
-   them here. Save the mapping as a named template and recurring exports skip
-   this step next time.
-6. **Convert.** The progress page shows row-level progress and a Cancel button.
+3. **Upload a CSV** (drag and drop, or click to browse), then **Upload &
+   Preview**. `.csv` only, 50 MB max by default (`MAX_UPLOAD_BYTES`).
+4. **Check the preview.** The preview page counts the expected columns that were
+   **Matched**, the ones **Missing**, and the **Extra** ones that will be
+   ignored, suggests renames, and lists data-quality problems; rows flagged as
+   errors will be skipped. Missing *required* columns stop the conversion;
+   missing *conditional* ones only warn.
+5. **Map columns if needed.** If your export uses different header names,
+   **Map Columns** opens the mapping page, where you point each expected field at
+   one of your columns. Save the mapping as a named template; next time, pick it
+   under **Saved templates** and **Apply** it — a template is not applied by
+   itself. **Save Mapping & Continue** returns you to the preview, whose counts
+   still describe the file's own headers: the conversion applies the mapping.
+6. **Convert.** **Confirm & Convert**. The progress page shows the records
+   processed, and a **Cancel conversion** button once the job is converting.
 7. **Read the results.** You get the XML, a pass/fail against the SBA schema, a
    list of data-quality issues, and a cleaning diff showing every value the tool
-   changed and why.
-8. **Download.** Files are removed from disk after `RETENTION_DAYS` (30 by
-   default); the job record and audit trail are kept.
+   changed and why. A record SBA's schema rejects is left out of the XML and
+   listed as an error, so compare **Successful** with **Total Records**.
+8. **Download.** **Download XML**. Files are removed from disk after
+   `RETENTION_DAYS` (30 by default); the job record and audit trail are kept.
+
+Each screen, and how to work a file down to a clean one:
+[web-app-guide.md](./web-app-guide.md).
 
 ### Sample CSVs
 
-Three samples ship with the app, linked from the landing page and the dashboard
-empty state, and served from `apps/web/public/samples/`:
+Three samples ship with the app, linked from the landing page, the dashboard
+empty state and the converter cards, and served from `apps/web/public/samples/`:
 
 | File | Converter | Rows | What it is |
 |---|---|---|---|
@@ -77,12 +90,22 @@ empty state, and served from `apps/web/public/samples/`:
 All three are covered by `TestShippedSamplesValidate` in
 `tests/test_integration_xsd.py`, which asserts each one converts to XML that
 validates clean against its bundled XSD. If a sample ever stops validating, that
-test fails — that is the point of it.
+test fails — that is the point of it. Because the converters now leave out a
+record the XSD rejects, validity alone would not notice a sample losing one;
+`test_shipped_sample_output_is_stable` in
+`tests/test_converter_characterization.py` pins each sample's exact XML to
+`tests/golden/`, which does.
+
+The samples are not issue-free: the counseling sample reports five errors (a
+client in business with no Legal Entity or Counseling Seeking, a veteran with no
+branch of service) and still files all three records. Their issue lists are
+examples to read, not faults.
 
 ### Running the web app without Docker
 
 Useful when you are working on the web code and want fast reloads. You need
-Python 3.12, Node 20, and a Postgres and Redis you can reach.
+Python 3.12, Node 20.9 or later, a Postgres, and Redis 7 or later (the rate
+limiter's `EXPIRE … NX` needs 7; on an older Redis every limit fails open).
 
 ```bash
 # Terminal 1 — worker
@@ -92,11 +115,17 @@ WORKER_AUTH_TOKEN=dev-token \
 
 # Terminal 2 — web
 cd apps/web
-cp .env.example .env.local     # then edit DATABASE_URL, REDIS_URL, secrets
+cp .env.example .env.local     # then edit DATABASE_URL, REDIS_URL, DATA_DIR, secrets
 npm ci
-node scripts/migrate.js        # creates the tables
+node --env-file=.env.local scripts/migrate.js   # creates the tables
 npm run dev
 ```
+
+`migrate.js` is plain Node: unlike `next dev` it does not read `.env.local`, so
+without `--env-file` it stops with *"Environment variable not found:
+DATABASE_URL"*. `DATA_DIR` defaults to `/data`, which a development machine
+usually cannot write; point it at a folder you own, or every upload fails with
+`EACCES` in the log.
 
 `WORKER_AUTH_TOKEN` must be **identical** in both terminals. The worker
 fail-closes: with no token configured it refuses every functional request, which
@@ -130,15 +159,16 @@ to PATH"** during install.
 `run.py` walks you through picking the converter type, the CSV, and where to save
 the XML. No flags to remember.
 
-Output lands in `output/`; the validation reports (CSV and HTML) land in
-`reports/`; logs land in `logs/`. All three are relative to the folder holding
-`run.py`.
+Output lands in `output/`; the validation reports land in `reports/` (HTML
+always, CSV when there are issues); logs land in `logs/`. All three are relative
+to the folder holding `run.py`.
 
 > **Note:** `run.py` offers an optional XSD-validation step only when it finds
 > `.xsd` files **directly beside `run.py`**. The bundled schemas live in
-> `schemas/`, so the step does not appear on a clean checkout. To validate from
-> the launcher, copy the XSD you need next to `run.py`, or use the scripted CLI
-> below, which locates the schemas itself. This is a known bug — see
+> `schemas/`, so the step does not appear on a clean checkout. The conversion
+> checks its XML against the bundled schema anyway, and leaves out a record that
+> fails with an error in the report; what you miss is the printed pass/fail. To
+> get it, copy the XSD you need next to `run.py`. This is a known bug — see
 > [documentation-audit.md](./documentation-audit.md#code-issues-found-during-the-audit).
 
 ### Scripting it
@@ -162,5 +192,6 @@ Full flag reference, the XML fixer, and the output-path confinement rules are in
   [csv-reference.md](./csv-reference.md)
 - You need to know what the tool did to a value →
   [converters.md](./converters.md#the-cleaning-rules)
+- What a screen or a result means → [web-app-guide.md](./web-app-guide.md)
 - Something failed → [troubleshooting.md](./troubleshooting.md)
 - You are deploying this for a team → [deployment.md](./deployment.md)

@@ -42,7 +42,8 @@ Open <http://localhost:3000>, create an account, upload a CSV.
 
 Output lands in `output/`, reports in `reports/`, logs in `logs/`.
 
-Full walkthrough: **[docs/getting-started.md](./docs/getting-started.md)**.
+Converting your first file: **[docs/user-guide.md](./docs/user-guide.md)**.
+Installing and running the app: [docs/getting-started.md](./docs/getting-started.md).
 
 ---
 
@@ -103,6 +104,7 @@ Everything lives in **[`docs/`](./docs/README.md)**.
 
 | | |
 |---|---|
+| [**User guide**](./docs/user-guide.md) | **Start here to convert a CSV**: the steps, what the results mean, a checklist before filing |
 | [Getting started](./docs/getting-started.md) | Install and run, web or CLI |
 | [Web app guide](./docs/web-app-guide.md) | Each screen, and how to read the results and work a file clean |
 | [Architecture](./docs/architecture.md) | How the pieces fit together |

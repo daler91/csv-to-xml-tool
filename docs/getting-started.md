@@ -192,6 +192,8 @@ Full flag reference, the XML fixer, and the output-path confinement rules are in
   [csv-reference.md](./csv-reference.md)
 - You need to know what the tool did to a value →
   [converters.md](./converters.md#the-cleaning-rules)
+- The short version, for the people doing the conversions →
+  [user-guide.md](./user-guide.md)
 - What a screen or a result means → [web-app-guide.md](./web-app-guide.md)
 - Something failed → [troubleshooting.md](./troubleshooting.md)
 - You are deploying this for a team → [deployment.md](./deployment.md)

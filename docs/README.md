@@ -29,8 +29,13 @@ registers. They are point-in-time findings with per-finding status markers, not
 descriptions of how the system works — read them when you want to know *what is
 wrong or was wrong*, not *how it works*.
 
+- [`reviews/XSD_VALIDITY_ANALYSIS.md`](./reviews/XSD_VALIDITY_ANALYSIS.md) —
+  whether every file the tool produces passes SBA's two XSDs, in two fuzzed
+  passes. Read it before changing anything in the conversion core.
+- [`reviews/CODEBASE_ANALYSIS_3.md`](./reviews/CODEBASE_ANALYSIS_3.md) — the
+  newest findings register: the third-pass review at `5d865e4`. Start here.
 - [`reviews/CODEBASE_ANALYSIS_2.md`](./reviews/CODEBASE_ANALYSIS_2.md) — the
-  current findings register: the second-pass review at `482d235`. Start here.
+  second-pass review at `482d235`, whose open items the third pass re-verifies.
 - [`reviews/CODEBASE_ANALYSIS.md`](./reviews/CODEBASE_ANALYSIS.md) — the first
   full review; mostly `[FIXED]` now, kept for the history and the still-open items.
 - [`reviews/TECHNICAL_DEBT.md`](./reviews/TECHNICAL_DEBT.md) — code and security
@@ -41,9 +46,9 @@ wrong or was wrong*, not *how it works*.
 - [`reviews/ARCHITECTURE_REVIEW.md`](./reviews/ARCHITECTURE_REVIEW.md) —
   **historical**. Kept for context; its line citations no longer resolve.
 
-[`documentation-audit.md`](./documentation-audit.md) records what this
-documentation set was checked against, what was corrected, and what is still
-known to be wrong in the code.
+[`documentation-audit.md`](./documentation-audit.md) records each audit of this
+documentation set — what it was checked against, what was corrected, and what
+was found wrong in the code. The newest audit is at the top.
 
 ## Conventions
 
@@ -52,8 +57,9 @@ known to be wrong in the code.
 - **`CONTRIBUTING.md` and `SECURITY.md` keep their uppercase names** because
   GitHub only gives those two files special treatment at these exact paths.
 - **Registers under `reviews/` keep their original `UPPER_SNAKE_CASE.md` names.**
-  They are referenced by name from ~25 source comments and from commit messages;
-  renaming them would break those references for no benefit.
+  They are referenced by name from ~50 source comments (counted at `7b14f3b`)
+  and from commit messages; renaming them would break those references for no
+  benefit.
 - **Findings carry a status marker** — `[OPEN]`, `[FIXED]`, `[PARTIAL]`,
   `[RESOLVED]`. When you fix something, flip its marker in the same commit.
 

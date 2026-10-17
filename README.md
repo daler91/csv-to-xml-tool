@@ -68,9 +68,17 @@ asserts they convert to schema-valid XML.
   dominate hand-built SBA XML. A blank cell produces no element, never an empty
   one.
 - **Cleaning and standardization** — dates to `YYYY-MM-DD`, phone numbers to
-  digits, money with `Decimal`, states and countries mapped onto schema
-  enumerations (`IA` → `Iowa`), semicolon-delimited Salesforce multi-value fields
-  split, long text truncated at the schema's limits.
+  ten digits (anything else is refused and reported, not cut), money with
+  `Decimal`, states and countries mapped onto schema enumerations
+  (`IA` → `Iowa`), semicolon-delimited Salesforce multi-value fields split, long
+  text truncated at the schema's limits with a warning.
+- **Every value checked against the XSD before it is written** — the schema's
+  own facets are applied to each record (`src/schema_rules.py`). A value that
+  cannot be filed is dropped with a warning when the schema lets it be omitted;
+  a record that still cannot be filed is left out and reported as an error,
+  instead of failing the whole file. Each finished file is then validated
+  against SBA's XSD, and any record that still fails is left out with an error
+  naming its row and column (`BaseConverter._write_valid_xml`).
 - **Conditional logic** — `BranchOfService` only when military status indicates
   service, and so on.
 - **Errors traced back to your CSV** — instead of *"Line 20: Element 'ZipCode'…"*
@@ -78,8 +86,10 @@ asserts they convert to schema-valid XML.
 - **An audit trail of every change** — CSV and HTML validation reports from the
   CLI, a before/after cleaning diff in the web app, and a `FABRICATED_DEFAULT`
   warning wherever a value did not come from your data.
-- **An XML repair tool** — reorders elements in existing counseling-format XML,
-  from the CLI or the web app's Validate page.
+- **An XML repair tool** — reorders the elements of existing SBA XML into the
+  order its XSD requires and re-validates the result: counseling and training
+  files from the CLI (`src/fix_sba_xml.py`), counseling-format files from the web
+  app's Validate page.
 
 > **This is currently a single-organization tool.** `src/config.py` hardcodes one
 > organization's location code and partner code, and they are stamped into every
@@ -131,5 +141,7 @@ ruff check .
 cd apps/web && npm ci && npm run lint && npm test && npm run build
 ```
 
-Installing `apps/worker/requirements-dev.txt` matters — without it 140 tests skip
-silently rather than failing. See [docs/testing.md](./docs/testing.md).
+Installing `apps/worker/requirements-dev.txt` matters — without it pytest stops
+at collection on `No module named 'redis'`, and a partial install that has
+`redis` but not `fastapi`/`fakeredis` passes green with 140 tests skipped. See
+[docs/testing.md](./docs/testing.md#a-caution-about-missing-dependencies).

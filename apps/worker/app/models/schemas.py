@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # The three conversions the worker knows. A Literal, so an unknown value is a
 # 422 from validation on every route: /preview used to accept "bogus" and
@@ -29,6 +29,12 @@ class ConvertRequest(BaseModel):
     csv_content: str  # the uploaded CSV text, sent by the web (no shared volume)
     converter_type: ConverterType
     column_mapping: dict[str, str] | None = None
+    # How the web had to read the upload before sending its text, named as
+    # data_cleaning.decode_csv_bytes names it ("windows-1252", "utf-16 (odd
+    # length)", ...), so the conversion records the file-level warning the
+    # command line records. A str, not a Literal: a name this worker doesn't
+    # know is no reason to fail a conversion; it just records no warning.
+    source_encoding: str | None = Field(default=None, max_length=64)
 
 
 class ConvertResponse(BaseModel):

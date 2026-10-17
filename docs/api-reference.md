@@ -341,11 +341,19 @@ error naming the row and column where it opened.
 
 ```json
 {"job_id": "…", "csv_content": "…", "converter_type": "counseling",
- "column_mapping": {"Your Header": "Expected Header"}}
+ "column_mapping": {"Your Header": "Expected Header"},
+ "source_encoding": "windows-1252"}
 ```
 
 → `xml_content`, `stats`, `xsd_valid`, `xsd_errors`, `xsd_error_details`,
 `issues`, `cleaning_diff`.
+
+`source_encoding` (optional) is how the web read the upload before sending its
+text, named as `decode_csv_bytes` names it: `utf-8`, `utf-16`, `utf-16 (odd
+length)`, `utf-16 (damaged)`, `utf-16 (damaged, odd length)` or
+`windows-1252`. The worker never sees the file's bytes, so this is what lets it
+record the file-level encoding warning the command line records. A name it
+doesn't know records nothing rather than failing the request.
 
 | Status | Meaning |
 |---|---|

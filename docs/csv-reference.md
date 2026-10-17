@@ -28,8 +28,10 @@ absent.
    stray byte out too; it kept it until 2026-10, and in a file without a final
    newline the `�` was filed as part of the last cell. Both decoders are held
    to one table of cases, `tests/fixtures/csv_decoding_cases.json`. The web
-   does not pass on how it decoded a file, so its results page does not show
-   the encoding warnings the command line records.
+   also sends the worker how it read the file (`source_encoding`), so a
+   Windows-1252 or damaged UTF-16 upload gets the same file-level warning on
+   the results page as on the command line; until 2026-10 the web results
+   showed none, since the worker only ever received the decoded text.
 3. **Any column mapping you saved is applied first**, then required-column
    validation runs. A CSV you have correctly mapped is never rejected for a
    column name it no longer uses. The mapping is matched against the headers

@@ -114,6 +114,7 @@ async def convert(req: ConvertRequest):
             xml_path=xml_path,
             converter_type=req.converter_type,
             column_mapping=req.column_mapping,
+            source_encoding=req.source_encoding,
             is_cancelled=_should_stop,
             on_progress=_on_progress,
         )

@@ -88,12 +88,11 @@ describe("decodeCsvBuffer agrees with the converters' decode_csv_bytes", () => {
   });
 
   it.each(table.map((row) => [row.name, row] as const))("%s", (_name, row) => {
-    const { text, encoding } = decodeCsvBuffer(Buffer.from(row.hex, "hex"));
+    const { text, sourceEncoding } = decodeCsvBuffer(Buffer.from(row.hex, "hex"));
     expect(asTheConverterReadsIt(text)).toBe(row.text);
-    // The same family of encoding, too: the Python names add how a UTF-16
-    // file was damaged, which the web does not track.
-    expect(encoding.startsWith("utf-16") ? "utf-16" : encoding).toBe(
-      row.encoding.startsWith("utf-16") ? "utf-16" : row.encoding
-    );
+    // And the same name for how it was read, which the worker turns into the
+    // command line's encoding warning -- a stray UTF-16 byte, damage, the
+    // Windows-1252 fallback.
+    expect(sourceEncoding).toBe(row.encoding);
   });
 });

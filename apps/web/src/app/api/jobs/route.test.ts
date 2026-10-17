@@ -82,6 +82,24 @@ describe("GET /api/jobs", () => {
     expect(purge.mock.invocationCallOrder[0]).toBeLessThan(read);
   });
 
+  it("still lists the jobs when the stuck-job reaper's own query fails", async () => {
+    // The real reaper, against the same database mock: its query fails, the
+    // list query after it succeeds. It used to fail the whole list with a 500.
+    const actual = await vi.importActual<typeof import("@/lib/job-reaper")>("@/lib/job-reaper");
+    reap.mockImplementation(actual.reapStuckConvertingJobs);
+    const jobs = [{ id: "job-1", status: "complete" }];
+    db.job.findMany
+      .mockRejectedValueOnce(new Error("Can't reach database server"))
+      .mockResolvedValueOnce(jobs as never);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(jobs);
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("[job-reaper]"), expect.any(Error));
+    errorLog.mockRestore();
+  });
+
   it("does no housekeeping and reads nothing without a session", async () => {
     auth.mockRejectedValue(new Error("Unauthorized"));
 

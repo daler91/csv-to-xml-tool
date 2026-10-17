@@ -131,5 +131,5 @@ ruff check .
 cd apps/web && npm ci && npm run lint && npm test && npm run build
 ```
 
-Installing `apps/worker/requirements-dev.txt` matters — without it 131 tests skip
+Installing `apps/worker/requirements-dev.txt` matters — without it 140 tests skip
 silently rather than failing. See [docs/testing.md](./docs/testing.md).

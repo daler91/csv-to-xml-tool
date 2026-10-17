@@ -282,13 +282,13 @@ on silently stops applying during an outage.
 
 ## Developing
 
-### 131 tests silently skipped
+### 140 tests silently skipped
 
 You did not install `apps/worker/requirements-dev.txt`. Eleven files begin with
 `pytest.importorskip("fastapi")` or `("fakeredis")` and skip wholesale without
 it. A green run with those missing is green because the tests did not execute.
 Pytest counts each skipped file once, so the summary line says `11 skipped`, not
-131.
+140.
 
 ```bash
 pip install -r requirements.txt -r apps/worker/requirements-dev.txt

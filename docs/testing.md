@@ -44,14 +44,14 @@ server.
 
 ## Current baseline
 
-Measured at commit `61935c5` on 2026-10-16 (Python 3.13). Re-measure with the
+Measured at commit `e4f1a59` on 2026-10-17 (Python 3.13). Re-measure with the
 commands above rather than trusting these numbers indefinitely.
 
 | Check | Result |
 |---|---|
-| pytest | **1018 passed** |
+| pytest | **1027 passed** |
 | Coverage (`src/` + worker) | **97.5%** against a 70% gate |
-| vitest | **389 passed**, 38 files |
+| vitest | **395 passed**, 38 files |
 | `tsc --noEmit` | clean |
 | `check-ui-classes.mjs` | clean |
 | `next build` | succeeds, 28 routes |
@@ -187,8 +187,8 @@ removal left output byte-identical.
 registry, schema-path, column-mapping, diff-service, expected-columns and
 worker-web contract tests
 **skip entirely** if you have not installed `apps/worker/requirements-dev.txt`.
-A green local run with those dependencies missing is green because 131 tests did
-not run (measured at `61935c5`; pytest counts each skipped file as one skip, so
+A green local run with those dependencies missing is green because 140 tests did
+not run (measured at `e4f1a59`; pytest counts each skipped file as one skip, so
 the summary line shows 11). CI installs them, so
 CI is honest; your laptop may not be. Check the summary line for skips before
 trusting a local pass.

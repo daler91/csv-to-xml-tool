@@ -37,8 +37,23 @@ const STUCK_STATUSES: JobStatus[] = ["queued", "converting"];
  * completed/cancelled in a concurrent handler is left untouched (count === 0).
  *
  * Returns the number of jobs reaped.
+ *
+ * Fail-open, as the retention sweep beside it on the same read paths is: this
+ * is housekeeping, and a failure in it -- the database briefly unreachable, a
+ * column the deployed schema lacks -- used to fail GET /api/jobs with a 500,
+ * so the whole dashboard went blank over jobs that were merely stuck. It is
+ * logged instead, and the next read tries again.
  */
 export async function reapStuckConvertingJobs(userId: string): Promise<number> {
+  try {
+    return await reapLostJobs(userId);
+  } catch (error) {
+    console.error("[job-reaper] reap failed; reading jobs without it:", error);
+    return 0;
+  }
+}
+
+async function reapLostJobs(userId: string): Promise<number> {
   const deadline = new Date(Date.now() - REAP_DEADLINE_MS);
 
   const stuck = await prisma.job.findMany({

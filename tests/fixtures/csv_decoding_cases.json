@@ -78,6 +78,12 @@
   "encoding": "utf-16 (damaged)"
  },
  {
+  "name": "utf-16 le, half an emoji in a file of an odd number of bytes",
+  "hex": "fffe41002c0042000a0031002c003dd878000a000a",
+  "text": "A,B\n1,\ufffdx\n",
+  "encoding": "utf-16 (damaged, odd length)"
+ },
+ {
   "name": "empty",
   "hex": "",
   "text": "",

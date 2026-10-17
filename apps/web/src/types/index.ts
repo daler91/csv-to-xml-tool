@@ -1,3 +1,5 @@
+import type { SourceEncoding } from "@/lib/csv-decode";
+
 export interface FieldDescription {
   description: string;
   conditional_rule?: string;
@@ -58,6 +60,8 @@ export interface ConvertRequest {
   csv_content: string;
   converter_type: string;
   column_mapping?: Record<string, string>;
+  /** How the web read the upload, as decode_csv_bytes names it (csv-decode.ts). */
+  source_encoding?: SourceEncoding;
 }
 
 /**

@@ -55,7 +55,7 @@ export async function runJob(jobId: string, attempt = 1): Promise<void> {
   // "CSV (Comma delimited)" export is the system code page, and a plain
   // utf-8 read turned every accented name into U+FFFD before the worker saw
   // it -- silently, since what the worker received was valid UTF-8.
-  const { text: csvContent, encoding } = decodeCsvBuffer(
+  const { text: csvContent, encoding, sourceEncoding } = decodeCsvBuffer(
     await readFile(job.inputFilePath)
   );
   if (encoding !== "utf-8") {
@@ -68,6 +68,11 @@ export async function runJob(jobId: string, attempt = 1): Promise<void> {
       csv_content: csvContent,
       converter_type: job.converterType,
       column_mapping: job.columnMapping,
+      // How the upload had to be read. The worker only sees the text, so this
+      // is what lets it record the warning the command line records for the
+      // same file ("read as Windows-1252 ... check that accented names came
+      // through", a damaged UTF-16 file).
+      source_encoding: sourceEncoding,
     }),
     timeoutMs: CONVERSION_TIMEOUT_MS,
   });

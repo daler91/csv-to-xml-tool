@@ -14,37 +14,70 @@
  *   3. Anything that is not valid UTF-8 → windows-1252, which is a superset
  *      of ISO-8859-1 and what every Windows export that is not UTF-8 uses.
  *
- * Returns the encoding used so callers can log or record the fallback.
+ * Returns the encoding used so callers can log the fallback, and
+ * `sourceEncoding`: how the converters' decode_csv_bytes names the same read.
  */
 
 export type CsvEncoding = "utf-8" | "utf-16le" | "utf-16be" | "windows-1252";
 
-export function decodeCsvBuffer(bytes: Buffer): { text: string; encoding: CsvEncoding } {
+/**
+ * decode_csv_bytes' names for how a file was read, the keys of its
+ * encoding_warning. The job runner sends this to the worker as
+ * `source_encoding`, which then records the file-level warning the command
+ * line records ("read as Windows-1252 ... check that accented names came
+ * through"). The worker only ever sees text, so it can't tell by itself.
+ */
+export type SourceEncoding =
+  | "utf-8"
+  | "utf-16"
+  | "utf-16 (odd length)"
+  | "utf-16 (damaged)"
+  | "utf-16 (damaged, odd length)"
+  | "windows-1252";
+
+export function decodeCsvBuffer(bytes: Buffer): {
+  text: string;
+  encoding: CsvEncoding;
+  sourceEncoding: SourceEncoding;
+} {
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return { text: decode(bytes, "utf-16le"), encoding: "utf-16le" };
+    return { ...decodeUtf16(bytes, "utf-16le"), encoding: "utf-16le" };
   }
   if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    return { text: decode(bytes, "utf-16be"), encoding: "utf-16be" };
+    return { ...decodeUtf16(bytes, "utf-16be"), encoding: "utf-16be" };
   }
   try {
     return {
       text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
       encoding: "utf-8",
+      sourceEncoding: "utf-8",
     };
   } catch {
-    return { text: decodeWindows1252(bytes), encoding: "windows-1252" };
+    return { text: decodeWindows1252(bytes), encoding: "windows-1252", sourceEncoding: "windows-1252" };
   }
 }
 
-function decode(bytes: Buffer, encoding: string): string {
+function decodeUtf16(
+  bytes: Buffer,
+  encoding: "utf-16le" | "utf-16be"
+): { text: string; sourceEncoding: SourceEncoding } {
   // An odd number of bytes: one is stray, most often a newline appended as a
   // single byte. Decoded, it became a trailing U+FFFD -- a last row of '�',
   // or, in a file without a final newline, part of the last cell, which was
   // then filed. Left out, as the converters' decode_csv_bytes leaves it.
-  const even = bytes.length % 2 === 1 ? bytes.subarray(0, bytes.length - 1) : bytes;
+  const odd = bytes.length % 2 === 1;
+  const even = odd ? bytes.subarray(0, bytes.length - 1) : bytes;
   // ignoreBOM keeps a leading BOM in the output for UTF-16 too; the worker's
   // utf-8-sig read strips only a UTF-8 BOM, so drop the decoded one here.
-  return new TextDecoder(encoding, { fatal: false, ignoreBOM: false }).decode(even);
+  try {
+    const text = new TextDecoder(encoding, { fatal: true, ignoreBOM: false }).decode(even);
+    return { text, sourceEncoding: odd ? "utf-16 (odd length)" : "utf-16" };
+  } catch {
+    // Bytes that are not text (a stray byte inside the file, half an emoji):
+    // read as U+FFFD, as decode_csv_bytes reads them, and said so.
+    const text = new TextDecoder(encoding, { fatal: false, ignoreBOM: false }).decode(even);
+    return { text, sourceEncoding: odd ? "utf-16 (damaged, odd length)" : "utf-16 (damaged)" };
+  }
 }
 
 // Code points for bytes 0x80-0x9F, where windows-1252 differs from ISO-8859-1.

@@ -59,6 +59,9 @@ CASES = {
     "utf-16 le, half an emoji": (
         _utf16le("A,B\n1,") + "\U0001F600".encode("utf-16-le")[:2] + "x\n".encode("utf-16-le")
     ),
+    "utf-16 le, half an emoji in a file of an odd number of bytes": (
+        _utf16le("A,B\n1,") + "\U0001F600".encode("utf-16-le")[:2] + "x\n".encode("utf-16-le") + b"\n"
+    ),
     "empty": b"",
     "only a utf-8 BOM": codecs.BOM_UTF8,
 }

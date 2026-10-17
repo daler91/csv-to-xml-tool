@@ -51,6 +51,24 @@ beforeEach(() => {
 });
 
 describe("runJob", () => {
+  it.each([
+    ["a UTF-8 export", Buffer.from("Last Name\nMuñoz\n", "utf-8"), "utf-8"],
+    // "Muñoz" as Excel's "CSV (Comma delimited)" writes it: ñ = 0xF1.
+    ["a Windows-1252 export", Buffer.from("Last Name\nMu\xf1oz\n", "latin1"), "windows-1252"],
+  ])("tells the worker how %s was read, for its encoding warning", async (_label, bytes, sourceEncoding) => {
+    db.job.findUnique.mockResolvedValue(JOB as never);
+    db.job.updateMany.mockResolvedValue({ count: 1 } as never);
+    db.auditEntry.create.mockResolvedValue({} as never);
+    read.mockResolvedValue(bytes as never);
+    worker.mockResolvedValue(RESULT as never);
+
+    await runJob("j1");
+
+    const body = JSON.parse(String(worker.mock.calls[0]?.[1]?.body));
+    expect(body.source_encoding).toBe(sourceEncoding);
+    expect(body.csv_content).toBe("Last Name\nMuñoz\n");
+  });
+
   it("claims, sends CSV content, persists the returned XML, and completes", async () => {
     db.job.findUnique.mockResolvedValue(JOB as never);
     db.job.updateMany

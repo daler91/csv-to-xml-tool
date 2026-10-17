@@ -95,6 +95,7 @@ def run_conversion(
     column_mapping: dict[str, str] | None = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
     on_progress: Optional[ProgressCallback] = None,
+    source_encoding: str | None = None,
 ) -> dict:
     """
     Run a CSV-to-XML conversion using the existing converter logic.
@@ -111,6 +112,11 @@ def run_conversion(
     ``progress_callback`` and receives ``(processed, total)`` tuples
     roughly every 25 rows (counseling) or every 5 event groups
     (training). See docs/reviews/UX_REVIEW.md §3.6.
+
+    ``source_encoding`` is how the upload was decoded before its text got
+    here, named as ``decode_csv_bytes`` names it; the web sends it, and an
+    encoding that needs one gets the same file-level warning the command
+    line records. A name it doesn't know records nothing.
     """
     if converter_type not in CONVERTER_MAP:
         raise ValueError(f"Unknown converter type: {converter_type}")
@@ -126,7 +132,7 @@ def run_conversion(
     actual_csv_path = csv_path
     tmp_mapped = None
     unmatched: dict[str, str] = {}
-    source_encoding = None
+    staged_encoding = None
     if column_mapping:
         safe_mapping = _sanitize_column_mapping(column_mapping, converter_type)
         # Both sides by normalize_header: the mapping page keys the mapping by
@@ -138,7 +144,7 @@ def run_conversion(
         # it isn't UTF-8): a strict UTF-8 read raised on the first accented
         # name of a file the converter itself reads. The copy is UTF-8.
         with open(csv_path, "rb") as source:
-            text, source_encoding = decode_csv_bytes(source.read())
+            text, staged_encoding = decode_csv_bytes(source.read())
         # Rows as lists, renaming only the header: a dict per row kept one
         # column of each duplicated header, so the converter never saw the
         # duplicate to report it, and a blank later "Date" erased the first.
@@ -184,9 +190,11 @@ def run_conversion(
             log_to_file=False,
         ).logger
         tracker = ValidationTracker()
-        # The converter reads the UTF-8 copy the mapping wrote, so it can't
-        # tell how the upload had to be decoded; say it here.
-        message = encoding_warning(source_encoding) if source_encoding else None
+        # The converter reads a UTF-8 copy -- the text the web sent, staged by
+        # the route, or the one the mapping wrote -- so it can't tell how the
+        # upload had to be decoded. The web says so in source_encoding; a file
+        # given to this function directly says so when the mapping decodes it.
+        message = encoding_warning(source_encoding or "") or encoding_warning(staged_encoding or "")
         if message:
             tracker.add_issue("file", "warning", ValidationCategory.FILE_ACCESS, "input_file", message)
         for name, target in unmatched.items():

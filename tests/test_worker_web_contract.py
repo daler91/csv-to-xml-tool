@@ -28,6 +28,12 @@ fakeredis = pytest.importorskip("fakeredis")
 from app import main as worker_main
 from app.core import auth as worker_auth
 from app.services import redis_client
+from src.data_cleaning import (
+    UTF16_DAMAGED,
+    UTF16_DAMAGED_ODD_LENGTH,
+    UTF16_ODD_LENGTH,
+    encoding_warning,
+)
 
 
 # TestCase assertions rather than bare asserts, which the code scanners report
@@ -247,3 +253,46 @@ def test_every_response_has_the_shape_the_web_reads():
     # Inline element types are not in `checked`; these keep theirs non-empty.
     check.assertTrue(preview["column_status"]["suggestions"])
     check.assertTrue(validated["is_valid"] is False and validated["error_details"])
+
+
+# --- what the web sends ----------------------------------------------------------
+
+# The reads decode_csv_bytes warns about, and the warnings it gives for them.
+WARNED_ENCODINGS = ["windows-1252", UTF16_DAMAGED, UTF16_ODD_LENGTH, UTF16_DAMAGED_ODD_LENGTH]
+ENCODING_WARNINGS = {encoding_warning(name) for name in WARNED_ENCODINGS}
+
+
+def _convert(**extra):
+    return _post("/convert", {"job_id": "contract", "csv_content": COUNSELING_CSV,
+                              "converter_type": "counseling", **extra})
+
+
+def test_every_field_the_web_sends_is_one_the_worker_reads():
+    """pydantic drops a field its model doesn't declare without a word, so a
+    field renamed on either side would just stop arriving -- the encoding
+    warnings would vanish from the results page and nothing would fail."""
+    from app.models.schemas import ConvertRequest
+
+    check.assertLessEqual(set(INTERFACES["ConvertRequest"]), set(ConvertRequest.model_fields))
+
+
+@pytest.mark.parametrize("source_encoding", WARNED_ENCODINGS)
+def test_the_web_s_read_of_a_file_gets_the_warning_the_command_line_gives(source_encoding):
+    """The web decodes the upload and sends text, so the converter can't tell
+    a Windows-1252 or damaged UTF-16 file from a clean one. The command line
+    warns about those; the web reports how it read the file so the results
+    page warns too, once, in the command line's words."""
+    warning = encoding_warning(source_encoding)
+    check.assertIsNotNone(warning)
+    issues = _convert(source_encoding=source_encoding)["issues"]
+    check.assertEqual([i["message"] for i in issues if i["message"] in ENCODING_WARNINGS], [warning])
+    [issue] = [i for i in issues if i["message"] == warning]
+    check.assertEqual((issue["severity"], issue["record_id"]), ("warning", "file"))
+
+
+@pytest.mark.parametrize("extra", [{}, {"source_encoding": "utf-8"}, {"source_encoding": "utf-16"},
+                                   {"source_encoding": "ebcdic"}],
+                         ids=["not sent", "utf-8", "clean utf-16", "a name the worker doesn't know"])
+def test_a_clean_or_unknown_read_records_no_encoding_warning(extra):
+    issues = _convert(**extra)["issues"]
+    check.assertEqual([i["message"] for i in issues if i["message"] in ENCODING_WARNINGS], [])

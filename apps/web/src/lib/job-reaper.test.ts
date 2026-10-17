@@ -78,4 +78,30 @@ describe("reapStuckConvertingJobs", () => {
     expect(db.job.updateMany).not.toHaveBeenCalled();
     errorLog.mockRestore();
   });
+
+  describe("fails open, so a failure never takes the job list down with it", () => {
+    it("returns 0 and logs when the database can't be read", async () => {
+      db.job.findMany.mockRejectedValue(new Error('column "filesPurgedAt" does not exist'));
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(reapStuckConvertingJobs("user-1")).resolves.toBe(0);
+
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.stringContaining("[job-reaper]"),
+        expect.objectContaining({ message: expect.stringContaining("filesPurgedAt") })
+      );
+      errorLog.mockRestore();
+    });
+
+    it("returns when writing a job's audit entry fails part-way through", async () => {
+      db.job.findMany.mockResolvedValue([{ id: "j1" }, { id: "j2" }] as never);
+      db.job.updateMany.mockResolvedValue({ count: 1 } as never);
+      db.auditEntry.create.mockRejectedValue(new Error("connection reset"));
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(reapStuckConvertingJobs("user-1")).resolves.toBe(0);
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      errorLog.mockRestore();
+    });
+  });
 });

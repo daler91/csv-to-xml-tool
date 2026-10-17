@@ -40,6 +40,12 @@ timer. A stuck job is therefore cleaned up the next time anyone looks at their
 dashboard, not at a fixed interval. If nobody looks, nothing is reaped; that is
 by design, because the only consumer of the result is the person looking.
 
+Like the retention sweep on the same reads, it **fails open**: an error inside it
+(the database unreachable for a moment, a column the deployed schema lacks) is
+logged as `[job-reaper] reap failed; reading jobs without it` and the jobs are
+read anyway; the next read tries again. It used to fail the request instead, so
+the whole job list returned 500 over jobs that were merely stuck.
+
 ### Redis keys
 
 Queue keys are defined in `apps/web/src/lib/job-queue.ts` under the prefix

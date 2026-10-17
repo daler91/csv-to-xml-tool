@@ -93,9 +93,12 @@ conversion reviving a cancelled job. Do not replace one with an `update`.
 
 ### 6. Do not weaken the XML parsing defaults
 
-`defusedxml` for ElementTree, `resolve_entities=False` for lxml. Everywhere.
-A document handed in by a user goes through `xml_validator._parser()`, and one
-whose DOCTYPE declares entities is refused (`_entity_problem`).
+Every XML parse is lxml with `resolve_entities=False`. Everywhere — the XSDs
+included. A document handed in by a user goes through `xml_validator._parser()`
+(which also sets `no_network=True`), and one whose DOCTYPE declares entities is
+refused (`_entity_problem`). The standard-library `ElementTree` only *builds*
+output and never parses; a test that parses with it uses `defusedxml`, as the
+existing ones do.
 
 ### 7. Keep the durability timeouts ordered
 

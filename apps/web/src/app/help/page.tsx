@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { CONVERTER_TYPES } from "@/lib/converter-types";
 
+// The plain-language, task-first guide for the people doing the
+// conversions; this page is the in-app summary of it.
+const USER_GUIDE_URL =
+  "https://github.com/daler91/csv-to-xml-tool/blob/master/docs/user-guide.md";
+
 /**
  * Help page.
  *
@@ -16,9 +21,22 @@ export default function HelpPage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold mb-2">Help</h1>
-      <p className="text-sm text-gray-600 mb-8">
+      <p className="text-sm text-gray-600 mb-4">
         How to use the CSV to XML converter, common errors, and
         who to contact if something goes wrong.
+      </p>
+      <p className="text-sm mb-8">
+        First time converting a file? The{" "}
+        <a
+          href={USER_GUIDE_URL}
+          className="text-blue-700 underline"
+          target="_blank"
+          rel="noreferrer"
+        >
+          step-by-step user guide
+        </a>{" "}
+        walks through a whole conversion and the checks to make before
+        you file with SBA.
       </p>
 
       <TableOfContents
@@ -275,6 +293,18 @@ export default function HelpPage() {
           If you hit a wall, the fastest paths are:
         </p>
         <ul className="list-disc pl-5 space-y-1">
+          <li>
+            Follow the{" "}
+            <a
+              href={USER_GUIDE_URL}
+              className="text-blue-700 underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              user guide
+            </a>{" "}
+            step by step, including its checklist before filing.
+          </li>
           <li>
             Read the{" "}
             <a

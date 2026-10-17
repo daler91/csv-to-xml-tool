@@ -212,6 +212,15 @@ Concrete, scoped, and already diagnosed (each re-checked at `7b14f3b`):
   which already exist in `types/index.ts`).
 - **Add a formatter and a type checker** (`ruff format`, mypy) — deliberately
   absent today, and a real gap.
+- **Teach `lib/job-failure.ts:describeJobFailure` the worker's 504**, so a
+  conversion past its deadline says to split the file instead of "try again".
+- **Offer Cancel for a `queued` job** on the progress page; the cancel route
+  already accepts it.
+- **Reword the download route's 410**, which advises a re-run a finished job
+  cannot have; the user must re-upload.
+
+More, each diagnosed, in
+[documentation-audit.md](./documentation-audit.md#code-issues-found-during-the-audit).
 
 The larger open items — the inverted converter abstraction (§5.1) and routing
 through `COLUMN_MAPPING` the 64 of 74 counseling headers still read as literals

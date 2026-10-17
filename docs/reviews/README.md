@@ -48,7 +48,9 @@ found on the way. Full detail in
   `MiddleEastern` and `NorthAfrican` (`classify_races`; third pass D.9).
 - Two defaults are filed with no report: a counseling file's `LocationCode`
   `249003` when it has no such column, and a training client's revenue and profit
-  of `0` ([`../converters.md`](../converters.md#known-gaps)).
+  of `0` ([`../converters.md`](../converters.md#known-gaps)). A missing
+  `Type of Session` column, and a blank `Currently In Business?` or
+  `Language(s) Used`, are defaulted without a warning too.
 
 **Architecture**
 
@@ -77,6 +79,11 @@ found on the way. Full detail in
   arrays on every progress poll.
 - A body that is not valid multipart is answered 500 (upload) or 502 (the XML
   tools) instead of 400.
+- What the user is told: a worker deadline (504) reads as a service failure; a
+  queued job can't be cancelled from the progress page, whose error counters
+  stay at 0 and which says "Timed Out" after five minutes of a running job; the
+  preview ignores a saved mapping; the download's 410 advises a re-run that is
+  impossible.
 
 **Security**
 
@@ -86,11 +93,16 @@ found on the way. Full detail in
 - The web sends no `Authorization` header when `WORKER_AUTH_TOKEN` is empty, with
   no startup check, and worker responses are cast, not validated (§3.11).
 - The CSP keeps `script-src 'unsafe-inline'`; a nonce CSP is deferred (§3.3 note).
+- Retention removes files but not the client data quoted in job records' issues
+  and cleaning diffs, which are kept indefinitely.
 
 **Deployment**
 
 - The web image has no `HEALTHCHECK`, and the worker's `/health` answers 200 when
   degraded, so Railway's status-code check proves only liveness.
+- `apps/worker/railway.toml`'s `ENVIRONMENT` is not applied by Railway, and its
+  start command's `$PORT` is not expanded; the web's base image is an unpinned
+  tag.
 
 **Tooling and tests**
 
@@ -111,7 +123,9 @@ found on the way. Full detail in
 
 **Repository**
 
-- No `LICENSE`, `CODEOWNERS` or `CLAUDE.md`.
+- No `LICENSE`, `CODEOWNERS` or `CLAUDE.md`. The repository is public with
+  private vulnerability reporting and issues both switched off (2026-10-17), so
+  there is no channel to report a problem, private or public.
 
 ## Corrections applied to these registers
 

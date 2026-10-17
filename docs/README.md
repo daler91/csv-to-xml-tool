@@ -8,7 +8,8 @@ reference material behind it.
 
 | If you want to… | Read |
 |---|---|
-| Convert a CSV today, without reading anything else | [Getting started](./getting-started.md) |
+| Convert a CSV to SBA XML, step by step, in plain language | [User guide](./user-guide.md) |
+| Install and run the app or the desktop tool | [Getting started](./getting-started.md) |
 | Read a results page, fix the CSV and re-upload until it is clean | [Web app guide](./web-app-guide.md) |
 | Understand how the pieces fit together | [Architecture](./architecture.md) |
 | Know which CSV columns a converter needs | [CSV input reference](./csv-reference.md) |

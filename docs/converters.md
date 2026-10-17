@@ -321,8 +321,9 @@ CSV's own that reads `n/a`.
 
 A missing column and a real zero are indistinguishable in the XML — the report is
 the only place the difference is visible. This is why the worker **warns** at
-conversion time when a fabrication-risk column is absent, and why the mapping
-page flags them in the UI.
+conversion time when a fabrication-risk column is absent (a `MISSING_FIELD`
+warning on the results page). The mapping page does not single them out: most
+carry the plain **Optional** badge there.
 
 ## ⚠ This is a single-organization tool
 

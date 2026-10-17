@@ -9,6 +9,7 @@ reference material behind it.
 | If you want to… | Read |
 |---|---|
 | Convert a CSV today, without reading anything else | [Getting started](./getting-started.md) |
+| Read a results page, fix the CSV and re-upload until it is clean | [Web app guide](./web-app-guide.md) |
 | Understand how the pieces fit together | [Architecture](./architecture.md) |
 | Know which CSV columns a converter needs | [CSV input reference](./csv-reference.md) |
 | Understand what each converter emits and when it invents a value | [Converters](./converters.md) |

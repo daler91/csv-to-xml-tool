@@ -104,6 +104,7 @@ Everything lives in **[`docs/`](./docs/README.md)**.
 | | |
 |---|---|
 | [Getting started](./docs/getting-started.md) | Install and run, web or CLI |
+| [Web app guide](./docs/web-app-guide.md) | Each screen, and how to read the results and work a file clean |
 | [Architecture](./docs/architecture.md) | How the pieces fit together |
 | [Converters](./docs/converters.md) | What each one emits, and when it defaults |
 | [CSV reference](./docs/csv-reference.md) | Expected columns per converter |

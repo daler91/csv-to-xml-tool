@@ -4,5 +4,5 @@
 -r requirements.in
 
 # Hermetic in-memory Redis so the registry tests need no live server.
-fakeredis==2.39.0
+fakeredis==2.40.0
 pytest==9.1.1
